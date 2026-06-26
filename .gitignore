@@ -8,4 +8,5 @@ __pycache__/
 venv/
 .gstack/
 embeddings.npy
+embedding_mids.json
 
