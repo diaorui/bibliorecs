@@ -16,6 +16,7 @@ import time
 
 import db
 import api
+import generate_embeddings
 
 QUERY = 'audience:"children"'
 PAPER_FORMATS = ["BK", "PICTURE_BOOK", "PAPERBACK", "BOARD_BK", "GRAPHIC_NOVEL"]
@@ -90,6 +91,9 @@ def run_sync(formats=None, max_pages=None, resume_from=None):
     status = "completed" if not failed_pages else "completed_with_errors"
     db.complete_sync_log(conn, log_id, total_books, status)
     conn.close()
+
+    print("\nRegenerating embeddings after catalog update...")
+    generate_embeddings.main()
 
     if failed_pages:
         print(f"\nWARNING: {len(failed_pages)} page(s) failed: {failed_pages}")
