@@ -49,6 +49,13 @@
   </div>
 </div>
 
+{% if book.isbn %}
+<div id="preview-section" class="section" style="display:none">
+  <h2 class="section-title">Preview</h2>
+  <div id="viewerCanvas" class="preview-canvas"></div>
+</div>
+{% endif %}
+
 {% if availability %}
 <div class="section">
   <h2 class="section-title">Availability</h2>
@@ -100,8 +107,24 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="https://www.google.com/books/jsapi.js"></script>
 <script>
 var mid = '{{ metadata_id }}';
+var bookIsbn = '{{ book.isbn or '' }}';
+
+if (bookIsbn) {
+  google.books.load();
+  google.books.setOnLoadCallback(function() {
+    var container = document.getElementById('viewerCanvas');
+    if (!container) return;
+    var viewer = new google.books.DefaultViewer(container);
+    viewer.load(
+      'ISBN:' + bookIsbn,
+      function() { document.getElementById('preview-section').style.display = 'none'; },
+      function() { document.getElementById('preview-section').style.display = ''; }
+    );
+  });
+}
 var holdSection = document.getElementById('hold-section');
 var holdContent = document.getElementById('hold-content');
 
