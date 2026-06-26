@@ -12,6 +12,8 @@ import db
 import updater
 from recommend import book_category
 
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
 app = Flask(__name__)
 app.config["DEBUG_MODE"] = "--debug" in sys.argv or os.environ.get("BIBLIORECS_DEBUG") == "1"
 
@@ -297,9 +299,28 @@ def api_checkouts():
 @app.route("/api/restart", methods=["POST"])
 def api_restart():
     def _do_restart():
-        import time
-        time.sleep(0.6)
-        os.execv(sys.executable, [sys.executable, __file__] + sys.argv[1:])
+        import time, subprocess
+
+        # Let the 200 response reach the browser first
+        time.sleep(0.5)
+
+        # Launch a fresh server process.
+        # It will see BIBLIORECS_RESTARTING and sleep before trying to bind.
+        env = os.environ.copy()
+        env["BIBLIORECS_RESTARTING"] = "1"
+        subprocess.Popen(
+            [sys.executable, __file__] + sys.argv[1:],
+            cwd=_SCRIPT_DIR,
+            start_new_session=True,
+            env=env,
+            stdout=open(os.devnull, 'w'),
+            stderr=open(os.devnull, 'w'),
+        )
+
+        # Old process waits longer so the OS releases port 5050
+        time.sleep(2.5)
+        os._exit(0)
+
     import threading
     threading.Thread(target=_do_restart, daemon=True).start()
     return jsonify({"ok": True})
@@ -671,6 +692,13 @@ def inject_debug():
 
 
 if __name__ == "__main__":
+    # When the restart button was used, the previous process may still hold port 5050
+    # (TCP TIME_WAIT). Sleep long enough before trying to bind.
+    if os.environ.get("BIBLIORECS_RESTARTING"):
+        import time
+        print("Restart: waiting for previous server to release port 5050...")
+        time.sleep(5)
+
     debug_mode = app.config["DEBUG_MODE"]
     if not debug_mode:
         updater.start()
