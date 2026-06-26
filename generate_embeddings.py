@@ -4,6 +4,7 @@ import os
 import time
 
 import numpy as np
+import torch
 from sentence_transformers import SentenceTransformer
 
 import config
@@ -44,8 +45,12 @@ def main():
     print(f"  Model loaded in {load_t:.1f}s ({config.EMBEDDING_MODEL})")
 
     texts = [embed_text(b) for b in books]
+
+    torch.set_num_threads(os.cpu_count())
+    batch_size = 512 if not torch.cuda.is_available() else 256
+
     t0 = time.time()
-    embeddings = model.encode(texts, batch_size=256, show_progress_bar=True)
+    embeddings = model.encode(texts, batch_size=batch_size, show_progress_bar=True)
     encode_t = time.time() - t0
     print(f"  Encoded {len(embeddings):,} vectors in {encode_t:.1f}s (dim={embeddings.shape[1]})")
 
