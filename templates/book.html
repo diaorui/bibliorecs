@@ -58,17 +58,17 @@
   </div>
 </div>
 
+<div id="hold-section" class="section" style="display:none">
+  <h2 class="section-title">Hold Status</h2>
+  <div id="hold-content" class="hold-block"></div>
+</div>
+
 {% if book.isbn %}
 <div id="preview-section" class="section" style="display:none">
   <h2 class="section-title">Preview</h2>
   <div id="viewerCanvas" class="preview-canvas"></div>
 </div>
 {% endif %}
-
-<div id="hold-section" class="section" style="display:none">
-  <h2 class="section-title">Hold Status</h2>
-  <div id="hold-content" class="hold-block"></div>
-</div>
 
 {% if borrows %}
 <div class="section">
