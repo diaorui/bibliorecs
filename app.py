@@ -437,6 +437,20 @@ def _dedup_genres(val):
     return result
 
 
+@app.template_filter("dedup")
+def _dedup(val):
+    if not val:
+        return []
+    seen = set()
+    result = []
+    for item in val:
+        key = item.lower() if isinstance(item, str) else item
+        if key not in seen:
+            seen.add(key)
+            result.append(item)
+    return result
+
+
 @app.template_filter("due_info")
 def due_info(checkout_date, is_current):
     if not checkout_date or not is_current:
@@ -482,6 +496,9 @@ _FORMAT_LABELS = {
     "GRAPHIC_NOVEL": "Graphic Novel",
     "PICTURE_BOOK": "Picture Book",
     "BOOK": "Book",
+    "BK": "Book",
+    "BOARD_BK": "Board Book",
+    "PAPERBACK": "Paperback",
     "EBOOK": "eBook",
     "AUDIOBOOK": "Audiobook",
     "LARGE_PRINT": "Large Print",

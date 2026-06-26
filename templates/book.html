@@ -14,7 +14,7 @@
   <div class="book-info">
     <h1>{{ book.title }}</h1>
     {% if book.subtitle %}<p class="book-subtitle">{{ book.subtitle }}</p>{% endif %}
-    <p class="author">{{ book.author or '' }}</p>
+    {% if book.author %}<p class="author">{{ book.author }}</p>{% endif %}
     <p class="metadata">
       <span>{{ book.format | fmt_label }}</span>
       {% if book.content_type %}<span>{{ book.content_type | content_type_label }}</span>{% endif %}
@@ -25,12 +25,11 @@
     <p class="description">{{ book.description }}</p>
     {% endif %}
 
-    {% set ns = namespace(subjects_clean=[]) %}
-    {% for s in subjects %}{% set _ = ns.subjects_clean.append(s | clean_subject) %}{% endfor %}
-    {% if ns.subjects_clean %}
+    {% set subjects_clean = subjects | map("clean_subject") | list | dedup %}
+    {% if subjects_clean %}
     <div class="tag-section">
       <div class="tag-list">
-        {% for s in ns.subjects_clean %}<span class="tag">{{ s }}</span>{% endfor %}
+        {% for s in subjects_clean %}<span class="tag">{{ s }}</span>{% endfor %}
       </div>
     </div>
     {% endif %}
@@ -44,8 +43,9 @@
     </div>
     {% endif %}
 
-    {% if series %}
-    <p class="series-line">Series: {{ series|join(', ') }}</p>
+    {% set series_clean = series | dedup %}
+    {% if series_clean %}
+    <p class="series-line">Series: {{ series_clean|join(', ') }}</p>
     {% endif %}
 
     {% if debug %}<a href="{{ catalog_url }}" class="btn btn-primary" target="_blank" rel="noopener">Open in Catalog</a>{% endif %}
