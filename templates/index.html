@@ -21,7 +21,10 @@
           <div class="cover-placeholder">📖<br>{{ r.title[:30] }}</div>
         </div>
         <div class="carousel-body">
-          <div class="carousel-title">{{ r.title }}</div>
+          <div class="carousel-title">
+            <span>{{ r.title }}</span>
+            {% if r.subtitle %}<span class="carousel-subtitle">{{ r.subtitle }}</span>{% endif %}
+          </div>
           <div class="carousel-author">{{ r.author or '' }}</div>
         </div>
       </a>

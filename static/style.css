@@ -584,6 +584,15 @@ th {
   margin-bottom: 1px;
 }
 
+.carousel-subtitle {
+  display: block;
+  font-size: 0.7rem;
+  color: #86868b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .carousel-author {
   font-size: 0.7rem;
   color: #86868b;
