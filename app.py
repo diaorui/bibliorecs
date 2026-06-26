@@ -69,7 +69,20 @@ def index():
     if "Other" in by_cat:
         cat_order.append("Other")
 
-    carousels = [{"name": c, "books": by_cat[c]} for c in cat_order]
+    SUB_LABELS = {
+        "Science": ["Animals", "Dinosaurs", "Space", "Earth & Nature", "Insects & Bugs"],
+        "History": ["US History", "World History", "Exploration & Travel", "Ancient Times"],
+        "Technology": ["Vehicles", "Pets & Farms", "Cooking", "How Things Work"],
+        "Arts & Recreation": ["Sports", "Games", "Drawing & Crafts", "Music"],
+        "Social Sciences": ["Fairy Tales & Folklore", "Holidays & Traditions", "Community & Family", "Social Issues"],
+    }
+
+    carousels = []
+    for c in cat_order:
+        entry = {"name": c, "books": by_cat[c]}
+        if c in SUB_LABELS:
+            entry["subs"] = SUB_LABELS[c]
+        carousels.append(entry)
 
     sync_time = db.get_recommendation_sync_time(conn)
     conn.close()

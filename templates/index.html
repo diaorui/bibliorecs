@@ -10,6 +10,11 @@
 {% for carousel in carousels %}
 <section class="carousel-section" data-category="{{ carousel.name }}">
   <h2 class="carousel-heading">{{ carousel.name }}</h2>
+  {% if carousel.subs %}
+  <div class="carousel-subs">
+    {% for s in carousel.subs %}<span class="carousel-sub">{{ s }}</span>{% endfor %}
+  </div>
+  {% endif %}
   <div class="carousel-track">
     {% for r in carousel.books %}
     <div class="carousel-card" data-mid="{{ r.metadata_id }}">
