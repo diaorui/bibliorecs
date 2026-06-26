@@ -57,8 +57,10 @@ def main():
 
     texts = [embed_text(b) for b in books]
 
-    torch.set_num_threads(os.cpu_count())
-    batch_size = 512 if not torch.cuda.is_available() else 256
+    use_gpu = torch.cuda.is_available()
+    if not use_gpu:
+        torch.set_num_threads(os.cpu_count())
+    batch_size = 256 if use_gpu else 64
 
     t0 = time.time()
     embeddings = model.encode(texts, batch_size=batch_size, show_progress_bar=True)
