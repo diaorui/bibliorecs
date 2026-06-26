@@ -30,6 +30,34 @@
   </div>
 </div>
 
+{% if update_status %}
+<div class="section">
+  <h2 class="section-title">Auto-Update</h2>
+  <table>
+    <thead><tr><th>Task</th><th>Last Run</th><th>State</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Recommendations</td>
+        <td>{% set d = update_status.get('daily', {}) %}{{ d.get('last_ok') or d.get('last_run') or 'never' }}</td>
+        <td>{{ d.get('state', '—') }}{% if d.get('error') %} — {{ d.error }}{% endif %}</td>
+      </tr>
+      <tr>
+        <td>Catalog</td>
+        <td>{% set c = update_status.get('catalog', {}) %}{{ c.get('last_ok') or c.get('last_run') or 'never' }}</td>
+        <td>{{ c.get('state', '—') }}{% if c.get('error') %} — {{ c.error }}{% endif %}</td>
+      </tr>
+    </tbody>
+  </table>
+  <p style="font-size:0.82rem;color:#86868b;margin-top:8px">
+    {% if update_status.now == 'idle' %}
+      Idle. Next window: {{ update_window_start }}:00–{{ update_window_end }}:00
+    {% else %}
+      <strong style="color:#2563eb">{{ update_status.now }}</strong>
+    {% endif %}
+  </p>
+</div>
+{% endif %}
+
 {% if formats %}
 <div class="section">
   <h2 class="section-title">Format Distribution</h2>

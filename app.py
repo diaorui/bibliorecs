@@ -7,6 +7,7 @@ from flask import Flask, render_template, abort, jsonify, request
 import api
 import config
 import db
+import updater
 from recommend import book_category
 
 app = Flask(__name__)
@@ -376,7 +377,10 @@ def stats():
     return render_template("stats.html", stats=s, formats=formats,
                            content_types=content_types, languages=languages,
                            years=years, sync_time=sync_time,
-                           total_borrows=total_borrows)
+                           total_borrows=total_borrows,
+                           update_status=updater.status(),
+                           update_window_start=config.UPDATE_WINDOW_START,
+                           update_window_end=config.UPDATE_WINDOW_END)
 
 
 @app.template_filter("due_info")
@@ -480,4 +484,5 @@ def _fmt_rec(r):
 
 
 if __name__ == "__main__":
+    updater.start()
     app.run(host="0.0.0.0", port=5050, debug=True)
