@@ -14,6 +14,7 @@ import sys
 import json
 import time
 
+import config
 import db
 import api
 import generate_embeddings
@@ -42,6 +43,7 @@ def run_sync(formats=None, max_pages=None, resume_from=None):
 
     conn = db.get_conn()
     failed_pages = []
+    synced_mids = set()
 
     if resume_from:
         page = resume_from
@@ -63,15 +65,16 @@ def run_sync(formats=None, max_pages=None, resume_from=None):
         log_id = db.start_sync_log(conn, "full",
                                    f"query={QUERY}&formats={fmt_list}",
                                    total_pages)
-        _process_page(conn, data)
+        synced_mids.update(_process_page(conn, data))
         db.update_sync_progress(conn, log_id, page)
         count = db.get_book_count(conn)
         print(f"  Page 1/{total_pages} done — {count:,} books so far")
         page = 2
 
     while page <= total_pages:
-        ok = _fetch_and_process_page(conn, page, fmt_list, sort=None)
+        ok, page_mids = _fetch_and_process_page(conn, page, fmt_list, sort=None)
         if ok:
+            synced_mids.update(page_mids)
             db.update_sync_progress(conn, log_id, page)
         else:
             failed_pages.append(page)
@@ -85,6 +88,9 @@ def run_sync(formats=None, max_pages=None, resume_from=None):
                   f" — {rate:.0f} pg/min — ETA {eta_min:.0f} min")
 
         page += 1
+
+    if not max_pages and not resume_from:
+        _deactivate_stale_books(conn, synced_mids)
 
     conn.commit()
     total_books = db.get_book_count(conn)
@@ -112,17 +118,19 @@ def _fetch_and_process_page(conn, page, formats, sort=None):
                 time.sleep(wait)
                 continue
             print(f"  Page {page} FAILED after {MAX_PAGE_RETRIES} attempts: {e}")
-            return False
+            return False, set()
 
-        _process_page(conn, data)
-        return True
+        mids = _process_page(conn, data)
+        return True, mids
 
-    return False
+    return False, set()
 
 
 def _process_page(conn, data):
     entities = api.parse_bib_entities(data)
+    mids = set()
     for metadata_id, bib in entities.items():
+        mids.add(metadata_id)
         book = api.extract_book_info(metadata_id, bib)
         db.upsert_book(
             conn,
@@ -158,6 +166,26 @@ def _process_page(conn, data):
             localised_status=avail["localised_status"],
             status_type=avail["status_type"],
         )
+    return mids
+
+
+def _deactivate_stale_books(conn, active_mids):
+    total = conn.execute("SELECT COUNT(*) as c FROM books WHERE active = 1").fetchone()[0]
+    mids_json = json.dumps(list(active_mids))
+    conn.execute("""
+        UPDATE books SET active = 0
+        WHERE active = 1 AND metadata_id NOT IN (
+            SELECT value FROM json_each(?)
+        )
+    """, (mids_json,))
+    deactivated = total - conn.execute("SELECT COUNT(*) as c FROM books WHERE active = 1").fetchone()[0]
+    if deactivated:
+        print(f"  Deactivated {deactivated:,} books no longer in branch catalog")
+        conn.execute("""
+            DELETE FROM availability
+            WHERE metadata_id NOT IN (SELECT metadata_id FROM books WHERE active = 1)
+        """)
+        print(f"  Cleaned up availability for deactivated books")
 
 
 def _get_latest_sync_log_id(conn):
