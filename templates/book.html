@@ -18,11 +18,12 @@
 
     {% set best_series = series | best_series(book.title) %}
     {% if best_series %}
-    <p class="series-row">
+    <div class="series-row">
+      <span class="series-label">Series</span>
       {% for s in best_series %}
       <span class="series-pill">{{ s }}</span>
       {% endfor %}
-    </p>
+    </div>
     {% endif %}
 
     <p class="metadata">

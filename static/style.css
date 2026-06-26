@@ -321,9 +321,19 @@ body {
 
 .series-row {
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
   gap: 6px;
   margin-bottom: 8px;
+}
+
+.series-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #86868b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
 }
 
 .series-pill {
