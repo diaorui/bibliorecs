@@ -11,17 +11,6 @@ import config
 import db
 
 
-def _load_model():
-    kwargs = {"model_name_or_path": config.EMBEDDING_MODEL}
-    try:
-        import optimum  # noqa
-        kwargs["backend"] = "onnx"
-        print(f"  Using ONNX backend for {config.EMBEDDING_MODEL}")
-    except ImportError:
-        print(f"  Using PyTorch backend for {config.EMBEDDING_MODEL}")
-    return SentenceTransformer(**kwargs)
-
-
 def embed_text(b):
     parts = []
     if b.get("title"):
@@ -51,9 +40,9 @@ def main():
 
     print(f"Generating embeddings for {len(books):,} books...")
     t0 = time.time()
-    model = _load_model()
+    model = SentenceTransformer(config.EMBEDDING_MODEL)
     load_t = time.time() - t0
-    print(f"  Model loaded in {load_t:.1f}s")
+    print(f"  Model loaded in {load_t:.1f}s ({config.EMBEDDING_MODEL})")
 
     texts = [embed_text(b) for b in books]
 
