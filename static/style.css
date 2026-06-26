@@ -877,15 +877,6 @@ th {
 .btn-hold-main:hover { background: #1d4ed8; }
 .btn-hold-main:disabled { opacity: 0.5; cursor: default; }
 
-/* ── preview ── */
-
-.preview-canvas {
-  width: 100%;
-  max-width: 500px;
-  aspect-ratio: 3 / 4;
-  max-height: 80vh;
-}
-
 /* ── mobile ── */
 
 @media (max-width: 640px) {

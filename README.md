@@ -7,7 +7,7 @@ Personalized children's book recommendation engine built on top of the [Biblioco
 - **Recommendations** — per-category carousels (Fiction, Picture Books, Graphic Novels, etc.) computed from your borrowing history using sentence-transformer embeddings + MaxSim + MMR diversity
 - **Live availability** — real-time status badges (Available / All Checked Out / On Hold) fetched per-category at page load
 - **Hold management** — place and cancel holds directly from the web UI
-- **Book detail** — availability table, borrow history, hold status, and optional Google Books preview
+- **Book detail** — hold status and borrow history
 - **Branch-filtered catalog** — catalog synced to your home branch at sync time
 - **Mobile-friendly** — responsive layout down to 320px
 - **Local timestamps** — all times displayed in the browser's timezone
