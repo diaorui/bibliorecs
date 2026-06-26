@@ -54,45 +54,56 @@ def _run_due_tasks():
     if daily_due:
         _run("daily.py", "daily")
     elif catalog_due:
-        _run("sync.py", "catalog")
+        _run("sync.py", "catalog", "generate_embeddings.py")
 
 
 # ──────────────────────────── task runner ────────────────────────────
 
 
-def _run(script, task_name):
+def _run(script, task_name, post_script=None):
     if not _acquire_lock():
         return
 
-    _set_status("now", f"running {script}")
-    ts = time.strftime("%Y-%m-%dT%H:%M:%S")
+    scripts = [(script, task_name)]
+    if post_script:
+        scripts.append((post_script, "embeddings"))
 
-    try:
-        result = subprocess.run(
-            [sys.executable, script],
-            capture_output=True, text=True,
-            cwd=_SCRIPT_DIR,
-            timeout=7200,
-        )
+    for s, tn in scripts:
 
-        ok = result.returncode == 0
-        info = {"last_run": ts, "state": "ok" if ok else "failed"}
-        if ok:
-            info["last_ok"] = ts
-        else:
-            stderr = result.stderr.strip()
-            info["error"] = stderr[-500:] if stderr else f"exit {result.returncode}"
-            info["last_ok"] = _read_nested(status(), f"{task_name}.last_ok")
+        _set_status("now", f"running {s}")
+        ts = time.strftime("%Y-%m-%dT%H:%M:%S")
 
-        _set_status(task_name, info)
+        try:
+            result = subprocess.run(
+                [sys.executable, s],
+                capture_output=True, text=True,
+                cwd=_SCRIPT_DIR,
+                timeout=7200,
+            )
 
-    except subprocess.TimeoutExpired:
-        _set_status(task_name, {"last_run": ts, "state": "failed", "error": "timed out"})
-    except Exception as e:
-        _set_status(task_name, {"last_run": ts, "state": "failed", "error": str(e)[:500]})
-    finally:
-        _set_status("now", "idle")
-        _release_lock()
+            ok = result.returncode == 0
+            info = {"last_run": ts, "state": "ok" if ok else "failed"}
+            if ok:
+                info["last_ok"] = ts
+            else:
+                stderr = result.stderr.strip()
+                info["error"] = stderr[-500:] if stderr else f"exit {result.returncode}"
+                info["last_ok"] = _read_nested(status(), f"{tn}.last_ok")
+
+            _set_status(tn, info)
+
+            if not ok:
+                break
+
+        except subprocess.TimeoutExpired:
+            _set_status(tn, {"last_run": ts, "state": "failed", "error": "timed out"})
+            break
+        except Exception as e:
+            _set_status(tn, {"last_run": ts, "state": "failed", "error": str(e)[:500]})
+            break
+
+    _set_status("now", "idle")
+    _release_lock()
 
 
 # ──────────────────────────── file helpers ────────────────────────────
