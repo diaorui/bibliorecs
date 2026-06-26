@@ -86,10 +86,6 @@ def book_detail(metadata_id):
         abort(404)
     book = dict(row)
 
-    avail = conn.execute(
-        "SELECT * FROM availability WHERE metadata_id = ?", (metadata_id,)
-    ).fetchall()
-
     borrows = conn.execute("""
         SELECT * FROM borrow_events WHERE metadata_id = ?
         ORDER BY checkout_date DESC
@@ -101,7 +97,6 @@ def book_detail(metadata_id):
         "book.html",
         metadata_id=metadata_id,
         book=book,
-        availability=[dict(a) for a in avail],
         borrows=[dict(b) for b in borrows],
         subjects=_json_list(book.get("subjects")),
         genres=_json_list(book.get("genres")),

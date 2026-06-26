@@ -65,33 +65,10 @@
 </div>
 {% endif %}
 
-{% if availability %}
-<div class="section">
-  <h2 class="section-title">Availability</h2>
-  <div class="table-wrap">
-    <table class="availability-table">
-      <thead>
-        <tr><th>Status</th><th>Available</th><th>Total</th><th>Held</th><th>Last Checked</th></tr>
-      </thead>
-      <tbody>
-        {% for a in availability %}
-        <tr>
-          <td>{% if a.total_copies == 0 %}Not at home branch{% elif a.at_home and a.available_copies > 0 %}Available{% else %}All Checked Out{% endif %}</td>
-          <td>{{ a.available_copies }}</td>
-          <td>{{ a.total_copies }}</td>
-          <td>{{ a.held_copies }}</td>
-          <td>{% if a.last_checked %}<time class="local-time" datetime="{{ a.last_checked }}Z">{{ a.last_checked }}</time>{% endif %}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</div>
 <div id="hold-section" class="section" style="display:none">
   <h2 class="section-title">Hold Status</h2>
   <div id="hold-content" class="hold-block"></div>
 </div>
-{% endif %}
 
 {% if borrows %}
 <div class="section">
@@ -237,24 +214,10 @@ function handlePlaceHold(e) {
 showLoading();
 
 Promise.all([
-  fetch('/api/availability/' + mid).then(function(r) { return r.json(); }),
   fetch('/api/holds').then(function(r) { return r.json(); }),
   fetch('/api/checkouts').then(function(r) { return r.json(); })
 ]).then(function(results) {
-  var avail = results[0], holds = results[1], checkouts = results[2];
-
-  if (!avail.error) {
-    var row = document.querySelector('.availability-table tbody tr');
-    if (row) {
-      row.cells[0].textContent = avail.owns_home ? (avail.at_home ? 'Available' : 'All Checked Out') : 'Not at home branch';
-      row.cells[1].textContent = avail.available_copies || '0';
-      var timeEl = row.cells[4].querySelector('time');
-      if (timeEl) {
-        timeEl.setAttribute('datetime', new Date().toISOString());
-        timeEl.textContent = new Date().toLocaleString();
-      }
-    }
-  }
+  var holds = results[0], checkouts = results[1];
 
   if (checkouts.checked_out && checkouts.checked_out.indexOf(mid) !== -1)
     { showCheckedOut(); return; }
