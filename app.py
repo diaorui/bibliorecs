@@ -451,6 +451,98 @@ def _dedup(val):
     return result
 
 
+@app.template_filter("best_series")
+def _best_series(series_list, title=None):
+    """Pick the best 1-2 series names to show on the detail page.
+    Strategy:
+    - Clean parentheses and trailing junk like " book"/" series"
+    - Prefer shorter, core names over longer qualified ones
+    - When names overlap (one is substring of another), keep the shorter core
+    - Never drop a series just because it matches the book title (Dog Man etc.)
+    - Return at most 2, nicely capitalized
+    """
+    if not series_list:
+        return []
+
+    def strip_parens(text):
+        text = text or ""
+        prev = None
+        while prev != text:
+            prev = text
+            text = re.sub(r"\s*\([^()]*\)", "", text)
+        return text.strip()
+
+    def clean_name(s):
+        s = strip_parens(s)
+        s = re.sub(r"[\s,;:]+$", "", s).strip()
+        # drop trailing " book" / " books" for display (common noise in series names)
+        s = re.sub(r"\s+books?$", "", s, flags=re.IGNORECASE).strip()
+        return s
+
+    # Normalize and dedup
+    items = []
+    seen = set()
+    for s in series_list:
+        if not isinstance(s, str):
+            continue
+        c = clean_name(s)
+        if not c:
+            continue
+        k = c.lower()
+        if k in seen:
+            continue
+        seen.add(k)
+        items.append((len(c), c))
+
+    if not items:
+        return []
+
+    # Process shortest first
+    items.sort()
+
+    kept = []
+    for _, name in items:
+        lname = name.lower()
+        # Skip if we already have a shorter core that this extends
+        if any(lname != kk.lower() and kk.lower() in lname for kk in kept):
+            continue
+        # If this is shorter and contained in an existing, replace the longer one
+        replaced = False
+        new_kept = []
+        for k in kept:
+            if lname in k.lower() and lname != k.lower():
+                replaced = True
+                continue  # drop the longer
+            new_kept.append(k)
+        kept = new_kept
+        if replaced or not any(lname != kk.lower() and lname in kk.lower() for kk in kept):
+            kept.append(name)
+        if len(kept) >= 2:
+            break
+
+    # Nice display casing
+    SMALL = {"a", "an", "the", "and", "or", "of", "in", "on", "for", "to", "with"}
+    def nice(s):
+        words = s.split()
+        out = []
+        for i, w in enumerate(words):
+            lw = w.lower()
+            if i == 0:
+                if w and w[0].islower():
+                    w = w[0].upper() + w[1:]
+                out.append(w)
+            elif lw in SMALL:
+                out.append(lw)
+            else:
+                if any(c.isupper() for c in w[1:]):
+                    out.append(w)
+                else:
+                    out.append(w[0].upper() + w[1:] if w else w)
+        return " ".join(out)
+
+    return [nice(k) for k in kept[:2]]
+
+
 @app.template_filter("due_info")
 def due_info(checkout_date, is_current):
     if not checkout_date or not is_current:

@@ -15,6 +15,16 @@
     <h1>{{ book.title }}</h1>
     {% if book.subtitle %}<p class="book-subtitle">{{ book.subtitle }}</p>{% endif %}
     {% if book.author %}<p class="author">{{ book.author }}</p>{% endif %}
+
+    {% set best_series = series | best_series(book.title) %}
+    {% if best_series %}
+    <p class="series-row">
+      {% for s in best_series %}
+      <span class="series-pill">{{ s }}</span>
+      {% endfor %}
+    </p>
+    {% endif %}
+
     <p class="metadata">
       <span>{{ book.format | fmt_label }}</span>
       {% if book.content_type %}<span>{{ book.content_type | content_type_label }}</span>{% endif %}
@@ -41,11 +51,6 @@
         {% for g in clean_genres %}<span class="tag tag-genre">{{ g }}</span>{% endfor %}
       </div>
     </div>
-    {% endif %}
-
-    {% set series_clean = series | dedup %}
-    {% if series_clean %}
-    <p class="series-line">Series: {{ series_clean|join(', ') }}</p>
     {% endif %}
 
     {% if debug %}<a href="{{ catalog_url }}" class="btn btn-primary" target="_blank" rel="noopener">Open in Catalog</a>{% endif %}

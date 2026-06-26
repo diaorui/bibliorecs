@@ -319,12 +319,22 @@ body {
   color: #1e40af;
 }
 
-.series-line {
-  font-size: 0.88rem;
+.series-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.series-pill {
+  display: inline-block;
+  font-size: 0.78rem;
+  font-weight: 500;
   color: #515154;
-  margin-bottom: 12px;
-  padding-left: 8px;
-  border-left: 2px solid #d2d2d7;
+  background: #f1f1f3;
+  padding: 2px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
 }
 
 .btn {
