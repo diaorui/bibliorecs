@@ -9,4 +9,5 @@ venv/
 .gstack/
 embeddings.npy
 embedding_mids.json
+update_status.json
 
