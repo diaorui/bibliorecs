@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Stats – Bibliocommons Recs{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Library Stats</h1>
+<p class="page-subtitle">
+  {% if sync_time %}Recommendations computed <time class="local-time" datetime="{{ sync_time }}">{{ sync_time }}</time>{% endif %}
+</p>
+
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="number">{{ stats.total }}</div>
+    <div class="label">Total Books</div>
+  </div>
+  <div class="stat-card">
+    <div class="number">{{ stats.with_author }}</div>
+    <div class="label">With Author</div>
+  </div>
+  <div class="stat-card">
+    <div class="number">{{ stats.with_subjects }}</div>
+    <div class="label">With Subjects</div>
+  </div>
+  <div class="stat-card">
+    <div class="number">{{ stats.with_description }}</div>
+    <div class="label">With Description</div>
+  </div>
+  <div class="stat-card">
+    <div class="number">{{ total_borrows }}</div>
+    <div class="label">Borrow Events</div>
+  </div>
+</div>
+
+{% if formats %}
+<div class="section">
+  <h2 class="section-title">Format Distribution</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Format</th><th>Count</th></tr></thead>
+      <tbody>
+        {% for f in formats %}
+        <tr><td>{{ f.format }}</td><td>{{ f.count }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% if content_types %}
+<div class="section">
+  <h2 class="section-title">Content Type Distribution</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Content Type</th><th>Count</th></tr></thead>
+      <tbody>
+        {% for ct in content_types %}
+        <tr><td>{{ ct.content_type }}</td><td>{{ ct.count }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% if languages %}
+<div class="section">
+  <h2 class="section-title">Language Distribution (top 20)</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Language</th><th>Count</th></tr></thead>
+      <tbody>
+        {% for l in languages %}
+        <tr><td>{{ l.primary_language }}</td><td>{{ l.count }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% if years %}
+<div class="section">
+  <h2 class="section-title">Recent Years</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Year</th><th>Count</th></tr></thead>
+      <tbody>
+        {% for y in years %}
+        <tr><td>{{ y.publication_year }}</td><td>{{ y.count }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

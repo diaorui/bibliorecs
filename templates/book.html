@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+{% block title %}{{ book.title }} – Bibliocommons Recs{% endblock %}
+
+{% block content %}
+<div class="book-detail">
+  <div class="book-cover-large">
+    <div class="book-cover-wrap">
+      <img class="cover-img" src="{{ img_url }}"
+           alt="{{ book.title }}" loading="lazy"
+           data-fallback="{{ fallback_url }}">
+      <div class="cover-placeholder cover-placeholder-lg">📖<br>{{ book.title[:50] }}</div>
+    </div>
+  </div>
+  <div class="book-info">
+    <h1>{{ book.title }}</h1>
+    {% if book.subtitle %}<p style="color:#515154;margin-bottom:4px">{{ book.subtitle }}</p>{% endif %}
+    <p class="author">{{ book.author or '' }}</p>
+    <p class="metadata">
+      <span>{{ book.format or '' }}</span>
+      {% if book.content_type %}<span>{{ book.content_type }}</span>{% endif %}
+      {% if book.publication_year %}<span>{{ book.publication_year }}</span>{% endif %}
+      {% if book.primary_language %}<span>{{ book.primary_language }}</span>{% endif %}
+    </p>
+    {% if book.description %}
+    <p class="description">{{ book.description }}</p>
+    {% endif %}
+
+    {% if subjects %}
+    <div>
+      <div class="tag-list">
+        {% for s in subjects %}<span class="tag">{{ s }}</span>{% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if genres %}
+    <div style="margin-bottom:12px">
+      <div class="tag-list">
+        {% for g in genres %}<span class="tag" style="background:#dbeafe;color:#1e40af">{{ g }}</span>{% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if series %}
+    <p style="font-size:0.88rem;color:#515154;margin-bottom:12px">Series: {{ series|join(', ') }}</p>
+    {% endif %}
+
+    <a href="{{ catalog_url }}" class="btn btn-primary" target="_blank" rel="noopener">Open in Catalog</a>
+  </div>
+</div>
+
+{% if availability %}
+<div class="section">
+  <h2 class="section-title">Availability</h2>
+  <div class="table-wrap">
+    <table class="availability-table">
+      <thead>
+        <tr><th>Status</th><th>Available</th><th>Total</th><th>Held</th><th>Last Checked</th></tr>
+      </thead>
+      <tbody>
+        {% for a in availability %}
+        <tr>
+          <td>{{ a.status or '' }}</td>
+          <td>{{ a.available_copies }}</td>
+          <td>{{ a.total_copies }}</td>
+          <td>{{ a.held_copies }}</td>
+          <td>{% if a.last_checked %}<time class="local-time" datetime="{{ a.last_checked }}Z">{{ a.last_checked }}</time>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+<div id="hold-section" class="section" style="display:none">
+  <h2 class="section-title">Hold</h2>
+  <div id="hold-content" class="hold-block"></div>
+</div>
+{% endif %}
+
+{% if borrows %}
+<div class="section">
+  <h2 class="section-title">Your Borrow History</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Date</th><th>Source</th></tr>
+      </thead>
+      <tbody>
+        {% for b in borrows %}
+        <tr>
+          <td><span class="{% if b.is_current %}due-date{% endif %}">{{ b.checkout_date | due_info(b.is_current) or b.checkout_date or '' }}</span></td>
+          <td>{% if b.is_current %}Current checkout{% else %}History{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+var mid = '{{ metadata_id }}';
+var holdSection = document.getElementById('hold-section');
+var holdContent = document.getElementById('hold-content');
+
+function showLoading() {
+  holdContent.innerHTML = '<div class="hold-status"><span class="hold-status-label">Checking hold status...</span></div>';
+  holdSection.style.display = '';
+}
+
+function showCheckedOut() {
+  holdContent.innerHTML = '<div class="hold-status"><span class="hold-status-label muted">You have this checked out.</span></div>';
+  holdSection.style.display = '';
+}
+
+function showReady(h) {
+  var expiry = h.expiry_date ? '<div class="hold-expiry">Pick up by ' + h.expiry_date.slice(0,10) + '</div>' : '';
+  holdContent.innerHTML =
+    '<div class="hold-status hold-status-ready">' +
+      '<span class="hold-status-badge">Ready for Pickup at Central Park</span>' +
+      expiry +
+    '</div>' +
+    '<button class="btn-cancel-hold" data-hold-id="' + h.hold_id + '" data-mid="' + mid + '">Cancel hold</button>';
+  holdSection.style.display = '';
+}
+
+function showOnHold(h) {
+  var pos = (h.position && h.position > 0) ? ' — Position #' + h.position : '';
+  holdContent.innerHTML =
+    '<div class="hold-status hold-status-queued">' +
+      '<span class="hold-status-badge">On hold' + pos + '</span>' +
+    '</div>' +
+    '<button class="btn-cancel-hold" data-hold-id="' + h.hold_id + '" data-mid="' + mid + '">Cancel hold</button>';
+  holdSection.style.display = '';
+}
+
+function showPlaceHold() {
+  holdContent.innerHTML =
+    '<button class="btn-hold-main" data-mid="' + mid + '">Place Hold at Central Park</button>';
+  holdSection.style.display = '';
+}
+
+function handleCancel(e) {
+  var btn = e.target.closest('.btn-cancel-hold');
+  if (!btn) return;
+  e.preventDefault();
+  if (btn.dataset.confirming) {
+    btn.textContent = 'Cancelling...';
+    btn.disabled = true;
+    fetch('/api/hold/cancel', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({hold_id: btn.dataset.holdId, metadata_id: btn.dataset.mid})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.success) { showPlaceHold(); }
+      else { showToast('Cancel failed: ' + (d.error || 'error'), 5000); delete btn.dataset.confirming; btn.textContent = 'Cancel hold'; }
+    });
+  } else {
+    btn.dataset.confirming = '1';
+    btn.textContent = 'Confirm cancel?';
+    setTimeout(function() { if (btn.dataset.confirming) { delete btn.dataset.confirming; btn.textContent = 'Cancel hold'; } }, 5000);
+  }
+}
+
+function showHoldError(msg) {
+  holdContent.innerHTML =
+    '<div class="hold-status hold-status-error">' +
+      '<span class="hold-status-badge"></span>' +
+    '</div>' +
+    '<button class="btn-hold-main" data-mid="' + mid + '">Place Hold at Central Park</button>';
+  holdContent.querySelector('.hold-status-badge').textContent = msg;
+  holdSection.style.display = '';
+  showToast(msg, 8000);
+}
+
+function handlePlaceHold(e) {
+  var btn = e.target.closest('.btn-hold-main');
+  if (!btn) return;
+  btn.textContent = 'Placing...';
+  btn.disabled = true;
+  fetch('/api/hold/place', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({metadata_id: mid})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.success) {
+      showOnHold({position: d.position, hold_id: d.hold_id});
+    } else if (d.error && d.error.indexOf('already') !== -1) {
+      showOnHold({position: null, hold_id: null});
+    } else {
+      showHoldError(d.error || 'Hold failed');
+    }
+  })
+  .catch(function() {
+    showHoldError('Network error placing hold');
+  });
+}
+
+showLoading();
+
+Promise.all([
+  fetch('/api/availability/' + mid).then(function(r) { return r.json(); }),
+  fetch('/api/holds').then(function(r) { return r.json(); }),
+  fetch('/api/checkouts').then(function(r) { return r.json(); })
+]).then(function(results) {
+  var avail = results[0], holds = results[1], checkouts = results[2];
+
+  if (!avail.error) {
+    var row = document.querySelector('.availability-table tbody tr');
+    if (row) {
+      row.cells[0].textContent = avail.owns_home ? (avail.at_home ? 'Available' : 'All Checked Out') : 'Not at home branch';
+      row.cells[1].textContent = avail.available_copies || '0';
+      var timeEl = row.cells[4].querySelector('time');
+      if (timeEl) {
+        timeEl.setAttribute('datetime', new Date().toISOString());
+        timeEl.textContent = new Date().toLocaleString();
+      }
+    }
+  }
+
+  if (checkouts.checked_out && checkouts.checked_out.indexOf(mid) !== -1)
+    { showCheckedOut(); return; }
+
+  if (holds.holds) {
+    var myHold = null;
+    holds.holds.forEach(function(h) { if (h.metadata_id === mid) myHold = h; });
+    if (myHold) {
+      if (myHold.status === 'READY_FOR_PICKUP')
+        { showReady(myHold); return; }
+      showOnHold(myHold);
+      return;
+    }
+  }
+
+  showPlaceHold();
+});
+
+document.addEventListener('click', handleCancel);
+document.addEventListener('click', handlePlaceHold);
+</script>
+{% endblock %}

@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Bibliocommons Recs{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <nav class="nav">
+    <div class="nav-inner">
+      <a href="/" class="nav-brand">Bibliocommons Recs</a>
+      <div class="nav-links">
+        <a href="/" class="nav-link">Home</a>
+        <a href="/history" class="nav-link">History</a>
+        <a href="/holds" class="nav-link">Holds</a>
+        <a href="/stats" class="nav-link">Stats</a>
+      </div>
+    </div>
+  </nav>
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+  <script>
+  document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.local-time').forEach(function(el) {
+      var d = new Date(el.getAttribute('datetime'));
+      if (!isNaN(d)) el.textContent = d.toLocaleString();
+    });
+    document.querySelectorAll('img.cover-img').forEach(function(img) {
+      var triedFallback = false;
+      function tryFallback() {
+        if (triedFallback) return false;
+        triedFallback = true;
+        var fb = img.getAttribute('data-fallback');
+        if (fb) { img.src = fb; return true; }
+        return false;
+      }
+      function showPlaceholder() {
+        img.style.display = 'none';
+        var card = img.closest('.carousel-card');
+        if (card) {
+          card.style.display = 'none';
+          return;
+        }
+        var ph = img.parentNode.querySelector('.cover-placeholder');
+        if (ph) ph.style.display = 'flex';
+      }
+      img.addEventListener('load', function() {
+        if (img.naturalWidth <= 1 && img.naturalHeight <= 1) {
+          if (!tryFallback()) showPlaceholder();
+        }
+      });
+      img.addEventListener('error', function() {
+        if (!tryFallback()) showPlaceholder();
+      });
+    });
+  });
+  </script>
+  <script>
+  function showToast(msg, duration) {
+    duration = duration || 5000;
+    var t = document.querySelector('.toast');
+    if (t) t.remove();
+    t = document.createElement('div');
+    t.className = 'toast';
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(function() { t.style.opacity = '0'; setTimeout(function() { t.remove(); }, 400); }, duration);
+  }
+  </script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

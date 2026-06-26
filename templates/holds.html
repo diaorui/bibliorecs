@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Holds – Bibliocommons Recs{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Your Holds</h1>
+
+{% if error %}
+<p style="color:#dc2626;margin-bottom:16px">{{ error }}</p>
+{% endif %}
+
+<div class="quota-bar">
+  <span>Physical: {% if ils_total %} {{ ils_used }} of {{ ils_total }} used{% else %}Unlimited{% endif %}</span>
+  <span>Digital: {{ od_used }} of {{ od_total }} used</span>
+</div>
+
+{% if holds %}
+{% set ready = holds | selectattr("status", "equalto", "READY_FOR_PICKUP") | list %}
+{% set waiting = holds | rejectattr("status", "equalto", "READY_FOR_PICKUP") | list %}
+
+{% if ready %}
+<div class="section">
+  <h2 class="section-title">Ready for Pickup</h2>
+  {% for h in ready %}
+  <a href="/book/{{ h.metadata_id }}" class="history-item">
+    <div class="history-cover-wrap">
+      <img class="history-cover cover-img" src="https://secure.syndetics.com/index.aspx?isbn={{ h.isbn }}/LC.GIF&client=sepup&type=xw12&oclc="
+           alt="" loading="lazy"
+           data-fallback="https://covers.openlibrary.org/b/isbn/{{ h.isbn }}-L.jpg">
+      <div class="cover-placeholder cover-placeholder-sm">📖</div>
+    </div>
+    <div class="history-body">
+      <div class="title">{{ h.title }}</div>
+      <div class="sub">{{ h.author or '' }}</div>
+    </div>
+    <div class="hold-status-wrap">
+      <span class="hold-badge hold-ready">Ready for Pickup</span>
+      {% if h.expiry_date %}<span class="hold-expiry">Expires {{ h.expiry_date[:10] }}</span>{% endif %}
+      <button class="btn-cancel" data-hold-id="{{ h.hold_id }}" data-mid="{{ h.metadata_id }}">Cancel</button>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if waiting %}
+<div class="section">
+  <h2 class="section-title">On Hold</h2>
+  {% for h in waiting %}
+  <a href="/book/{{ h.metadata_id }}" class="history-item">
+    <div class="history-cover-wrap">
+      <img class="history-cover cover-img" src="https://secure.syndetics.com/index.aspx?isbn={{ h.isbn }}/LC.GIF&client=sepup&type=xw12&oclc="
+           alt="" loading="lazy"
+           data-fallback="https://covers.openlibrary.org/b/isbn/{{ h.isbn }}-L.jpg">
+      <div class="cover-placeholder cover-placeholder-sm">📖</div>
+    </div>
+    <div class="history-body">
+      <div class="title">{{ h.title }}</div>
+      <div class="sub">{{ h.author or '' }}</div>
+    </div>
+    <div class="hold-status-wrap">
+      <span class="hold-badge hold-queued">{% if h.position and h.position > 0 %}Position #{{ h.position }}{% else %}On Hold{% endif %}</span>
+      <button class="btn-cancel" data-hold-id="{{ h.hold_id }}" data-mid="{{ h.metadata_id }}">Cancel</button>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% else %}
+<div class="empty-state">
+  <h2>No holds</h2>
+  <p>Place holds on recommended books from the home page.</p>
+  <a href="/" class="btn btn-primary" style="margin-top:12px">Browse Recommendations</a>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.querySelectorAll('.btn-cancel').forEach(function(btn) {
+  btn.addEventListener('click', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (btn.dataset.confirming) {
+      var holdId = btn.dataset.holdId;
+      var mid = btn.dataset.mid;
+      btn.textContent = 'Cancelling...';
+      btn.disabled = true;
+      fetch('/api/hold/cancel', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({hold_id: holdId, metadata_id: mid})
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.success) {
+          var item = btn.closest('.history-item');
+          item.style.opacity = '0.3';
+          item.style.pointerEvents = 'none';
+          btn.textContent = 'Cancelled';
+        } else {
+          btn.textContent = 'Failed';
+          btn.dataset.confirming = '';
+        }
+      })
+      .catch(function() {
+        btn.textContent = 'Failed';
+        btn.dataset.confirming = '';
+      });
+    } else {
+      btn.dataset.confirming = '1';
+      btn.textContent = 'Confirm?';
+      setTimeout(function() { if (btn.dataset.confirming) { delete btn.dataset.confirming; btn.textContent = 'Cancel'; } }, 5000);
+    }
+  });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+{% block title %}Recommendations – Bibliocommons Recs{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Your Recommendations</h1>
+<p class="page-subtitle">
+  {% if sync_time %}Computed <time class="local-time" datetime="{{ sync_time }}">{{ sync_time }}</time>{% endif %}
+</p>
+
+{% for carousel in carousels %}
+<section class="carousel-section" data-category="{{ carousel.name }}">
+  <h2 class="carousel-heading">{{ carousel.name }}</h2>
+  <div class="carousel-track">
+    {% for r in carousel.books %}
+    <div class="carousel-card" data-mid="{{ r.metadata_id }}">
+      <a href="/book/{{ r.metadata_id }}" class="carousel-card-link">
+        <div class="carousel-cover-wrap">
+          <img class="carousel-cover cover-img" src="{{ r.img_url }}"
+               alt="{{ r.title }}" loading="lazy"
+               data-fallback="{{ r.fallback_url }}">
+          <div class="cover-placeholder">📖<br>{{ r.title[:30] }}</div>
+        </div>
+        <div class="carousel-body">
+          <div class="carousel-title">{{ r.title }}</div>
+          <div class="carousel-author">{{ r.author or '' }}</div>
+        </div>
+      </a>
+      <div class="carousel-actions">
+        <div class="card-status-wrap">
+          <span class="status-dot status-dot-avail"></span>
+          <span class="status-label status-label-avail">Loading...</span>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% else %}
+<div class="empty-state">
+  <h2>No recommendations yet</h2>
+  <p>Run <code>python daily.py</code> to generate recommendations.</p>
+</div>
+{% endfor %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  var __holdsByMid = {};
+  var __checkedOutByMe = new Set();
+
+  function init() {
+    Promise.all([
+      fetch('/api/holds').then(function(r) { return r.json(); }),
+      fetch('/api/checkouts').then(function(r) { return r.json(); })
+    ]).then(function(results) {
+      var holdsData = results[0];
+      var checkoutsData = results[1];
+      if (holdsData.holds) {
+        holdsData.holds.forEach(function(h) {
+          if (h.metadata_id) __holdsByMid[h.metadata_id] = h;
+        });
+      }
+      if (checkoutsData.checked_out) {
+        checkoutsData.checked_out.forEach(function(mid) { __checkedOutByMe.add(mid); });
+      }
+      startCarousels();
+    }).catch(function() {
+      startCarousels();
+    });
+  }
+
+  function setStatus(card, dotClass, labelClass, labelText, buttonHtml) {
+    var wrap = card.querySelector('.card-status-wrap');
+    if (!wrap) return;
+    wrap.innerHTML =
+      '<span class="status-dot ' + dotClass + '"></span>' +
+      '<span class="status-label ' + labelClass + '">' + labelText + '</span>' +
+      (buttonHtml || '');
+  }
+
+  function startCarousels() {
+    var sections = document.querySelectorAll('.carousel-section');
+    var idx = 0;
+    function checkNext() {
+      if (idx >= sections.length) return;
+      var section = sections[idx];
+      idx++;
+      var cards = section.querySelectorAll('.carousel-card[data-mid]');
+      var ids = [];
+      cards.forEach(function(c) { ids.push(c.getAttribute('data-mid')); });
+      if (!ids.length) { checkNext(); return; }
+      fetch('/api/availability/batch?ids=' + ids.join(','))
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          var anyVisible = false;
+          cards.forEach(function(c) {
+            var mid = c.getAttribute('data-mid');
+
+            if (__checkedOutByMe.has(mid)) {
+              setStatus(c, 'status-dot-yours', 'status-label-yours', 'Checked out', '');
+              anyVisible = true;
+              return;
+            }
+
+            var hold = __holdsByMid[mid];
+            if (hold) {
+              if (hold.status === 'READY_FOR_PICKUP') {
+                setStatus(c, 'status-dot-ready', 'status-label-ready', 'Ready for pickup!', '');
+              } else {
+                var pos = (hold.position && hold.position > 0) ? ' #' + hold.position : '';
+                setStatus(c, 'status-dot-hold', 'status-label-hold', 'On hold' + pos, '');
+              }
+              anyVisible = true;
+              return;
+            }
+
+            var info = data[mid];
+            if (!info || info.error || !info.at_home) {
+              setStatus(c, 'status-dot-unavail', '', 'All checked out',
+                '<button class="btn-hold" data-mid="' + mid + '">Hold</button>');
+              anyVisible = true;
+            } else {
+              setStatus(c, 'status-dot-avail', 'status-label-avail', 'Available',
+                '<button class="btn-hold" data-mid="' + mid + '">Hold</button>');
+              anyVisible = true;
+            }
+          });
+          if (!anyVisible) section.style.display = 'none';
+        })
+        .catch(function() {})
+        .then(function() { checkNext(); });
+    }
+    checkNext();
+  }
+
+  document.addEventListener('click', function(e) {
+    var btn = e.target.closest('.btn-hold');
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (btn.disabled) return;
+    var mid = btn.getAttribute('data-mid');
+    btn.textContent = '...';
+    btn.disabled = true;
+    fetch('/api/hold/place', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({metadata_id: mid})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var card = btn.closest('.carousel-card');
+      if (data.success) {
+        var pos = (data.position && data.position > 0) ? ' #' + data.position : '';
+        setStatus(card, 'status-dot-hold', 'status-label-hold', 'On hold' + pos, '');
+      } else if (data.error && data.error.indexOf('already') !== -1) {
+        setStatus(card, 'status-dot-hold', 'status-label-hold', 'On hold', '');
+      } else if (data.error && (data.error.indexOf('cannot be requested') !== -1 || data.error.indexOf('Cannot be requested') !== -1)) {
+        setStatus(card, 'status-dot-error', 'status-label-error', 'Cannot be requested', '');
+        showToast('Hold failed: ' + data.error, 8000);
+      } else {
+        btn.textContent = 'Hold';
+        btn.disabled = false;
+        showToast('Hold failed: ' + (data.error || 'error'), 5000);
+      }
+    })
+    .catch(function() {
+      btn.textContent = 'Hold';
+      btn.disabled = false;
+      showToast('Network error placing hold', 5000);
+    });
+  });
+
+  // showToast is defined in base.html
+
+  init();
+})();
+</script>
+{% endblock %}
