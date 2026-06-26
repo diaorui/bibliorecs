@@ -4,7 +4,7 @@ Personalized children's book recommendation engine built on top of the [Biblioco
 
 ## Features
 
-- **Recommendations** — per-category carousels (Fiction, Picture Books, Graphic Novels, etc.) computed from your borrowing history using TF-IDF + MMR diversity
+- **Recommendations** — per-category carousels (Fiction, Picture Books, Graphic Novels, etc.) computed from your borrowing history using sentence-transformer embeddings + MaxSim + MMR diversity
 - **Live availability** — real-time status badges (Available / All Checked Out / On Hold) fetched per-category at page load
 - **Hold management** — place and cancel holds directly from the web UI
 - **Book detail** — availability table, borrow history, hold status, and optional Google Books preview
@@ -34,14 +34,25 @@ Edit `config.py` to match your library:
 |---|---|---|
 | `CENTRAL_PARK_BRANCH` | `"Central Park Library"` | Your home branch name (as it appears in the API) |
 | `CENTRAL_PARK_BRANCH_CODE` | `"C"` | Branch code used when placing holds |
+| `EMBEDDING_MODEL` | `"BAAI/bge-small-en-v1.5"` | Sentence transformer model for book embeddings |
 | `FILTER_HOME_BRANCH` | `True` | Only recommend books at your branch |
 | `FILTER_ENGLISH` | `True` | Only recommend English-language books |
 | `AVAILABILITY_CACHE_SECONDS` | `900` | How long to cache availability data |
-| `TFIDF_MAX_FEATURES` | `10000` | TF-IDF vocabulary size |
-| `TOP_CANDIDATES` | `50` | Recommendations per category |
+| `TOP_CANDIDATES` | `25` | Recommendations per category |
 | `MMR_LAMBDA` | `0.5` | Diversity vs. relevance trade-off |
+| `MMR_TOP_K` | `100` | Candidates considered before MMR reranking |
 
 ## Usage
+
+### 0. Generate book embeddings (one-time)
+
+```bash
+python generate_embeddings.py
+```
+
+Encodes all active books using the configured sentence-transformer model. Takes ~15s on GPU or ~2-5 min on CPU. Produces `embeddings.npy` (115 MB, gitignored) and `embedding_mids.json`.
+
+Embeddings are auto-generated if missing when `daily.py` runs.
 
 ### 1. Sync the catalog
 
@@ -72,25 +83,29 @@ Open `http://localhost:5050`.
 ## Architecture
 
 ```
-sync.py          → catalog sync (one-time, ~63 min for 78k books)
-patron.py        → borrowing history sync
-recommend.py     → TF-IDF + MMR recommendation engine
-api.py           → Bibliocommons API client (auth, availability, holds)
-app.py           → Flask web app with server-rendered templates
-db.py            → SQLite schema and migrations
+sync.py                  → catalog sync (one-time, ~63 min for 78k books)
+patron.py                → borrowing history sync
+generate_embeddings.py   → one-time embedding generation (~15s GPU)
+recommend.py             → embedding MaxSim + MMR recommendation engine
+api.py                   → Bibliocommons API client (auth, availability, holds)
+app.py                   → Flask web app with server-rendered templates
+db.py                    → SQLite schema and migrations
+updater.py               → daemon subprocess for nightly auto-updates
 ```
 
 ### Recommendation algorithm
 
-1. **TF-IDF** — each book is represented by its title, author, subjects, and genres. A global TF-IDF matrix is built from all borrows across all users.
-2. **MMR (Maximal Marginal Relevance)** — for each category, the top 50 most relevant books are selected, balancing relevance to the user's history with diversity.
-3. **Categories** — derived from the `call_number` prefix (12 categories: Picture Books, Fiction, Board Books, Graphic Novels, Easy Readers, Science, History, Biography, Technology, Arts & Recreation, Social Sciences, Other).
+1. **Sentence transformer embeddings** — each book is encoded as a 384-d vector (BGE-small) from its title, author, series, subjects, and genres.
+2. **MaxSim scoring** — for each candidate book, the relevance score is its maximum cosine similarity to any borrowed book (preferring same-series matches over generic profile averaging).
+3. **MMR (Maximal Marginal Relevance)** — for each category, the top 100 books by MaxSim are reranked, balancing relevance with embedding-based pairwise diversity.
+4. **Categories** — derived from the `call_number` prefix (12 categories: Picture Books, Fiction, Board Books, Graphic Novels, Easy Readers, Science, History, Biography, Technology, Arts & Recreation, Social Sciences, Other).
 
 ### Data pipeline
 
 ```
 Bibliocommons API → sync.py → books.db (catalog)
                   → patron.py → borrow_events table
+                  → generate_embeddings.py → embeddings.npy (pre-computed)
                   → recommend.py → recommendation_cache table
                   → app.py / api.py → real-time availability + holds
 ```
