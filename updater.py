@@ -1,6 +1,7 @@
 import json
 import os
 import subprocess
+import sys
 import time
 from multiprocessing import Process
 
@@ -68,7 +69,7 @@ def _run(script, task_name):
 
     try:
         result = subprocess.run(
-            ["python3", script],
+            [sys.executable, script],
             capture_output=True, text=True,
             cwd=_SCRIPT_DIR,
             timeout=7200,

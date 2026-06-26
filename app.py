@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import urllib.error
 from collections import defaultdict
@@ -484,5 +485,6 @@ def _fmt_rec(r):
 
 
 if __name__ == "__main__":
-    updater.start()
+    if not app.debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+        updater.start()
     app.run(host="0.0.0.0", port=5050, debug=True)
