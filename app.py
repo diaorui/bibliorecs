@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 import re
 import urllib.error
 from collections import defaultdict
@@ -12,6 +13,7 @@ import updater
 from recommend import book_category
 
 app = Flask(__name__)
+app.config["DEBUG_MODE"] = "--debug" in sys.argv or os.environ.get("BIBLIORECS_DEBUG") == "1"
 
 OL_URL = "https://covers.openlibrary.org/b/isbn/{isbn}-{size}.jpg"
 SYN_URL = "https://secure.syndetics.com/index.aspx?isbn={isbn}/{size}.GIF&client=sepup&type=xw12&oclc="
@@ -483,7 +485,13 @@ def _fmt_rec(r):
     return r
 
 
+@app.context_processor
+def inject_debug():
+    return {"debug": app.config.get("DEBUG_MODE", False)}
+
+
 if __name__ == "__main__":
-    if not app.debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+    debug_mode = app.config["DEBUG_MODE"]
+    if not debug_mode:
         updater.start()
-    app.run(host="0.0.0.0", port=5050, debug=True)
+    app.run(host="0.0.0.0", port=5050, debug=debug_mode)

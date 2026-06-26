@@ -45,7 +45,7 @@
     <p style="font-size:0.88rem;color:#515154;margin-bottom:12px">Series: {{ series|join(', ') }}</p>
     {% endif %}
 
-    <a href="{{ catalog_url }}" class="btn btn-primary" target="_blank" rel="noopener">Open in Catalog</a>
+    {% if debug %}<a href="{{ catalog_url }}" class="btn btn-primary" target="_blank" rel="noopener">Open in Catalog</a>{% endif %}
   </div>
 </div>
 
