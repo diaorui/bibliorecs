@@ -284,6 +284,11 @@ body {
 
 .book-info .metadata span { margin-right: 16px; }
 
+.book-info .book-subtitle {
+  color: #515154;
+  margin-bottom: 4px;
+}
+
 .book-info .description {
   font-size: 0.92rem;
   line-height: 1.6;
@@ -303,6 +308,21 @@ body {
   padding: 3px 10px;
   border-radius: 10px;
   color: #515154;
+}
+
+.tag-section {
+  margin-bottom: 12px;
+}
+
+.tag-genre {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.series-line {
+  font-size: 0.88rem;
+  color: #515154;
+  margin-bottom: 12px;
 }
 
 .btn {

@@ -13,36 +13,39 @@
   </div>
   <div class="book-info">
     <h1>{{ book.title }}</h1>
-    {% if book.subtitle %}<p style="color:#515154;margin-bottom:4px">{{ book.subtitle }}</p>{% endif %}
+    {% if book.subtitle %}<p class="book-subtitle">{{ book.subtitle }}</p>{% endif %}
     <p class="author">{{ book.author or '' }}</p>
     <p class="metadata">
-      <span>{{ book.format or '' }}</span>
-      {% if book.content_type %}<span>{{ book.content_type }}</span>{% endif %}
+      <span>{{ book.format | fmt_label }}</span>
+      {% if book.content_type %}<span>{{ book.content_type | content_type_label }}</span>{% endif %}
       {% if book.publication_year %}<span>{{ book.publication_year }}</span>{% endif %}
-      {% if book.primary_language %}<span>{{ book.primary_language }}</span>{% endif %}
+      {% if book.primary_language %}<span>{{ book.primary_language | lang_label }}</span>{% endif %}
     </p>
     {% if book.description %}
     <p class="description">{{ book.description }}</p>
     {% endif %}
 
-    {% if subjects %}
-    <div>
+    {% set ns = namespace(subjects_clean=[]) %}
+    {% for s in subjects %}{% set _ = ns.subjects_clean.append(s | clean_subject) %}{% endfor %}
+    {% if ns.subjects_clean %}
+    <div class="tag-section">
       <div class="tag-list">
-        {% for s in subjects %}<span class="tag">{{ s }}</span>{% endfor %}
+        {% for s in ns.subjects_clean %}<span class="tag">{{ s }}</span>{% endfor %}
       </div>
     </div>
     {% endif %}
 
-    {% if genres %}
-    <div style="margin-bottom:12px">
+    {% set clean_genres = genres | dedup_genres %}
+    {% if clean_genres %}
+    <div class="tag-section genre-section">
       <div class="tag-list">
-        {% for g in genres %}<span class="tag" style="background:#dbeafe;color:#1e40af">{{ g }}</span>{% endfor %}
+        {% for g in clean_genres %}<span class="tag tag-genre">{{ g }}</span>{% endfor %}
       </div>
     </div>
     {% endif %}
 
     {% if series %}
-    <p style="font-size:0.88rem;color:#515154;margin-bottom:12px">Series: {{ series|join(', ') }}</p>
+    <p class="series-line">Series: {{ series|join(', ') }}</p>
     {% endif %}
 
     {% if debug %}<a href="{{ catalog_url }}" class="btn btn-primary" target="_blank" rel="noopener">Open in Catalog</a>{% endif %}
@@ -79,7 +82,7 @@
   </div>
 </div>
 <div id="hold-section" class="section" style="display:none">
-  <h2 class="section-title">Hold</h2>
+  <h2 class="section-title">Hold Status</h2>
   <div id="hold-content" class="hold-block"></div>
 </div>
 {% endif %}

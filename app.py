@@ -385,6 +385,58 @@ def stats():
                            update_window_end=config.UPDATE_WINDOW_END)
 
 
+@app.template_filter("fmt_label")
+def _fmt_label_filter(val):
+    if not val:
+        return ""
+    return _FORMAT_LABELS.get(val, val.replace("_", " ").title().strip())
+
+
+@app.template_filter("content_type_label")
+def _content_type_label(val):
+    if not val:
+        return ""
+    return val.title()
+
+
+@app.template_filter("lang_label")
+def _lang_label(val):
+    if not val:
+        return ""
+    labels = {"eng": "English"}
+    return labels.get(val, val)
+
+
+_SUBJECT_SUFFIXES = [
+    " Juvenile fiction", " Juvenile literature",
+    " Comic books, strips, etc",
+]
+
+
+@app.template_filter("clean_subject")
+def _clean_subject(val):
+    if not val:
+        return ""
+    for s in _SUBJECT_SUFFIXES:
+        if val.lower().endswith(s.lower()):
+            return val[:-len(s)]
+    return val
+
+
+@app.template_filter("dedup_genres")
+def _dedup_genres(val):
+    if not val:
+        return []
+    seen = set()
+    result = []
+    for g in val:
+        key = g.lower()
+        if key not in seen:
+            seen.add(key)
+            result.append(_clean_genre(g))
+    return result
+
+
 @app.template_filter("due_info")
 def due_info(checkout_date, is_current):
     if not checkout_date or not is_current:
