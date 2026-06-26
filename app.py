@@ -327,7 +327,7 @@ def history():
         FROM borrow_events b
         LEFT JOIN books bk ON bk.metadata_id = b.metadata_id
         WHERE b.is_current = 1
-        ORDER BY b.checkout_date DESC
+        ORDER BY COALESCE(b.checkout_date, '9999-12-31') ASC
     """).fetchall()
 
     past = conn.execute("""
