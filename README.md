@@ -8,7 +8,7 @@ Personalized children's book recommendation engine built on top of the [Biblioco
 - **Live availability** — real-time status badges (Available / All Checked Out / On Hold) fetched per-category at page load
 - **Hold management** — place and cancel holds directly from the web UI
 - **Book detail** — availability table, borrow history, hold status, and optional Google Books preview
-- **Home-branch filter** — optionally limit to books owned by your home library branch
+- **Branch-filtered catalog** — catalog synced to your home branch at sync time
 - **Mobile-friendly** — responsive layout down to 320px
 - **Local timestamps** — all times displayed in the browser's timezone
 
@@ -35,10 +35,9 @@ Edit `config.py` to match your library:
 | `CENTRAL_PARK_BRANCH` | `"Central Park Library"` | Your home branch name (as it appears in the API) |
 | `CENTRAL_PARK_BRANCH_CODE` | `"C"` | Branch code used when placing holds |
 | `EMBEDDING_MODEL` | `"BAAI/bge-small-en-v1.5"` | Sentence transformer model for book embeddings |
-| `FILTER_HOME_BRANCH` | `True` | Only recommend books at your branch |
 | `FILTER_ENGLISH` | `True` | Only recommend English-language books |
 | `AVAILABILITY_CACHE_SECONDS` | `900` | How long to cache availability data |
-| `TOP_CANDIDATES` | `25` | Recommendations per category |
+| `TOP_CANDIDATES` | `20` | Recommendations per category |
 | `MMR_LAMBDA` | `0.5` | Diversity vs. relevance trade-off |
 | `MMR_TOP_K` | `100` | Candidates considered before MMR reranking |
 
@@ -50,7 +49,7 @@ Edit `config.py` to match your library:
 python generate_embeddings.py
 ```
 
-Encodes all active books using the configured sentence-transformer model. Takes ~15s on GPU or ~2-5 min on CPU. Produces `embeddings.npy` (115 MB, gitignored) and `embedding_mids.json`.
+Encodes all active books using the configured sentence-transformer model. Takes ~15s on GPU or ~2-5 min on CPU. Produces `embeddings.npy` (~90 MB, gitignored) and `embedding_mids.json`.
 
 Embeddings are auto-generated if missing when `daily.py` runs.
 
@@ -62,7 +61,7 @@ Downloads all active children's paper books from the library:
 python sync.py
 ```
 
-This creates `books.db` with ~78,000 books. Options: `--incremental`, `--pages N`, `--format BK`.
+This creates `books.db` with ~61,000 active books (branch-filtered). Options: `--incremental`, `--pages N`, `--format BK`.
 
 ### 2. Sync your borrowing history
 
@@ -83,7 +82,7 @@ Open `http://localhost:5050`.
 ## Architecture
 
 ```
-sync.py                  → catalog sync (one-time, ~63 min for 78k books)
+sync.py                  → catalog sync (one-time, ~60 min for 61k active books)
 patron.py                → borrowing history sync
 generate_embeddings.py   → one-time embedding generation (~15s GPU)
 recommend.py             → embedding MaxSim + MMR recommendation engine
