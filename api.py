@@ -351,7 +351,7 @@ def extract_home_availability(metadata_id, data):
         "metadata_id": metadata_id,
         "owns_home": owns_home,
         "at_home": at_home,
-        "status": "AVAILABLE" if at_home else "UNAVAILABLE",
+        "status": "Available" if at_home else "All Checked Out",
         "available_copies": available,
         "total_copies": total,
         "held_copies": held,

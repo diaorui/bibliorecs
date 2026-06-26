@@ -67,7 +67,7 @@
       <tbody>
         {% for a in availability %}
         <tr>
-          <td>{{ a.status or '' }}</td>
+          <td>{% if a.total_copies == 0 %}Not at home branch{% elif a.at_home and a.available_copies > 0 %}Available{% else %}All Checked Out{% endif %}</td>
           <td>{{ a.available_copies }}</td>
           <td>{{ a.total_copies }}</td>
           <td>{{ a.held_copies }}</td>
