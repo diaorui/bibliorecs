@@ -894,6 +894,22 @@ th {
 .btn-hold-main:hover { background: #1d4ed8; }
 .btn-hold-main:disabled { opacity: 0.5; cursor: default; }
 
+.btn-restart {
+  display: inline-block;
+  padding: 8px 16px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  border-radius: 8px;
+  border: 1px solid #dc2626;
+  background: #fff;
+  color: #dc2626;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-restart:hover { background: #fef2f2; }
+.btn-restart:disabled { opacity: 0.5; cursor: default; }
+
 /* ── mobile ── */
 
 @media (max-width: 640px) {

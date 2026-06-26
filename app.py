@@ -294,6 +294,17 @@ def api_checkouts():
         return jsonify({"checked_out": [], "error": str(e)})
 
 
+@app.route("/api/restart", methods=["POST"])
+def api_restart():
+    def _do_restart():
+        import time
+        time.sleep(0.6)
+        os.execv(sys.executable, [sys.executable, __file__] + sys.argv[1:])
+    import threading
+    threading.Thread(target=_do_restart, daemon=True).start()
+    return jsonify({"ok": True})
+
+
 @app.route("/holds")
 def holds_page():
     """Show all current holds."""

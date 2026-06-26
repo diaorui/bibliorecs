@@ -121,4 +121,26 @@
   </div>
 </div>
 {% endif %}
+
+<div class="section">
+  <button onclick="restartServer()" class="btn-restart">Restart Server</button>
+</div>
+
+<script>
+function restartServer() {
+  if (!confirm('Restart the server now?')) return;
+  var btns = document.querySelectorAll('.btn-restart');
+  btns.forEach(function(b){ b.disabled = true; b.textContent = 'Restarting...'; });
+  fetch('/api/restart', { method: 'POST' })
+    .then(function(r){ return r.json(); })
+    .then(function(){
+      showToast('Server restarting...', 4000);
+      setTimeout(function(){ window.location.reload(); }, 2500);
+    })
+    .catch(function(){
+      showToast('Restart request failed', 5000);
+      btns.forEach(function(b){ b.disabled = false; b.textContent = 'Restart Server'; });
+    });
+}
+</script>
 {% endblock %}
