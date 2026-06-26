@@ -321,16 +321,6 @@ def fetch_availability(bc_token, session_id, metadata_id):
     return _gateway_get(f"/bibs/{metadata_id}/availability", bc_token, session_id)
 
 
-def bib_owns_home(data):
-    """Check if any home branch item exists in availability response."""
-    items = data.get("entities", {}).get("bibItems", {})
-    for item in items.values():
-        branch = item.get("branch", {})
-        if branch.get("name") == config.CENTRAL_PARK_BRANCH:
-            return True
-    return False
-
-
 def extract_home_availability(metadata_id, data):
     """Extract Central Park-specific availability from full API response."""
     items = data.get("entities", {}).get("bibItems", {})

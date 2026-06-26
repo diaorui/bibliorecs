@@ -2,13 +2,11 @@ import json
 import os
 from datetime import datetime, date
 from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
 from sklearn.preprocessing import normalize
 
 import config
-import api
 import db
 
 
@@ -153,14 +151,6 @@ def compute(conn):
     else:
         print("  No borrow history — cold start")
         maxsim = np.ones(len(mid_list), dtype=float)
-        weights = None
-
-    # Login for availability check
-    try:
-        bc_token, session_id, account_id, _ = api.login()
-    except Exception as e:
-        print(f"  Login failed for ownership check: {e}")
-        bc_token = session_id = None
 
     db.clear_recommendation_cache(conn)
 
@@ -193,30 +183,10 @@ def compute(conn):
         candidate_mids = [idx_to_mid[i] for i in top_indices]
         candidate_scores = [float(maxsim[i]) for i in top_indices]
 
-        print(f" checking availability...", end="")
+        for rank, (mid, score) in enumerate(zip(candidate_mids, candidate_scores)):
+            db.upsert_recommendation(conn, mid, score, cat_name, rank + 1)
 
-        owns_flags = []
-        if bc_token:
-            with ThreadPoolExecutor(max_workers=config.CHECKOUTS_PARALLEL_WORKERS) as pool:
-                fut_map = {
-                    pool.submit(api.fetch_availability, bc_token, session_id, mid): j
-                    for j, mid in enumerate(candidate_mids)
-                }
-                results = {}
-                for f in as_completed(fut_map):
-                    j = fut_map[f]
-                    try:
-                        results[j] = api.bib_owns_home(f.result())
-                    except Exception:
-                        results[j] = False
-                owns_flags = [results.get(j, False) for j in range(len(candidate_mids))]
-        else:
-            owns_flags = [False] * len(candidate_mids)
-
-        print(f" {sum(owns_flags)}/{len(candidate_mids)} at Central Park")
-
-        for rank, (mid, score, owns) in enumerate(zip(candidate_mids, candidate_scores, owns_flags)):
-            db.upsert_recommendation(conn, mid, score, cat_name, rank + 1, int(owns))
+        print(f" {top_n} recommended")
 
     conn.commit()
 

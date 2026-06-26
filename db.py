@@ -92,14 +92,15 @@ def _migrate_schema(conn):
     tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
     if "recommendation_cache" in tables:
         rec_cols = [r[1] for r in conn.execute("PRAGMA table_info(recommendation_cache)").fetchall()]
-        if "rank" in rec_cols:
+        if "owns_home" in rec_cols:
+            conn.execute("DROP INDEX IF EXISTS idx_rec_owns")
+            conn.execute("ALTER TABLE recommendation_cache DROP COLUMN owns_home")
+            print("  Migration: dropped owns_home from recommendation_cache")
+        if "rank" in rec_cols or "owns_central" in rec_cols:
             conn.execute("DROP TABLE recommendation_cache")
             print("  Migration: dropped old recommendation_cache table")
             _create_rec_cache(conn)
             print("  Migration: created new recommendation_cache table")
-        elif "owns_central" in rec_cols:
-            conn.execute("ALTER TABLE recommendation_cache RENAME COLUMN owns_central TO owns_home")
-            print("  Migration: renamed owns_central to owns_home")
     else:
         _create_rec_cache(conn)
 
@@ -107,8 +108,6 @@ def _migrate_schema(conn):
                  if r[2] is not None]
     if "idx_rec_cat" not in idx_names:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_rec_cat ON recommendation_cache(category)")
-    if "idx_rec_owns" not in idx_names:
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_rec_owns ON recommendation_cache(owns_home)")
 
     avail_cols = [r[1] for r in conn.execute("PRAGMA table_info(availability)").fetchall()]
     if "at_central" in avail_cols:
@@ -126,7 +125,6 @@ def _create_rec_cache(conn):
             score REAL,
             category TEXT NOT NULL,
             category_rank INTEGER NOT NULL,
-            owns_home INTEGER DEFAULT 0,
             synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
@@ -242,11 +240,11 @@ def clear_recommendation_cache(conn):
     conn.execute("DELETE FROM recommendation_cache")
 
 
-def upsert_recommendation(conn, metadata_id, score, category, category_rank, owns_home):
+def upsert_recommendation(conn, metadata_id, score, category, category_rank):
     conn.execute("""
-        INSERT INTO recommendation_cache (metadata_id, score, category, category_rank, owns_home)
-        VALUES (?, ?, ?, ?, ?)
-    """, (metadata_id, score, category, category_rank, owns_home))
+        INSERT INTO recommendation_cache (metadata_id, score, category, category_rank)
+        VALUES (?, ?, ?, ?)
+    """, (metadata_id, score, category, category_rank))
 
 
 def get_category_order(conn):
