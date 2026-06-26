@@ -142,7 +142,7 @@ function showReady(h) {
   var expiry = h.expiry_date ? '<div class="hold-expiry">Pick up by ' + h.expiry_date.slice(0,10) + '</div>' : '';
   holdContent.innerHTML =
     '<div class="hold-status hold-status-ready">' +
-      '<span class="hold-status-badge">Ready for Pickup at Central Park</span>' +
+      '<span class="hold-status-badge">Ready for Pickup</span>' +
       expiry +
     '</div>' +
     '<button class="btn-cancel-hold" data-hold-id="' + h.hold_id + '" data-mid="' + mid + '">Cancel hold</button>';
@@ -161,7 +161,7 @@ function showOnHold(h) {
 
 function showPlaceHold() {
   holdContent.innerHTML =
-    '<button class="btn-hold-main" data-mid="' + mid + '">Place Hold at Central Park</button>';
+    '<button class="btn-hold-main" data-mid="' + mid + '">Place Hold</button>';
   holdSection.style.display = '';
 }
 
@@ -194,7 +194,7 @@ function showHoldError(msg) {
     '<div class="hold-status hold-status-error">' +
       '<span class="hold-status-badge"></span>' +
     '</div>' +
-    '<button class="btn-hold-main" data-mid="' + mid + '">Place Hold at Central Park</button>';
+    '<button class="btn-hold-main" data-mid="' + mid + '">Place Hold</button>';
   holdContent.querySelector('.hold-status-badge').textContent = msg;
   holdSection.style.display = '';
   showToast(msg, 8000);
