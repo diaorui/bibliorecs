@@ -53,6 +53,10 @@
   var __checkedOutByMe = new Set();
 
   function init() {
+    // Hide buttons until hold/checkout status is known
+    var btns = document.querySelectorAll('.btn-card');
+    btns.forEach(function(b) { b.style.opacity = '0'; b.style.pointerEvents = 'none'; });
+
     Promise.all([
       fetch('/api/holds').then(function(r) { return r.json(); }),
       fetch('/api/checkouts').then(function(r) { return r.json(); })
@@ -68,8 +72,16 @@
         checkoutsData.checked_out.forEach(function(mid) { __checkedOutByMe.add(mid); });
       }
       applyButtonStates();
+      revealButtons();
     }).catch(function() {
-      // Leave buttons at default "Place Hold"
+      revealButtons();
+    });
+  }
+
+  function revealButtons() {
+    document.querySelectorAll('.btn-card').forEach(function(b) {
+      b.style.opacity = '';
+      b.style.pointerEvents = '';
     });
   }
 
