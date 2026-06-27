@@ -494,6 +494,19 @@ def _dedup(val):
     return result
 
 
+@app.template_filter("duration_format")
+def _duration_format(secs):
+    if secs is None:
+        return "—"
+    try:
+        s = int(secs)
+    except (ValueError, TypeError):
+        return "—"
+    if s < 60:
+        return f"{s}s"
+    return f"{s // 60}m {s % 60}s"
+
+
 @app.template_filter("best_series")
 def _best_series(series_list, title=None):
     """Pick the best 1-2 series names to show on the detail page.

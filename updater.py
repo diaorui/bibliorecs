@@ -65,7 +65,8 @@ def _run(script, task_name):
         return
 
     _set_status("now", f"running {script}")
-    ts = time.strftime("%Y-%m-%dT%H:%M:%S")
+    ts_start = time.strftime("%Y-%m-%dT%H:%M:%S")
+    t0 = time.monotonic()
 
     try:
         result = subprocess.run(
@@ -75,10 +76,12 @@ def _run(script, task_name):
             timeout=7200,
         )
 
+        elapsed = round(time.monotonic() - t0)
         ok = result.returncode == 0
-        info = {"last_run": ts, "state": "ok" if ok else "failed"}
+        info = {"last_run": ts_start, "duration_sec": elapsed,
+                "state": "ok" if ok else "failed"}
         if ok:
-            info["last_ok"] = ts
+            info["last_ok"] = time.strftime("%Y-%m-%dT%H:%M:%S")
         else:
             stderr = result.stderr.strip()
             info["error"] = stderr[-500:] if stderr else f"exit {result.returncode}"
@@ -87,9 +90,12 @@ def _run(script, task_name):
         _set_status(task_name, info)
 
     except subprocess.TimeoutExpired:
-        _set_status(task_name, {"last_run": ts, "state": "failed", "error": "timed out"})
+        _set_status(task_name, {"last_run": ts_start, "duration_sec": 7200,
+                                "state": "failed", "error": "timed out"})
     except Exception as e:
-        _set_status(task_name, {"last_run": ts, "state": "failed", "error": str(e)[:500]})
+        elapsed = round(time.monotonic() - t0)
+        _set_status(task_name, {"last_run": ts_start, "duration_sec": elapsed,
+                                "state": "failed", "error": str(e)[:500]})
     finally:
         _set_status("now", "idle")
         _release_lock()
