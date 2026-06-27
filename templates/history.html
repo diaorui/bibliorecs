@@ -3,11 +3,10 @@
 
 {% block content %}
 <h1 class="page-title">Borrowing History</h1>
-<p class="page-subtitle">{{ current|length }} currently checked out · {{ past|length }} past borrows</p>
 
 {% if current %}
 <div class="section">
-  <h2 class="section-title">Currently Checked Out</h2>
+  <h2 class="section-title">Currently Checked Out ({{ current | length }})</h2>
   {% for c in current %}
     <a href="/book/{{ c.metadata_id }}" class="history-item">
       <div class="history-cover-wrap">
@@ -28,7 +27,7 @@
 
 {% if past %}
 <div class="section">
-  <h2 class="section-title">Past Borrows</h2>
+  <h2 class="section-title">Past Borrows ({{ past | length }})</h2>
   {% for p in past %}
     <a href="/book/{{ p.metadata_id }}" class="history-item">
       <div class="history-cover-wrap">
