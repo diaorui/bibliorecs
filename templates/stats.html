@@ -38,12 +38,18 @@
     <tbody>
       <tr>
         <td>Recommendations</td>
-        <td>{% set d = update_status.get('daily', {}) %}{{ d.get('last_ok') or d.get('last_run') or 'never' }}</td>
+        <td>{% set d = update_status.get('daily', {}) %}
+          {%- set ts = d.get('last_ok') or d.get('last_run') -%}
+          {%- if ts %}<time class="local-time" datetime="{{ ts }}">{{ ts }}</time>{% else %}never{% endif -%}
+        </td>
         <td>{{ d.get('state', '—') }}{% if d.get('error') %} — {{ d.error }}{% endif %}</td>
       </tr>
       <tr>
         <td>Catalog</td>
-        <td>{% set c = update_status.get('catalog', {}) %}{{ c.get('last_ok') or c.get('last_run') or 'never' }}</td>
+        <td>{% set c = update_status.get('catalog', {}) %}
+          {%- set ts = c.get('last_ok') or c.get('last_run') -%}
+          {%- if ts %}<time class="local-time" datetime="{{ ts }}">{{ ts }}</time>{% else %}never{% endif -%}
+        </td>
         <td>{{ c.get('state', '—') }}{% if c.get('error') %} — {{ c.error }}{% endif %}</td>
       </tr>
     </tbody>
