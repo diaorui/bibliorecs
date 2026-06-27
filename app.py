@@ -9,6 +9,7 @@ from flask import Flask, render_template, abort, jsonify, request
 import api
 import config
 import db
+import patron
 import updater
 from recommend import book_category
 
@@ -361,6 +362,14 @@ def holds_page():
 @app.route("/history")
 def history():
     conn = db.get_conn()
+
+    try:
+        bc_token, session_id, account_id, _ = api._get_auth()
+        patron.sync_checkouts(conn, bc_token, session_id, account_id)
+        patron.sync_history(conn, bc_token, session_id, account_id)
+    except Exception:
+        pass
+
     current = conn.execute("""
         SELECT b.*, bk.title, bk.author, bk.isbn, bk.metadata_id
         FROM borrow_events b
