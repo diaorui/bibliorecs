@@ -33,7 +33,7 @@
           <div class="carousel-author">{{ r.author or '' }}</div>
         </div>
       </a>
-      <button class="btn-card" data-mid="{{ r.metadata_id }}">Place Hold</button>
+      <button class="btn-card" data-mid="{{ r.metadata_id }}">Hold</button>
     </div>
     {% endfor %}
   </div>
@@ -81,7 +81,7 @@
       if (!btn) return;
 
       if (__checkedOutByMe.has(mid)) {
-        btn.textContent = 'You have this checked out';
+        btn.textContent = 'Checked Out';
         btn.disabled = true;
         btn.className = 'btn-card btn-card-checked';
         return;
