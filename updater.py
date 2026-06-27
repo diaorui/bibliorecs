@@ -53,7 +53,7 @@ def _run_due_tasks():
 
     if daily_due:
         _run("daily.py", "daily")
-    elif catalog_due:
+    if catalog_due:
         _run("sync.py", "catalog")
 
 
