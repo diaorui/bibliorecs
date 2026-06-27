@@ -351,14 +351,8 @@ def holds_page():
                 "isbn": row["isbn"] if row else None,
             })
         quotas = data.get("borrowing", {}).get("summaries", {}).get("holds", {}).get("quotas", [])
-        ils_quota = next((q for q in quotas if q.get("type") == "ILS"), {})
-        od_quota = next((q for q in quotas if q.get("type") == "OverDriveAPI"), {})
         conn.close()
-        return render_template("holds.html", holds=holds,
-                               ils_used=ils_quota.get("total", 0),
-                               ils_total=ils_quota.get("total", 0) + ils_quota.get("remaining", 0) if ils_quota.get("remaining") is not None else None,
-                               od_used=od_quota.get("total", 0),
-                               od_total=od_quota.get("total", 0) + od_quota.get("remaining", 0) if od_quota.get("remaining") is not None else None)
+        return render_template("holds.html", holds=holds)
     except Exception as e:
         conn.close()
         return render_template("holds.html", holds=[], error=str(e))

@@ -8,14 +8,10 @@
 <p style="color:#dc2626;margin-bottom:16px">{{ error }}</p>
 {% endif %}
 
-<div class="quota-bar">
-  <span>Physical: {% if ils_total %} {{ ils_used }} of {{ ils_total }} used{% else %}Unlimited{% endif %}</span>
-  <span>Digital: {{ od_used }} of {{ od_total }} used</span>
-</div>
-
 {% if holds %}
 {% set ready = holds | selectattr("status", "equalto", "READY_FOR_PICKUP") | list %}
 {% set waiting = holds | rejectattr("status", "equalto", "READY_FOR_PICKUP") | list %}
+<p class="holds-summary">{{ ready | length }} ready for pickup · {{ waiting | length }} on hold</p>
 
 {% if ready %}
 <div class="section">
