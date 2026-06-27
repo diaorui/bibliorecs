@@ -3,7 +3,7 @@ import os
 import subprocess
 import sys
 import time
-from multiprocessing import Process
+from threading import Thread
 
 import config
 
@@ -14,9 +14,9 @@ _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 def start():
-    """Start the daemon background updater process."""
-    p = Process(target=_loop, daemon=True)
-    p.start()
+    """Start the daemon background updater thread."""
+    t = Thread(target=_loop, daemon=True)
+    t.start()
 
 
 def read_status():
