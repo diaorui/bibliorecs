@@ -33,6 +33,7 @@
           <div class="carousel-author">{{ r.author or '' }}</div>
         </div>
       </a>
+      <button class="btn-card" data-mid="{{ r.metadata_id }}">Place Hold</button>
     </div>
     {% endfor %}
   </div>
@@ -43,4 +44,100 @@
   <p>Run <code>python daily.py</code> to generate recommendations.</p>
 </div>
 {% endfor %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  var __holdsByMid = {};
+  var __checkedOutByMe = new Set();
+
+  function init() {
+    Promise.all([
+      fetch('/api/holds').then(function(r) { return r.json(); }),
+      fetch('/api/checkouts').then(function(r) { return r.json(); })
+    ]).then(function(results) {
+      var holdsData = results[0];
+      var checkoutsData = results[1];
+      if (holdsData.holds) {
+        holdsData.holds.forEach(function(h) {
+          if (h.metadata_id) __holdsByMid[h.metadata_id] = h;
+        });
+      }
+      if (checkoutsData.checked_out) {
+        checkoutsData.checked_out.forEach(function(mid) { __checkedOutByMe.add(mid); });
+      }
+      applyButtonStates();
+    }).catch(function() {
+      // Leave buttons at default "Place Hold"
+    });
+  }
+
+  function applyButtonStates() {
+    var cards = document.querySelectorAll('.carousel-card');
+    cards.forEach(function(card) {
+      var mid = card.getAttribute('data-mid');
+      var btn = card.querySelector('.btn-card');
+      if (!btn) return;
+
+      if (__checkedOutByMe.has(mid)) {
+        btn.textContent = 'You have this checked out';
+        btn.disabled = true;
+        btn.className = 'btn-card btn-card-checked';
+        return;
+      }
+
+      var hold = __holdsByMid[mid];
+      if (hold) {
+        if (hold.status === 'READY_FOR_PICKUP') {
+          btn.textContent = 'Ready for Pickup';
+          btn.disabled = true;
+          btn.className = 'btn-card btn-card-ready';
+        } else {
+          btn.textContent = 'On Hold';
+          btn.disabled = true;
+          btn.className = 'btn-card btn-card-hold';
+        }
+        return;
+      }
+    });
+  }
+
+  document.addEventListener('click', function(e) {
+    var btn = e.target.closest('.btn-card:not(:disabled)');
+    if (!btn) return;
+    e.preventDefault();
+    var mid = btn.getAttribute('data-mid');
+    var orig = btn.textContent;
+    btn.textContent = 'Placing...';
+    btn.disabled = true;
+    fetch('/api/hold/place', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({metadata_id: mid})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.success) {
+        btn.textContent = 'On Hold';
+        btn.className = 'btn-card btn-card-hold';
+      } else if (data.error && data.error.indexOf('already') !== -1) {
+        btn.textContent = 'On Hold';
+        btn.className = 'btn-card btn-card-hold';
+      } else {
+        btn.textContent = 'Failed';
+        btn.disabled = false;
+        showToast(data.error || 'Hold failed', 5000);
+      }
+    })
+    .catch(function() {
+      btn.textContent = orig;
+      btn.disabled = false;
+      showToast('Network error', 5000);
+    });
+  });
+
+  init();
+})();
+</script>
 {% endblock %}

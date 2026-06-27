@@ -670,6 +670,27 @@ th {
   flex: 1;
 }
 
+.btn-card {
+  width: 100%;
+  padding: 5px 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border: none;
+  border-top: 1px solid #e5e5ea;
+  cursor: pointer;
+  background: #fff;
+  color: #2563eb;
+  transition: background 0.12s;
+  flex-shrink: 0;
+}
+
+.btn-card:hover:not(:disabled) { background: #f0f5ff; }
+.btn-card:disabled { cursor: default; }
+
+.btn-card-checked { color: #7c3aed; background: #f5f3ff; border-top-color: #e5e5ea; }
+.btn-card-ready   { color: #d97706; background: #fffbeb; border-top-color: #e5e5ea; }
+.btn-card-hold    { color: #6b7280; background: #f9fafb; border-top-color: #e5e5ea; }
+
 /* ── toast ── */
 
 .toast {
