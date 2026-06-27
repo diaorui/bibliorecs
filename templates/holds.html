@@ -11,11 +11,10 @@
 {% if holds %}
 {% set ready = holds | selectattr("status", "equalto", "READY_FOR_PICKUP") | list %}
 {% set waiting = holds | rejectattr("status", "equalto", "READY_FOR_PICKUP") | list %}
-<p class="holds-summary">{{ ready | length }} ready for pickup · {{ waiting | length }} on hold</p>
 
 {% if ready %}
 <div class="section">
-  <h2 class="section-title">Ready for Pickup</h2>
+  <h2 class="section-title">Ready for Pickup ({{ ready | length }})</h2>
   {% for h in ready %}
   <a href="/book/{{ h.metadata_id }}" class="history-item">
     <div class="history-cover-wrap">
@@ -40,7 +39,7 @@
 
 {% if waiting %}
 <div class="section">
-  <h2 class="section-title">On Hold</h2>
+  <h2 class="section-title">On Hold ({{ waiting | length }})</h2>
   {% for h in waiting %}
   <a href="/book/{{ h.metadata_id }}" class="history-item">
     <div class="history-cover-wrap">
