@@ -144,15 +144,15 @@ def upsert_book(conn, metadata_id, title, subtitle=None, author=None,
                 primary_language=None, isbn=None, subjects=None,
                 composite_subjects=None, genres=None, series=None,
                 super_formats=None, consumption_format=None,
-                raw_json=None, active=1):
+                active=1):
     conn.execute("""
         INSERT INTO books (metadata_id, title, subtitle, author, format,
                            content_type, description, call_number,
                            publication_year, primary_language, isbn,
                            subjects, composite_subjects, genres, series,
                            super_formats, consumption_format,
-                           raw_json, active, last_updated)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                           active, last_updated)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                 ?, ?)
         ON CONFLICT(metadata_id) DO UPDATE SET
             title=excluded.title, subtitle=excluded.subtitle,
@@ -167,7 +167,6 @@ def upsert_book(conn, metadata_id, title, subtitle=None, author=None,
             genres=excluded.genres, series=excluded.series,
             super_formats=excluded.super_formats,
             consumption_format=excluded.consumption_format,
-            raw_json=excluded.raw_json,
             first_synced=COALESCE(first_synced, excluded.first_synced),
             last_updated=excluded.last_updated,
             active=excluded.active
@@ -177,7 +176,7 @@ def upsert_book(conn, metadata_id, title, subtitle=None, author=None,
         publication_year, primary_language, isbn,
         subjects, composite_subjects, genres, series,
         super_formats, consumption_format,
-        raw_json, active, datetime.utcnow().isoformat()
+        active, datetime.utcnow().isoformat()
     ))
 
 

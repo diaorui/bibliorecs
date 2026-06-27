@@ -151,7 +151,6 @@ def _process_page(conn, data):
             series=book["series"],
             super_formats=book["super_formats"],
             consumption_format=book["consumption_format"],
-            raw_json=json.dumps(bib, ensure_ascii=False),
         )
 
         avail = api.extract_availability(metadata_id, bib)
