@@ -34,7 +34,7 @@
     </div>
     <div class="hold-status-wrap">
       <span class="hold-badge hold-ready">Ready for Pickup</span>
-      {% if h.expiry_date %}<span class="hold-expiry">Expires {{ h.expiry_date[:10] }}</span>{% endif %}
+      {% if h.expiry_date %}<span class="hold-expiry">Pick up by {{ h.expiry_date[:10] }}</span>{% endif %}
       <button class="btn-cancel" data-hold-id="{{ h.hold_id }}" data-mid="{{ h.metadata_id }}">Cancel</button>
     </div>
   </a>

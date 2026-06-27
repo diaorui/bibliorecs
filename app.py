@@ -227,7 +227,7 @@ def api_holds():
                 "position": h.get("holdsPosition"),
                 "pickup_branch": (h.get("pickupLocation") or {}).get("code"),
                 "placed_date": h.get("holdPlacedDate"),
-                "expiry_date": h.get("expiryDate"),
+                "expiry_date": h.get("pickupByDate"),
             }
             for hid, h in holds_ents.items()
         ]
@@ -347,7 +347,7 @@ def holds_page():
                 "position": h.get("holdsPosition"),
                 "pickup_branch": (h.get("pickupLocation") or {}).get("code"),
                 "placed_date": h.get("holdPlacedDate"),
-                "expiry_date": h.get("expiryDate"),
+                "expiry_date": h.get("pickupByDate"),
                 "isbn": row["isbn"] if row else None,
             })
         quotas = data.get("borrowing", {}).get("summaries", {}).get("holds", {}).get("quotas", [])
