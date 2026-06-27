@@ -670,67 +670,6 @@ th {
   flex: 1;
 }
 
-/* ── carousel status line ── */
-
-.carousel-actions {
-  padding: 0 2px 2px;
-  min-height: 18px;
-}
-
-.card-status-wrap {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 0.68rem;
-  line-height: 1;
-}
-
-.status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.status-dot-avail { background: #16a34a; }
-.status-dot-unavail { background: #9ca3af; }
-.status-dot-hold { background: #2563eb; }
-.status-dot-ready { background: #d97706; }
-.status-dot-yours { background: #7c3aed; }
-.status-dot-error { background: #dc2626; }
-
-.status-label {
-  flex: 1;
-  color: #86868b;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-size: 0.68rem;
-}
-
-.status-label-avail { color: #16a34a; font-weight: 500; }
-.status-label-hold { color: #2563eb; font-weight: 500; }
-.status-label-ready { color: #d97706; font-weight: 600; }
-.status-label-yours { color: #7c3aed; font-weight: 500; }
-.status-label-error { color: #dc2626; font-weight: 500; }
-
-.btn-hold {
-  font-size: 0.64rem;
-  font-weight: 600;
-  padding: 2px 6px;
-  border-radius: 3px;
-  border: 1px solid #2563eb;
-  background: #fff;
-  color: #2563eb;
-  cursor: pointer;
-  white-space: nowrap;
-  flex-shrink: 0;
-  transition: background 0.15s, color 0.15s;
-}
-
-.btn-hold:hover { background: #2563eb; color: #fff; }
-.btn-hold:disabled { opacity: 0.4; cursor: default; }
-
 /* ── toast ── */
 
 .toast {
