@@ -137,7 +137,7 @@
     });
   });
 
-  init();
+  window.addEventListener('pageshow', function() { init(); });
 })();
 </script>
 {% endblock %}
