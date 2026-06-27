@@ -824,19 +824,6 @@ th {
   margin-top: 4px;
 }
 
-.btn-cancel-hold {
-  font-size: 0.84rem;
-  color: #dc2626;
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 4px 0;
-  align-self: flex-start;
-}
-
-.btn-cancel-hold:hover { color: #b91c1c; }
-.btn-cancel-hold:disabled { opacity: 0.4; cursor: default; }
-
 .btn-hold-main {
   display: inline-block;
   padding: 10px 24px;

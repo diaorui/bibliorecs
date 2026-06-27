@@ -107,8 +107,7 @@ function showReady(h) {
     '<div class="hold-status hold-status-ready">' +
       '<span class="hold-status-badge">Ready for Pickup</span>' +
       expiry +
-    '</div>' +
-    '<button class="btn-cancel-hold" data-hold-id="' + h.hold_id + '" data-mid="' + mid + '">Cancel hold</button>';
+    '</div>';
   holdSection.style.display = '';
 }
 
@@ -117,8 +116,7 @@ function showOnHold(h) {
   holdContent.innerHTML =
     '<div class="hold-status hold-status-queued">' +
       '<span class="hold-status-badge">On hold' + pos + '</span>' +
-    '</div>' +
-    '<button class="btn-cancel-hold" data-hold-id="' + h.hold_id + '" data-mid="' + mid + '">Cancel hold</button>';
+    '</div>';
   holdSection.style.display = '';
 }
 
@@ -126,30 +124,6 @@ function showPlaceHold() {
   holdContent.innerHTML =
     '<button class="btn-hold-main" data-mid="' + mid + '">Place Hold</button>';
   holdSection.style.display = '';
-}
-
-function handleCancel(e) {
-  var btn = e.target.closest('.btn-cancel-hold');
-  if (!btn) return;
-  e.preventDefault();
-  if (btn.dataset.confirming) {
-    btn.textContent = 'Cancelling...';
-    btn.disabled = true;
-    fetch('/api/hold/cancel', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({hold_id: btn.dataset.holdId, metadata_id: btn.dataset.mid})
-    })
-    .then(function(r) { return r.json(); })
-    .then(function(d) {
-      if (d.success) { showPlaceHold(); }
-      else { showToast('Cancel failed: ' + (d.error || 'error'), 5000); delete btn.dataset.confirming; btn.textContent = 'Cancel hold'; }
-    });
-  } else {
-    btn.dataset.confirming = '1';
-    btn.textContent = 'Confirm cancel?';
-    setTimeout(function() { if (btn.dataset.confirming) { delete btn.dataset.confirming; btn.textContent = 'Cancel hold'; } }, 5000);
-  }
 }
 
 function showHoldError(msg) {
@@ -213,7 +187,6 @@ Promise.all([
   showPlaceHold();
 });
 
-document.addEventListener('click', handleCancel);
 document.addEventListener('click', handlePlaceHold);
 </script>
 {% endblock %}
