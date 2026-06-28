@@ -881,7 +881,8 @@ th {
 }
 
 .preview-modal {
-  position: relative;
+  display: flex;
+  flex-direction: column;
   width: 90vw;
   max-width: 800px;
   height: 80vh;
@@ -890,29 +891,41 @@ th {
   overflow: hidden;
 }
 
+.preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  border-bottom: 1px solid #e5e7eb;
+  flex-shrink: 0;
+}
+
+.preview-title {
+  font-weight: 600;
+  font-size: 1rem;
+  color: #111;
+}
+
 .preview-close {
-  position: absolute;
-  top: 10px;
-  right: 12px;
-  z-index: 10;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border: none;
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.45);
+  background: #e5e7eb;
   font-size: 1.2rem;
   line-height: 1;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  color: #374151;
+  flex-shrink: 0;
   transition: background 0.15s;
 }
 
-.preview-close:hover { background: rgba(0, 0, 0, 0.65); }
+.preview-close:hover { background: #d1d5db; }
 
-#viewerCanvas { width: 100%; height: 100%; }
+#viewerCanvas { flex: 1; min-height: 0; }
 
 /* ── preview button (lazy-injected) ── */
 
@@ -992,7 +1005,7 @@ th {
   .book-info .description { font-size: 0.88rem; margin-bottom: 12px; }
 
   .preview-modal { width: 100vw; height: 100vh; border-radius: 0; }
-  .preview-close { top: 12px; right: 12px; width: 36px; height: 36px; font-size: 1.3rem; background: rgba(0,0,0,0.55); }
+  .preview-close { width: 32px; height: 32px; font-size: 1.3rem; }
 
   .section-title { font-size: 1.05rem; }
 

@@ -64,7 +64,10 @@
 {% if book.isbn %}
 <div id="preview-overlay" class="preview-overlay">
   <div class="preview-modal">
-    <button id="preview-close" class="preview-close" aria-label="Close preview">&times;</button>
+    <div class="preview-header">
+      <span class="preview-title">Book Preview</span>
+      <button id="preview-close" class="preview-close" aria-label="Close preview">&times;</button>
+    </div>
     <div id="viewerCanvas"></div>
   </div>
 </div>
