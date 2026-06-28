@@ -247,7 +247,7 @@ body {
 .book-detail {
   display: flex;
   gap: 32px;
-  margin-bottom: 32px;
+  margin-bottom: 20px;
 }
 
 .book-cover-large {
