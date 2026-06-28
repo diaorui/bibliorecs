@@ -3,111 +3,125 @@
 
 {% block content %}
 <h1 class="page-title">Your Holds</h1>
-
-{% if error %}
-<p style="color:#dc2626;margin-bottom:16px">{{ error }}</p>
-{% endif %}
-
-{% if holds %}
-{% set ready = holds | selectattr("status", "equalto", "READY_FOR_PICKUP") | list %}
-{% set waiting = holds | rejectattr("status", "equalto", "READY_FOR_PICKUP") | list %}
-
-{% if ready %}
-<div class="section">
-  <h2 class="section-title">Ready for Pickup ({{ ready | length }})</h2>
-  {% for h in ready %}
-  <a href="/book/{{ h.metadata_id }}" class="history-item">
-    <div class="history-cover-wrap">
-      <img class="history-cover cover-img" src="https://secure.syndetics.com/index.aspx?isbn={{ h.isbn }}/LC.GIF&client=sepup&type=xw12&oclc="
-           alt="" loading="lazy"
-           data-fallback="https://covers.openlibrary.org/b/isbn/{{ h.isbn }}-L.jpg">
-      <div class="cover-placeholder cover-placeholder-sm">📖</div>
-    </div>
-    <div class="history-body">
-      <div class="title">{{ h.title }}</div>
-      <div class="sub">{{ h.author or '' }}</div>
-    </div>
-    <div class="hold-status-wrap">
-      <span class="hold-badge hold-ready">Ready for Pickup</span>
-      {% if h.expiry_date %}<span class="hold-expiry">Pick up by {{ h.expiry_date[:10] }}</span>{% endif %}
-      <button class="btn-cancel" data-hold-id="{{ h.hold_id }}" data-mid="{{ h.metadata_id }}">Cancel</button>
-    </div>
-  </a>
-  {% endfor %}
+<div id="holds-container" class="loading-state">
+  <div class="spinner"></div>
+  <p>Loading your holds...</p>
 </div>
-{% endif %}
-
-{% if waiting %}
-<div class="section">
-  <h2 class="section-title">On Hold ({{ waiting | length }})</h2>
-  {% for h in waiting %}
-  <a href="/book/{{ h.metadata_id }}" class="history-item">
-    <div class="history-cover-wrap">
-      <img class="history-cover cover-img" src="https://secure.syndetics.com/index.aspx?isbn={{ h.isbn }}/LC.GIF&client=sepup&type=xw12&oclc="
-           alt="" loading="lazy"
-           data-fallback="https://covers.openlibrary.org/b/isbn/{{ h.isbn }}-L.jpg">
-      <div class="cover-placeholder cover-placeholder-sm">📖</div>
-    </div>
-    <div class="history-body">
-      <div class="title">{{ h.title }}</div>
-      <div class="sub">{{ h.author or '' }}</div>
-    </div>
-    <div class="hold-status-wrap">
-      <span class="hold-badge hold-queued">{% if h.position and h.position > 0 %}Position #{{ h.position }}{% else %}On Hold{% endif %}</span>
-      <button class="btn-cancel" data-hold-id="{{ h.hold_id }}" data-mid="{{ h.metadata_id }}">Cancel</button>
-    </div>
-  </a>
-  {% endfor %}
-</div>
-{% endif %}
-
-{% else %}
-<div class="empty-state">
-  <h2>No holds</h2>
-  <p>Place holds on recommended books from the home page.</p>
-  <a href="/" class="btn btn-primary" style="margin-top:12px">Browse Recommendations</a>
-</div>
-{% endif %}
 {% endblock %}
 
 {% block scripts %}
 <script>
-document.querySelectorAll('.btn-cancel').forEach(function(btn) {
-  btn.addEventListener('click', function(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    if (btn.dataset.confirming) {
-      var holdId = btn.dataset.holdId;
-      var mid = btn.dataset.mid;
-      btn.textContent = 'Cancelling...';
-      btn.disabled = true;
-      fetch('/api/hold/cancel', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({hold_id: holdId, metadata_id: mid})
-      })
-      .then(function(r) { return r.json(); })
-      .then(function(data) {
-        if (data.success) {
-          var item = btn.closest('.history-item');
-          item.style.opacity = '0.3';
-          item.style.pointerEvents = 'none';
-          btn.textContent = 'Cancelled';
-        } else {
-          btn.textContent = 'Failed';
-          btn.dataset.confirming = '';
-        }
-      })
-      .catch(function() {
-        btn.textContent = 'Failed';
-        btn.dataset.confirming = '';
-      });
-    } else {
-      btn.dataset.confirming = '1';
-      btn.textContent = 'Confirm?';
-      setTimeout(function() { if (btn.dataset.confirming) { delete btn.dataset.confirming; btn.textContent = 'Cancel'; } }, 5000);
+(function() {
+  var container = document.getElementById('holds-container');
+
+  function renderItem(h) {
+    var isbn = h.isbn || '';
+    var syndetics = 'https://secure.syndetics.com/index.aspx?isbn=' + isbn + '/LC.GIF&client=sepup&type=xw12&oclc=';
+    var openlibrary = 'https://covers.openlibrary.org/b/isbn/' + isbn + '-L.jpg';
+    var isReady = h.status === 'READY_FOR_PICKUP';
+    var badge = isReady
+      ? '<span class="hold-badge hold-ready">Ready for Pickup</span>'
+      : '<span class="hold-badge hold-queued">' + (h.position && h.position > 0 ? 'Position #' + h.position : 'On Hold') + '</span>';
+    var expiry = isReady && h.expiry_date
+      ? '<span class="hold-expiry">Pick up by ' + h.expiry_date.slice(0, 10) + '</span>'
+      : '';
+
+    return '<a href="/book/' + h.metadata_id + '" class="history-item">'
+      + '<div class="history-cover-wrap">'
+      + '<img class="history-cover cover-img" src="' + syndetics + '" alt="" loading="lazy" data-fallback="' + openlibrary + '">'
+      + '<div class="cover-placeholder cover-placeholder-sm">📖</div>'
+      + '</div>'
+      + '<div class="history-body">'
+      + '<div class="title">' + (h.title || '') + '</div>'
+      + '<div class="sub">' + (h.author || '') + '</div>'
+      + '</div>'
+      + '<div class="hold-status-wrap">'
+      + badge
+      + expiry
+      + '<button class="btn-cancel" data-hold-id="' + h.hold_id + '" data-mid="' + h.metadata_id + '">Cancel</button>'
+      + '</div>'
+      + '</a>';
+  }
+
+  function renderSection(title, items) {
+    if (!items.length) return '';
+    var html = '<div class="section"><h2 class="section-title">' + title + ' (' + items.length + ')</h2>';
+    items.forEach(function(h) { html += renderItem(h); });
+    html += '</div>';
+    return html;
+  }
+
+  function renderHolds(holds) {
+    var ready = holds.filter(function(h) { return h.status === 'READY_FOR_PICKUP'; });
+    var waiting = holds.filter(function(h) { return h.status !== 'READY_FOR_PICKUP'; });
+    var html = renderSection('Ready for Pickup', ready) + renderSection('On Hold', waiting);
+
+    if (!html) {
+      html = '<div class="empty-state"><h2>No holds</h2><p>Place holds on recommended books from the home page.</p><a href="/" class="btn btn-primary" style="margin-top:12px">Browse Recommendations</a></div>';
     }
-  });
-});
+
+    container.className = '';
+    container.innerHTML = html;
+    attachCancel();
+  }
+
+  function renderError(msg) {
+    container.className = 'empty-state';
+    container.innerHTML = '<h2>Could not load holds</h2><p style="color:#86868b;margin-top:4px">' + (msg || 'Unknown error') + '</p><button onclick="location.reload()" class="btn btn-primary" style="margin-top:12px">Retry</button>';
+  }
+
+  function attachCancel() {
+    document.querySelectorAll('.btn-cancel').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (btn.dataset.confirming) {
+          var holdId = btn.dataset.holdId;
+          var mid = btn.dataset.mid;
+          btn.textContent = 'Cancelling...';
+          btn.disabled = true;
+          fetch('/api/hold/cancel', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({hold_id: holdId, metadata_id: mid})
+          })
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            if (data.success) {
+              var item = btn.closest('.history-item');
+              item.style.opacity = '0.3';
+              item.style.pointerEvents = 'none';
+              btn.textContent = 'Cancelled';
+            } else {
+              btn.textContent = 'Failed';
+              btn.dataset.confirming = '';
+            }
+          })
+          .catch(function() {
+            btn.textContent = 'Failed';
+            btn.dataset.confirming = '';
+          });
+        } else {
+          btn.dataset.confirming = '1';
+          btn.textContent = 'Confirm?';
+          setTimeout(function() { if (btn.dataset.confirming) { delete btn.dataset.confirming; btn.textContent = 'Cancel'; } }, 5000);
+        }
+      });
+    });
+  }
+
+  fetch('/api/holds')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.holds) {
+        renderHolds(data.holds);
+      } else {
+        renderError(data.error);
+      }
+    })
+    .catch(function() {
+      renderError('Network error');
+    });
+})();
 </script>
 {% endblock %}

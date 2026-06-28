@@ -219,19 +219,24 @@ def api_holds():
         bc_token, session_id, account_id, _ = api._get_auth()
         data = api.fetch_holds(bc_token, session_id, account_id)
         holds_ents = data.get("entities", {}).get("holds", {})
-        holds = [
-            {
+        conn = db.get_conn()
+        holds = []
+        for hid, h in holds_ents.items():
+            mid = h.get("metadataId")
+            row = conn.execute("SELECT author, isbn FROM books WHERE metadata_id = ?", (mid,)).fetchone() if mid else None
+            holds.append({
                 "hold_id": hid,
-                "metadata_id": h.get("metadataId"),
+                "metadata_id": mid,
                 "title": h.get("bibTitle"),
+                "author": row["author"] if row else "",
+                "isbn": row["isbn"] if row else None,
                 "status": h.get("status"),
                 "position": h.get("holdsPosition"),
                 "pickup_branch": (h.get("pickupLocation") or {}).get("code"),
                 "placed_date": h.get("holdPlacedDate"),
                 "expiry_date": h.get("pickupByDate"),
-            }
-            for hid, h in holds_ents.items()
-        ]
+            })
+        conn.close()
         quotas = data.get("borrowing", {}).get("summaries", {}).get("holds", {}).get("quotas", [])
         return jsonify({"holds": holds, "quotas": quotas})
     except Exception as e:
@@ -327,48 +332,71 @@ def api_restart():
     return jsonify({"ok": True})
 
 
-@app.route("/holds")
-def holds_page():
-    """Show all current holds."""
-    conn = db.get_conn()
+@app.route("/api/sync-history", methods=["POST"])
+def api_sync_history():
     try:
         bc_token, session_id, account_id, _ = api._get_auth()
-        data = api.fetch_holds(bc_token, session_id, account_id)
-        holds_ents = data.get("entities", {}).get("holds", {})
-        holds = []
-        for hid, h in holds_ents.items():
-            mid = h.get("metadataId")
-            row = conn.execute("SELECT title, author, isbn FROM books WHERE metadata_id = ?", (mid,)).fetchone() if mid else None
-            holds.append({
-                "hold_id": hid,
-                "metadata_id": mid,
-                "title": h.get("bibTitle") or (row["title"] if row else ""),
-                "author": row["author"] if row else "",
-                "status": h.get("status"),
-                "position": h.get("holdsPosition"),
-                "pickup_branch": (h.get("pickupLocation") or {}).get("code"),
-                "placed_date": h.get("holdPlacedDate"),
-                "expiry_date": h.get("pickupByDate"),
-                "isbn": row["isbn"] if row else None,
-            })
-        quotas = data.get("borrowing", {}).get("summaries", {}).get("holds", {}).get("quotas", [])
+        conn = db.get_conn()
+        co = patron.sync_checkouts(conn, bc_token, session_id, account_id)
+        hi = patron.sync_history(conn, bc_token, session_id, account_id)
         conn.close()
-        return render_template("holds.html", holds=holds)
+        return jsonify({"synced": True, "checkouts": co, "history_new": hi})
     except Exception as e:
+        return jsonify({"synced": False, "error": str(e)})
+
+
+@app.route("/api/history/data")
+def api_history_data():
+    conn = db.get_conn()
+    try:
+        current = conn.execute("""
+            SELECT b.*, bk.title, bk.author, bk.isbn, bk.metadata_id
+            FROM borrow_events b
+            LEFT JOIN books bk ON bk.metadata_id = b.metadata_id
+            WHERE b.is_current = 1
+            ORDER BY COALESCE(b.checkout_date, '9999-12-31') ASC
+        """).fetchall()
+
+        past = conn.execute("""
+            SELECT b.*, bk.title, bk.author, bk.isbn, bk.metadata_id
+            FROM borrow_events b
+            LEFT JOIN books bk ON bk.metadata_id = b.metadata_id
+            WHERE b.source = 'history'
+            ORDER BY b.checkout_date DESC
+        """).fetchall()
+
+        current_list = []
+        for c in current:
+            c = dict(c)
+            img, fallback = _cover(c.get("isbn"))
+            c["img_url"] = img
+            c["fallback_url"] = fallback
+            c["due_label"] = due_info(c.get("checkout_date"), True)
+            current_list.append(c)
+
+        past_list = []
+        for p in past:
+            p = dict(p)
+            img, fallback = _cover(p.get("isbn"))
+            p["img_url"] = img
+            p["fallback_url"] = fallback
+            past_list.append(p)
+
+        return jsonify({"current": current_list, "past": past_list})
+    except Exception as e:
+        return jsonify({"error": str(e)})
+    finally:
         conn.close()
-        return render_template("holds.html", holds=[], error=str(e))
+
+
+@app.route("/holds")
+def holds_page():
+    return render_template("holds.html")
 
 
 @app.route("/history")
 def history():
     conn = db.get_conn()
-
-    try:
-        bc_token, session_id, account_id, _ = api._get_auth()
-        patron.sync_checkouts(conn, bc_token, session_id, account_id)
-        patron.sync_history(conn, bc_token, session_id, account_id)
-    except Exception:
-        pass
 
     current = conn.execute("""
         SELECT b.*, bk.title, bk.author, bk.isbn, bk.metadata_id

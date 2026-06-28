@@ -721,6 +721,47 @@ th {
 
 .empty-state h2 { font-size: 1.2rem; margin-bottom: 8px; }
 
+/* ── loading / sync states ── */
+
+.loading-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: #86868b;
+}
+
+.loading-state p { margin-top: 8px; }
+
+.spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid #e5e5ea;
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  margin: 0 auto;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.sync-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.82rem;
+  color: #86868b;
+  margin-left: 10px;
+  vertical-align: middle;
+}
+
+.sync-indicator .spinner {
+  width: 14px;
+  height: 14px;
+  border-width: 2px;
+  margin: 0;
+}
+
+.sync-done { color: #16a34a; }
+
 /* ── holds page ── */
 
 .quota-bar {
