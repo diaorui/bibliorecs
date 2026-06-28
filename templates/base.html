@@ -28,13 +28,15 @@
       if (!isNaN(d)) el.textContent = d.toLocaleString();
     });
     document.querySelectorAll('img.cover-img').forEach(function(img) {
-      var triedFallback = false;
+      var fallbacks = [];
+      var fb = img.getAttribute('data-fallback');
+      if (fb) fallbacks.push(fb);
+      fallbacks.push('https://placehold.co/120x180/e8e8ed/86868b?text=No+Cover&font=source-sans-pro');
+      var fbIdx = 0;
       function tryFallback() {
-        if (triedFallback) return false;
-        triedFallback = true;
-        var fb = img.getAttribute('data-fallback');
-        if (fb) { img.src = fb; return true; }
-        return false;
+        if (fbIdx >= fallbacks.length) return false;
+        img.src = fallbacks[fbIdx++];
+        return true;
       }
       function showPlaceholder() {
         img.style.display = 'none';
