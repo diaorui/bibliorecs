@@ -825,8 +825,10 @@ th {
 .hold-queued { background: #dbeafe; color: #1e40af; }
 
 .hold-expiry {
-  font-size: 0.78rem;
-  color: #86868b;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
 }
 
 .btn-cancel {
