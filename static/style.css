@@ -437,6 +437,9 @@ th {
   font-size: 0.82rem;
   color: #86868b;
   margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .history-body .title-row {
