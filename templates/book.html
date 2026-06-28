@@ -10,9 +10,7 @@
            data-fallback="{{ fallback_url }}">
       <div class="cover-placeholder cover-placeholder-lg">📖<br>{{ book.title[:50] }}</div>
     </div>
-    {% if book.isbn %}
-    <div class="preview-btn-slot"></div>
-    {% endif %}
+
   </div>
   <div class="book-info">
     <h1>{{ book.title }}</h1>
@@ -107,7 +105,7 @@
   var isbn = '{{ book.isbn }}';
   var overlay = document.getElementById('preview-overlay');
   var canvas = document.getElementById('viewerCanvas');
-  var slot = document.querySelector('.preview-btn-slot');
+  var slot = document.querySelector('.book-cover-wrap');
 
   function handleResponse(data) {
     var key = 'ISBN:' + isbn;
