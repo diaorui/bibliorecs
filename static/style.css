@@ -1003,7 +1003,7 @@ th {
   .book-info .metadata span { margin-right: 10px; }
   .book-info .description { font-size: 0.88rem; margin-bottom: 12px; }
 
-  .preview-modal { width: 100vw; height: 100vh; border-radius: 0; }
+  .preview-modal { width: 100vw; height: 100vh; height: 100dvh; border-radius: 0; }
   .preview-close { width: 32px; height: 32px; font-size: 1.3rem; }
 
   .section-title { font-size: 1.05rem; }
