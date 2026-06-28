@@ -31,7 +31,7 @@
       var fallbacks = [];
       var fb = img.getAttribute('data-fallback');
       if (fb) fallbacks.push(fb);
-      fallbacks.push('https://placehold.co/120x180/e8e8ed/86868b?text=No+Cover&font=source-sans-pro');
+      fallbacks.push("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 180'%3E%3Crect width='120' height='180' fill='%23e8e8ed'/%3E%3Cpath d='M45 55v70l15-8 15 8V55z' fill='%2386868b' opacity='.4'/%3E%3C/svg%3E");
       var fbIdx = 0;
       function tryFallback() {
         if (fbIdx >= fallbacks.length) return false;
