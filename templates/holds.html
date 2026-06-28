@@ -2,7 +2,7 @@
 {% block title %}Holds – Bibliorecs{% endblock %}
 
 {% block content %}
-<h1 class="page-title">Your Holds</h1>
+<h1 class="page-title" id="page-title">Your Holds</h1>
 <div id="holds-container" class="loading-state">
   <div class="spinner"></div>
   <p>Loading your holds...</p>
@@ -58,6 +58,9 @@
 
     if (!html) {
       html = '<div class="empty-state"><h2>No holds</h2><p>Place holds on recommended books from the home page.</p><a href="/" class="btn btn-primary" style="margin-top:12px">Browse Recommendations</a></div>';
+      document.getElementById('page-title').textContent = 'Your Holds';
+    } else {
+      document.getElementById('page-title').textContent = 'Your Holds (' + holds.length + ')';
     }
 
     container.className = '';
@@ -66,6 +69,7 @@
   }
 
   function renderError(msg) {
+    document.getElementById('page-title').textContent = 'Your Holds';
     container.className = 'empty-state';
     container.innerHTML = '<h2>Could not load holds</h2><p style="color:#86868b;margin-top:4px">' + (msg || 'Unknown error') + '</p><button onclick="location.reload()" class="btn btn-primary" style="margin-top:12px">Retry</button>';
   }
