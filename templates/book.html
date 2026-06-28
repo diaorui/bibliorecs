@@ -10,6 +10,12 @@
            data-fallback="{{ fallback_url }}">
       <div class="cover-placeholder cover-placeholder-lg">📖<br>{{ book.title[:50] }}</div>
     </div>
+    {% if book.isbn %}
+    <div class="preview-btn-slot">
+      <script src="https://books.google.com/books/previewlib.js"></script>
+      <script>GBS_insertPreviewButtonPopup('ISBN:{{ book.isbn }}');</script>
+    </div>
+    {% endif %}
   </div>
   <div class="book-info">
     <h1>{{ book.title }}</h1>
@@ -58,15 +64,6 @@
   </div>
 </div>
 
-{% if book.isbn %}
-<div id="preview-overlay" class="preview-overlay">
-  <div class="preview-modal">
-    <button id="preview-close" class="preview-close" aria-label="Close preview">&times;</button>
-    <div id="viewerCanvas"></div>
-  </div>
-</div>
-{% endif %}
-
 <div id="hold-section" class="section" style="display:none">
   <h2 class="section-title">Hold Status</h2>
   <div id="hold-content" class="hold-block"></div>
@@ -95,50 +92,6 @@
 {% endblock %}
 
 {% block scripts %}
-{% if book.isbn %}
-<script src="https://www.google.com/books/jsapi.js"></script>
-<script>
-(function() {
-  var isbn = '{{ book.isbn }}';
-  if (!isbn) return;
-
-  var overlay = document.getElementById('preview-overlay');
-  var canvas = document.getElementById('viewerCanvas');
-  var coverLarge = document.querySelector('.book-cover-large');
-  var viewer = null;
-
-  google.books.load(function() {
-    viewer = new google.books.DefaultViewer(canvas);
-    viewer.load(
-      'ISBN:' + isbn,
-      function() {
-        viewer = null;
-      },
-      function() {
-        var btn = document.createElement('button');
-        btn.className = 'btn-preview';
-        btn.textContent = 'Preview this book';
-        btn.addEventListener('click', function() {
-          overlay.style.display = 'flex';
-          viewer.resize();
-        });
-        coverLarge.appendChild(btn);
-      }
-    );
-  });
-
-  overlay.addEventListener('click', function(e) {
-    if (e.target === overlay) {
-      overlay.style.display = 'none';
-    }
-  });
-
-  document.getElementById('preview-close').addEventListener('click', function() {
-    overlay.style.display = 'none';
-  });
-})();
-</script>
-{% endif %}
 <script>
 var mid = '{{ metadata_id }}';
 var holdSection = document.getElementById('hold-section');
