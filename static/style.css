@@ -425,22 +425,21 @@ th {
 
 .history-body { flex: 1; min-width: 0; }
 
-.history-body .title {
-  font-weight: 600;
-  font-size: 0.92rem;
+.history-body .title-row {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.history-body .sub {
-  font-size: 0.82rem;
-  color: #86868b;
+.history-body .title-row .title {
+  font-weight: 600;
+  font-size: 0.92rem;
 }
 
-.history-body .sub-api {
-  color: #6b7280;
-  font-style: italic;
+.history-body .title-row .sub {
+  font-size: 0.82rem;
+  color: #86868b;
+  margin-left: 8px;
 }
 
 .history-date {

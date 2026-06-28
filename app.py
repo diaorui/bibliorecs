@@ -228,7 +228,6 @@ def api_holds():
                 "hold_id": hid,
                 "metadata_id": mid,
                 "title": row["title"] if row else (h.get("bibTitle") or ""),
-                "api_title": h.get("bibTitle"),
                 "author": row["author"] if row else "",
                 "isbn": row["isbn"] if row else None,
                 "status": h.get("status"),
