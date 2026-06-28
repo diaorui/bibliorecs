@@ -99,42 +99,46 @@
 
 {% block scripts %}
 {% if book.isbn %}
-<script src="https://www.google.com/books/jsapi.js"></script>
 <script>
 (function() {
   var isbn = '{{ book.isbn }}';
-  if (!isbn) return;
-
   var overlay = document.getElementById('preview-overlay');
   var canvas = document.getElementById('viewerCanvas');
   var slot = document.querySelector('.preview-btn-slot');
-  var viewer = null;
 
-  google.books.load();
-
-  (function init() {
-    if (typeof google === 'undefined' || typeof google.books === 'undefined' || typeof google.books.DefaultViewer !== 'function') {
-      setTimeout(init, 200);
-      return;
+  function handleResponse(data) {
+    var key = 'ISBN:' + isbn;
+    if (data && data[key] && data[key].preview_url && data[key].embeddable) {
+      var btn = document.createElement('button');
+      btn.className = 'btn-preview';
+      btn.textContent = 'Preview this book';
+      btn.addEventListener('click', function() {
+        canvas.innerHTML = '';
+        var iframe = document.createElement('iframe');
+        iframe.src = data[key].preview_url + '&output=embed';
+        iframe.style.cssText = 'width:100%;height:100%;border:0';
+        iframe.allow = 'clipboard-read; clipboard-write';
+        canvas.appendChild(iframe);
+        overlay.style.display = 'flex';
+      });
+      slot.appendChild(btn);
     }
-    viewer = new google.books.DefaultViewer(canvas);
-    viewer.load(
-      'ISBN:' + isbn,
-      function() {
-        viewer = null;
-      },
-      function() {
-        var btn = document.createElement('button');
-        btn.className = 'btn-preview';
-        btn.textContent = 'Preview this book';
-        btn.addEventListener('click', function() {
-          overlay.style.display = 'flex';
-          requestAnimationFrame(function() { viewer.resize(); });
-        });
-        slot.appendChild(btn);
-      }
-    );
-  })();
+    cleanup();
+  }
+
+  function cleanup() {
+    var s = document.getElementById('gbs-jsonp');
+    if (s) s.parentNode.removeChild(s);
+    delete window['gbs_cb_' + isbn.replace(/[^a-zA-Z0-9]/g, '_')];
+  }
+
+  var callbackName = 'gbs_cb_' + isbn.replace(/[^a-zA-Z0-9]/g, '_');
+  window[callbackName] = handleResponse;
+
+  var script = document.createElement('script');
+  script.id = 'gbs-jsonp';
+  script.src = 'https://books.google.com/books?jscmd=viewapi&bibkeys=ISBN:' + encodeURIComponent(isbn) + '&callback=' + callbackName;
+  document.head.appendChild(script);
 
   overlay.addEventListener('click', function(e) {
     if (e.target === overlay) overlay.style.display = 'none';
