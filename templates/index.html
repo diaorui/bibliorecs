@@ -127,10 +127,7 @@
     .then(function(data) {
       if (data.success) {
         btn.textContent = 'On Hold';
-        btn.className = 'btn-card btn-card-hold';
-      } else if (data.error && data.error.indexOf('already') !== -1) {
-        btn.textContent = 'On Hold';
-        btn.className = 'btn-card btn-card-hold';
+        btn.className = 'btn-card btn-card-hold btn-card-revealed';
       } else {
         btn.textContent = 'Failed';
         btn.disabled = false;
