@@ -3,10 +3,6 @@
 
 {% block content %}
 <h1 class="page-title">Library Stats</h1>
-<p class="page-subtitle">
-  {% if sync_time %}Recommendations computed <time class="local-time" datetime="{{ sync_time }}">{{ sync_time }}</time>{% endif %}
-</p>
-
 <div class="stats-grid">
   <div class="stat-card">
     <div class="number">{{ stats.total }}</div>
