@@ -300,7 +300,7 @@ def get_stats(conn):
             SUM(CASE WHEN description IS NOT NULL AND description != '' THEN 1 ELSE 0 END) as with_description,
             SUM(CASE WHEN content_type IS NOT NULL THEN 1 ELSE 0 END) as with_content_type,
             SUM(CASE WHEN series IS NOT NULL AND series != '[]' THEN 1 ELSE 0 END) as with_series
-        FROM books
+        FROM books WHERE active = 1
     """).fetchone()
     return dict(row)
 
@@ -308,7 +308,7 @@ def get_stats(conn):
 def get_format_distribution(conn):
     rows = conn.execute("""
         SELECT format, COUNT(*) as count
-        FROM books GROUP BY format ORDER BY count DESC
+        FROM books WHERE active = 1 GROUP BY format ORDER BY count DESC
     """).fetchall()
     return [dict(r) for r in rows]
 
@@ -316,7 +316,7 @@ def get_format_distribution(conn):
 def get_content_type_distribution(conn):
     rows = conn.execute("""
         SELECT content_type, COUNT(*) as count
-        FROM books GROUP BY content_type ORDER BY count DESC
+        FROM books WHERE active = 1 GROUP BY content_type ORDER BY count DESC
     """).fetchall()
     return [dict(r) for r in rows]
 
@@ -324,7 +324,7 @@ def get_content_type_distribution(conn):
 def get_language_distribution(conn):
     rows = conn.execute("""
         SELECT primary_language, COUNT(*) as count
-        FROM books GROUP BY primary_language ORDER BY count DESC LIMIT 20
+        FROM books WHERE active = 1 GROUP BY primary_language ORDER BY count DESC LIMIT 20
     """).fetchall()
     return [dict(r) for r in rows]
 
@@ -332,7 +332,7 @@ def get_language_distribution(conn):
 def get_year_distribution(conn):
     rows = conn.execute("""
         SELECT publication_year, COUNT(*) as count
-        FROM books WHERE publication_year IS NOT NULL
+        FROM books WHERE active = 1 AND publication_year IS NOT NULL
         GROUP BY publication_year ORDER BY publication_year DESC LIMIT 30
     """).fetchall()
     return [dict(r) for r in rows]
