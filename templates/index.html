@@ -3,9 +3,6 @@
 
 {% block content %}
 <h1 class="page-title">Your Recommendations</h1>
-<p class="page-subtitle">
-  {% if sync_time %}Computed <time class="local-time" datetime="{{ sync_time }}">{{ sync_time }}</time>{% endif %}
-</p>
 
 {% for carousel in carousels %}
 <section class="carousel-section" data-category="{{ carousel.name }}">
