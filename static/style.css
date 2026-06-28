@@ -868,6 +868,34 @@ th {
   margin-top: 4px;
 }
 
+/* ── book preview ── */
+
+.btn-preview {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 6px 0;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: #2563eb;
+  background: #fff;
+  border: 1px solid #dbeafe;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: center;
+}
+
+.btn-preview:hover { background: #f0f5ff; }
+.btn-preview:disabled { opacity: 0.4; cursor: default; }
+
+.preview-section {
+  display: none;
+  margin-bottom: 28px;
+}
+
+#viewerCanvas { width: 100%; height: 450px; }
+
 .btn-hold-main {
   display: inline-block;
   padding: 10px 24px;
@@ -922,6 +950,7 @@ th {
   .book-info .metadata { font-size: 0.82rem; margin-bottom: 12px; }
   .book-info .metadata span { margin-right: 10px; }
   .book-info .description { font-size: 0.88rem; margin-bottom: 12px; }
+  #viewerCanvas { height: 350px; }
 
   .section-title { font-size: 1.05rem; }
 

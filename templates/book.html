@@ -10,6 +10,9 @@
            data-fallback="{{ fallback_url }}">
       <div class="cover-placeholder cover-placeholder-lg">📖<br>{{ book.title[:50] }}</div>
     </div>
+    {% if book.isbn %}
+    <button class="btn-preview" id="btn-preview" data-isbn="{{ book.isbn }}">📖 Preview this book</button>
+    {% endif %}
   </div>
   <div class="book-info">
     <h1>{{ book.title }}</h1>
@@ -58,6 +61,12 @@
   </div>
 </div>
 
+{% if book.isbn %}
+<div id="preview-section" class="preview-section">
+  <div id="viewerCanvas"></div>
+</div>
+{% endif %}
+
 <div id="hold-section" class="section" style="display:none">
   <h2 class="section-title">Hold Status</h2>
   <div id="hold-content" class="hold-block"></div>
@@ -86,6 +95,57 @@
 {% endblock %}
 
 {% block scripts %}
+{% if book.isbn %}
+<script src="https://www.google.com/books/jsapi.js"></script>
+<script>
+google.books.load();
+
+(function() {
+  var btn = document.getElementById('btn-preview');
+  var section = document.getElementById('preview-section');
+  var canvas = document.getElementById('viewerCanvas');
+  var viewer = null;
+  var loaded = false;
+
+  if (!btn) return;
+
+  btn.addEventListener('click', function() {
+    if (loaded) {
+      if (section.style.display === 'none') {
+        section.style.display = 'block';
+        btn.textContent = 'Close Preview';
+        viewer.resize();
+      } else {
+        section.style.display = 'none';
+        btn.textContent = '📖 Preview this book';
+      }
+    } else if (!viewer) {
+      btn.textContent = 'Loading...';
+      btn.disabled = true;
+      section.style.display = 'block';
+
+      google.books.setOnLoadCallback(function() {
+        viewer = new google.books.DefaultViewer(canvas);
+        viewer.load(
+          'ISBN:' + btn.getAttribute('data-isbn'),
+          function() {
+            section.style.display = 'none';
+            btn.textContent = 'No preview';
+            btn.disabled = true;
+            viewer = null;
+          },
+          function() {
+            btn.textContent = 'Close Preview';
+            btn.disabled = false;
+            loaded = true;
+          }
+        );
+      });
+    }
+  });
+})();
+</script>
+{% endif %}
 <script>
 var mid = '{{ metadata_id }}';
 var holdSection = document.getElementById('hold-section');
