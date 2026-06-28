@@ -110,7 +110,11 @@
   var slot = document.querySelector('.preview-btn-slot');
   var viewer = null;
 
-  google.books.load(function() {
+  (function init() {
+    if (typeof google === 'undefined' || typeof google.books === 'undefined' || typeof google.books.DefaultViewer !== 'function') {
+      setTimeout(init, 200);
+      return;
+    }
     viewer = new google.books.DefaultViewer(canvas);
     viewer.load(
       'ISBN:' + isbn,
@@ -128,7 +132,7 @@
         slot.appendChild(btn);
       }
     );
-  });
+  })();
 
   overlay.addEventListener('click', function(e) {
     if (e.target === overlay) overlay.style.display = 'none';
