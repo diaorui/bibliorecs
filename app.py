@@ -5,7 +5,7 @@ import re
 import urllib.error
 from collections import defaultdict
 from datetime import datetime, timedelta
-from flask import Flask, render_template, abort, jsonify, request
+from flask import Flask, render_template, abort, jsonify, request, redirect
 import api
 import config
 import db
@@ -100,7 +100,7 @@ def book_detail(metadata_id):
                        (metadata_id,)).fetchone()
     if not row:
         conn.close()
-        abort(404)
+        return redirect(f"https://sclibrary.bibliocommons.com/v2/record/{metadata_id}")
     book = dict(row)
 
     borrows = conn.execute("""
