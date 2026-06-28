@@ -129,7 +129,7 @@
         btn.textContent = 'Preview this book';
         btn.addEventListener('click', function() {
           overlay.style.display = 'flex';
-          viewer.resize();
+          requestAnimationFrame(function() { viewer.resize(); });
         });
         slot.appendChild(btn);
       }
