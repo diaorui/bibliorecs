@@ -20,11 +20,12 @@ app.config["DEBUG_MODE"] = "--debug" in sys.argv or os.environ.get("BIBLIORECS_D
 
 OL_URL = "https://covers.openlibrary.org/b/isbn/{isbn}-{size}.jpg"
 SYN_URL = "https://secure.syndetics.com/index.aspx?isbn={isbn}/{size}.GIF&client=sepup&type=xw12&oclc="
+PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='180' viewBox='0 0 120 180'%3E%3Crect width='120' height='180' fill='%23e8e8ed' rx='4'/%3E%3Cpath d='M45 55v70l15-8 15 8V55z' fill='%2386868b' opacity='.4'/%3E%3Crect x='48' y='65' width='24' height='2' fill='%2386868b' opacity='.3'/%3E%3C/svg%3E"
 
 
 def _cover(isbn):
     if not isbn:
-        return None, None
+        return PLACEHOLDER, PLACEHOLDER
     return (
         SYN_URL.format(isbn=isbn, size="LC"),
         OL_URL.format(isbn=isbn, size="L"),
@@ -33,7 +34,7 @@ def _cover(isbn):
 
 def _cover_large(isbn):
     if not isbn:
-        return None, None
+        return PLACEHOLDER, PLACEHOLDER
     return (
         SYN_URL.format(isbn=isbn, size="LC"),
         OL_URL.format(isbn=isbn, size="L"),
