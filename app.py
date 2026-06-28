@@ -373,6 +373,8 @@ def api_history_data():
             c["img_url"] = img
             c["fallback_url"] = fallback
             c["due_label"] = due_info(c.get("checkout_date"), True)
+            c["due_label_compact"] = due_label_compact(c.get("checkout_date"), True)
+            c["due_remaining"] = due_remaining(c.get("checkout_date"), True)
             current_list.append(c)
 
         past_list = []
@@ -648,6 +650,47 @@ def due_info(checkout_date, is_current):
             return f"Due {formatted} ({delta} days left)"
     except (ValueError, TypeError):
         return f"Due {checkout_date}"
+
+
+@app.template_filter("due_label_compact")
+def due_label_compact(checkout_date, is_current):
+    if not checkout_date or not is_current:
+        return None
+    from datetime import date as date_cls
+    try:
+        due = date_cls.fromisoformat(checkout_date[:10])
+        today = date_cls.today()
+        delta = (due - today).days
+        formatted = due.strftime("%b %-d")
+        if delta < 0:
+            return f"Overdue {formatted}"
+        elif delta == 0:
+            return "Due today"
+        else:
+            return f"Due {formatted}"
+    except (ValueError, TypeError):
+        return None
+
+
+@app.template_filter("due_remaining")
+def due_remaining(checkout_date, is_current):
+    if not checkout_date or not is_current:
+        return None
+    from datetime import date as date_cls
+    try:
+        due = date_cls.fromisoformat(checkout_date[:10])
+        today = date_cls.today()
+        delta = (due - today).days
+        if delta < 0:
+            return f"{-delta} days ago"
+        elif delta == 0:
+            return None
+        elif delta == 1:
+            return "1 day left"
+        else:
+            return f"{delta} days left"
+    except (ValueError, TypeError):
+        return None
 
 
 @app.template_filter("parse_json")

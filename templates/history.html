@@ -24,7 +24,11 @@
           {% if c.subtitle %}<div class="sub">{{ c.subtitle }}</div>{% endif %}
           <div class="sub">{{ c.author or '' }}</div>
         </div>
-        <span class="history-date">{{ c.checkout_date | due_info(true) or c.checkout_date }}</span>
+        <span class="history-date">
+          <span class="due-date">{{ c.checkout_date | due_label_compact(true) or c.checkout_date }}</span>
+          {% set rem = c.checkout_date | due_remaining(true) %}
+          {% if rem %}<span class="due-relative">{{ rem }}</span>{% endif %}
+        </span>
       </a>
     {% endfor %}
   </div>
@@ -89,9 +93,15 @@
     var label = isCurrent ? 'Currently Checked Out' : 'Past Borrows';
     var html = '<h2 class="section-title">' + label + ' (' + items.length + ')</h2>';
     items.forEach(function(item) {
-      var date = isCurrent
-        ? (item.due_label || item.checkout_date || '')
-        : (item.checkout_date || '');
+      var dateHtml;
+      if (isCurrent) {
+        var label = item.due_label_compact || item.checkout_date || '';
+        var remain = item.due_remaining || '';
+        dateHtml = '<span class="due-date">' + label + '</span>';
+        if (remain) dateHtml += '<span class="due-relative">' + remain + '</span>';
+      } else {
+        dateHtml = '<span class="due-date">' + (item.checkout_date || '') + '</span>';
+      }
       html += '<a href="/book/' + item.metadata_id + '" class="history-item">'
         + '<div class="history-cover-wrap">'
         + '<img class="history-cover cover-img" src="' + item.img_url + '" alt="" loading="lazy" data-fallback="' + item.fallback_url + '">'
@@ -102,7 +112,7 @@
         + (item.subtitle ? '<div class="sub">' + item.subtitle + '</div>' : '')
         + '<div class="sub">' + (item.author || '') + '</div>'
         + '</div>'
-        + '<span class="history-date">' + date + '</span>'
+        + '<span class="history-date">' + dateHtml + '</span>'
         + '</a>';
     });
     container.innerHTML = html;
