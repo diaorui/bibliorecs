@@ -295,30 +295,6 @@ body {
   margin-bottom: 16px;
 }
 
-/* ── product details ── */
-
-.detail-section { margin-bottom: 20px; }
-
-.detail-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.detail-row { display: flex; }
-
-.detail-label {
-  width: 100px;
-  flex-shrink: 0;
-  font-size: 0.88rem;
-  color: #86868b;
-}
-
-.detail-value {
-  font-size: 0.88rem;
-  color: #1d1d1f;
-}
-
 .tag-list {
   display: flex;
   flex-wrap: wrap;
@@ -946,9 +922,6 @@ th {
   .book-info .metadata { font-size: 0.82rem; margin-bottom: 12px; }
   .book-info .metadata span { margin-right: 10px; }
   .book-info .description { font-size: 0.88rem; margin-bottom: 12px; }
-
-  .detail-label { width: 80px; font-size: 0.82rem; }
-  .detail-value { font-size: 0.82rem; }
 
   .section-title { font-size: 1.05rem; }
 
