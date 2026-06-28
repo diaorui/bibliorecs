@@ -5,7 +5,7 @@ Personalized children's book recommendation engine built on top of the [Biblioco
 ## Features
 
 - **Recommendations** — per-category carousels (Fiction, Picture Books, Graphic Novels, etc.) computed from your borrowing history using sentence-transformer embeddings + MaxSim + MMR diversity
-- **Live availability** — real-time status badges (Available / All Checked Out / On Hold) fetched per-category at page load
+- **Real-time hold status** — live hold and checkout state on every card, fetched on page load
 - **Hold management** — place and cancel holds directly from the web UI
 - **Book detail** — hold status and borrow history
 - **Branch-filtered catalog** — catalog synced to your home branch at sync time
@@ -87,7 +87,7 @@ patron.py                → borrowing history sync
 generate_embeddings.py   → one-time embedding generation (~15s GPU)
 recommend.py             → embedding MaxSim + MMR recommendation engine
 api.py                   → Bibliocommons API client (auth, availability, holds)
-app.py                   → Flask web app with server-rendered templates
+app.py                   → Flask web app with server- and client-rendered templates
 db.py                    → SQLite schema and migrations
 updater.py               → daemon subprocess for nightly auto-updates
 ```
@@ -109,7 +109,7 @@ Bibliocommons API → sync.py → books.db (catalog)
                   → app.py / api.py → real-time availability + holds
 ```
 
-Live availability and hold status are fetched from the API on user view, not pre-computed. Availability is cached per-book with a configurable TTL (default 15 min).
+Hold and checkout status are fetched from the API on user view, not pre-computed. Home page cards use only holds/checkouts (no per-book availability API). Book detail pages still fetch live availability directly.
 
 ## API endpoints
 
@@ -126,6 +126,8 @@ Live availability and hold status are fetched from the API on user view, not pre
 | `POST /api/hold/place` | Place a hold |
 | `POST /api/hold/cancel` | Cancel a hold |
 | `GET /api/checkouts` | Currently checked-out book IDs |
+| `POST /api/sync-history` | Trigger background sync of checkouts and borrowing history |
+| `GET /api/history/data` | Borrowing history as JSON (with cover URLs and due labels) |
 
 ## License
 
