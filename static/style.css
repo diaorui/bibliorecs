@@ -1041,7 +1041,7 @@ th {
 
   th, td { padding: 6px 8px; font-size: 0.82rem; }
 
-  .hold-status-wrap { align-items: flex-start; margin-top: 4px; }
+  .hold-status-wrap { margin-top: 4px; }
   .hold-badge { font-size: 0.75rem; padding: 3px 8px; }
 
   .quota-bar { flex-direction: column; gap: 4px; font-size: 0.82rem; }
