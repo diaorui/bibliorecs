@@ -223,11 +223,12 @@ def api_holds():
         holds = []
         for hid, h in holds_ents.items():
             mid = h.get("metadataId")
-            row = conn.execute("SELECT title, author, isbn FROM books WHERE metadata_id = ?", (mid,)).fetchone() if mid else None
+            row = conn.execute("SELECT title, subtitle, author, isbn FROM books WHERE metadata_id = ?", (mid,)).fetchone() if mid else None
             holds.append({
                 "hold_id": hid,
                 "metadata_id": mid,
                 "title": row["title"] if row else (h.get("bibTitle") or ""),
+                "subtitle": row["subtitle"] if row else None,
                 "author": row["author"] if row else "",
                 "isbn": row["isbn"] if row else None,
                 "status": h.get("status"),

@@ -32,7 +32,8 @@
       + '<div class="cover-placeholder cover-placeholder-sm">📖</div>'
       + '</div>'
       + '<div class="history-body">'
-      + '<div class="title-row"><span class="title">' + (h.title || '') + '</span><span class="sub">' + (h.author || '') + '</span></div>'
+      + '<div class="title-row"><span class="title">' + (h.title || '') + '</span>' + (h.subtitle ? '<span class="sub">' + h.subtitle + '</span>' : '') + '</div>'
+      + '<div class="sub">' + (h.author || '') + '</div>'
       + '</div>'
       + '<div class="hold-status-wrap">'
       + badge
