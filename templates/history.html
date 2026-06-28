@@ -24,8 +24,7 @@
           {% if c.subtitle %}<div class="sub">{{ c.subtitle }}</div>{% endif %}
           <div class="sub">{{ c.author or '' }}</div>
         </div>
-        <span class="history-date">
-          <span class="due-date">{{ c.checkout_date | due_label_compact(true) or c.checkout_date }}</span>
+        <span class="history-date"><span class="due-date">{{ c.checkout_date | due_label_compact(true) or c.checkout_date }}</span>
           {% set rem = c.checkout_date | due_remaining(true) %}
           {% if rem %}<span class="due-relative">{{ rem }}</span>{% endif %}
         </span>
@@ -50,7 +49,7 @@
           {% if p.subtitle %}<div class="sub">{{ p.subtitle }}</div>{% endif %}
           <div class="sub">{{ p.author or '' }}</div>
         </div>
-        <span class="history-date">{{ p.checkout_date or '' }}</span>
+        <span class="history-date"><span class="due-date">{{ p.checkout_date or '' }}</span></span>
       </a>
     {% endfor %}
   </div>

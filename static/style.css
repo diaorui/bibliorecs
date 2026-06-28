@@ -465,6 +465,8 @@ th {
   align-items: flex-end;
   gap: 2px;
   flex-shrink: 0;
+  font-size: 0.82rem;
+  color: #86868b;
 }
 
 .due-date {
