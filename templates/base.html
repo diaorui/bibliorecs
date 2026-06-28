@@ -31,31 +31,36 @@
       var fallbacks = [];
       var fb = img.getAttribute('data-fallback');
       if (fb) fallbacks.push(fb);
-      fallbacks.push("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 180'%3E%3Crect width='120' height='180' fill='%23e8e8ed'/%3E%3Cpath d='M45 55v70l15-8 15 8V55z' fill='%2386868b' opacity='.4'/%3E%3C/svg%3E");
+      fallbacks.push("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='180' viewBox='0 0 120 180'%3E%3Crect width='120' height='180' fill='%23e8e8ed' rx='4'/%3E%3Cpath d='M45 55v70l15-8 15 8V55z' fill='%2386868b' opacity='.4'/%3E%3Crect x='48' y='65' width='24' height='2' fill='%2386868b' opacity='.3'/%3E%3C/svg%3E");
       var fbIdx = 0;
+      var done = false;
       function tryFallback() {
+        if (done) return false;
         if (fbIdx >= fallbacks.length) return false;
         img.src = fallbacks[fbIdx++];
         return true;
       }
+      function handleLoad() {
+        if (done) return;
+        if (img.naturalWidth <= 1 && img.naturalHeight <= 1) {
+          if (!tryFallback()) { done = true; showPlaceholder(); }
+        } else {
+          done = true;
+        }
+      }
+      function handleError() {
+        if (done) return;
+        if (!tryFallback()) { done = true; showPlaceholder(); }
+      }
       function showPlaceholder() {
         img.style.display = 'none';
         var card = img.closest('.carousel-card');
-        if (card) {
-          card.style.display = 'none';
-          return;
-        }
+        if (card) { card.style.display = 'none'; return; }
         var ph = img.parentNode.querySelector('.cover-placeholder');
         if (ph) ph.style.display = 'flex';
       }
-      img.addEventListener('load', function() {
-        if (img.naturalWidth <= 1 && img.naturalHeight <= 1) {
-          if (!tryFallback()) showPlaceholder();
-        }
-      });
-      img.addEventListener('error', function() {
-        if (!tryFallback()) showPlaceholder();
-      });
+      img.addEventListener('load', handleLoad);
+      img.addEventListener('error', handleError);
     });
   });
   </script>
