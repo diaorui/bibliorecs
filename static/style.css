@@ -438,6 +438,11 @@ th {
   color: #86868b;
 }
 
+.history-body .sub-api {
+  color: #6b7280;
+  font-style: italic;
+}
+
 .history-date {
   font-size: 0.82rem;
   color: #86868b;

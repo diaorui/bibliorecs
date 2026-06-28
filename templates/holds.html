@@ -33,6 +33,7 @@
       + '</div>'
       + '<div class="history-body">'
       + '<div class="title">' + (h.title || '') + '</div>'
+      + (h.api_title && h.api_title !== h.title ? '<div class="sub sub-api">' + h.api_title + '</div>' : '')
       + '<div class="sub">' + (h.author || '') + '</div>'
       + '</div>'
       + '<div class="hold-status-wrap">'
