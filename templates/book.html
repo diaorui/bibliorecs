@@ -10,9 +10,6 @@
            data-fallback="{{ fallback_url }}">
       <div class="cover-placeholder cover-placeholder-lg">📖<br>{{ book.title[:50] }}</div>
     </div>
-    {% if book.isbn %}
-    <button class="btn-preview" id="btn-preview" data-isbn="{{ book.isbn }}">📖 Preview this book</button>
-    {% endif %}
   </div>
   <div class="book-info">
     <h1>{{ book.title }}</h1>
@@ -62,8 +59,11 @@
 </div>
 
 {% if book.isbn %}
-<div id="preview-section" class="preview-section">
-  <div id="viewerCanvas"></div>
+<div id="preview-overlay" class="preview-overlay">
+  <div class="preview-modal">
+    <button id="preview-close" class="preview-close" aria-label="Close preview">&times;</button>
+    <div id="viewerCanvas"></div>
+  </div>
 </div>
 {% endif %}
 
@@ -98,50 +98,43 @@
 {% if book.isbn %}
 <script src="https://www.google.com/books/jsapi.js"></script>
 <script>
-google.books.load();
-
 (function() {
-  var btn = document.getElementById('btn-preview');
-  var section = document.getElementById('preview-section');
+  var isbn = '{{ book.isbn }}';
+  if (!isbn) return;
+
+  var overlay = document.getElementById('preview-overlay');
   var canvas = document.getElementById('viewerCanvas');
+  var coverLarge = document.querySelector('.book-cover-large');
   var viewer = null;
-  var loaded = false;
 
-  if (!btn) return;
-
-  btn.addEventListener('click', function() {
-    if (loaded) {
-      if (section.style.display === 'none') {
-        section.style.display = 'block';
-        btn.textContent = 'Close Preview';
-        viewer.resize();
-      } else {
-        section.style.display = 'none';
-        btn.textContent = '📖 Preview this book';
+  google.books.load(function() {
+    viewer = new google.books.DefaultViewer(canvas);
+    viewer.load(
+      'ISBN:' + isbn,
+      function() {
+        viewer = null;
+      },
+      function() {
+        var btn = document.createElement('button');
+        btn.className = 'btn-preview';
+        btn.textContent = 'Preview this book';
+        btn.addEventListener('click', function() {
+          overlay.style.display = 'flex';
+          viewer.resize();
+        });
+        coverLarge.appendChild(btn);
       }
-    } else if (!viewer) {
-      btn.textContent = 'Loading...';
-      btn.disabled = true;
-      section.style.display = 'block';
+    );
+  });
 
-      google.books.setOnLoadCallback(function() {
-        viewer = new google.books.DefaultViewer(canvas);
-        viewer.load(
-          'ISBN:' + btn.getAttribute('data-isbn'),
-          function() {
-            section.style.display = 'none';
-            btn.textContent = 'No preview';
-            btn.disabled = true;
-            viewer = null;
-          },
-          function() {
-            btn.textContent = 'Close Preview';
-            btn.disabled = false;
-            loaded = true;
-          }
-        );
-      });
+  overlay.addEventListener('click', function(e) {
+    if (e.target === overlay) {
+      overlay.style.display = 'none';
     }
+  });
+
+  document.getElementById('preview-close').addEventListener('click', function() {
+    overlay.style.display = 'none';
   });
 })();
 </script>
