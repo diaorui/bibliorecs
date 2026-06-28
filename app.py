@@ -351,7 +351,7 @@ def api_history_data():
     conn = db.get_conn()
     try:
         current = conn.execute("""
-            SELECT b.*, bk.title, bk.author, bk.isbn, bk.metadata_id
+            SELECT b.*, bk.title, bk.subtitle, bk.author, bk.isbn, bk.metadata_id
             FROM borrow_events b
             LEFT JOIN books bk ON bk.metadata_id = b.metadata_id
             WHERE b.is_current = 1
@@ -359,7 +359,7 @@ def api_history_data():
         """).fetchall()
 
         past = conn.execute("""
-            SELECT b.*, bk.title, bk.author, bk.isbn, bk.metadata_id
+            SELECT b.*, bk.title, bk.subtitle, bk.author, bk.isbn, bk.metadata_id
             FROM borrow_events b
             LEFT JOIN books bk ON bk.metadata_id = b.metadata_id
             WHERE b.source = 'history'
@@ -400,7 +400,7 @@ def history():
     conn = db.get_conn()
 
     current = conn.execute("""
-        SELECT b.*, bk.title, bk.author, bk.isbn, bk.metadata_id
+        SELECT b.*, bk.title, bk.subtitle, bk.author, bk.isbn, bk.metadata_id
         FROM borrow_events b
         LEFT JOIN books bk ON bk.metadata_id = b.metadata_id
         WHERE b.is_current = 1
@@ -408,7 +408,7 @@ def history():
     """).fetchall()
 
     past = conn.execute("""
-        SELECT b.*, bk.title, bk.author, bk.isbn, bk.metadata_id
+        SELECT b.*, bk.title, bk.subtitle, bk.author, bk.isbn, bk.metadata_id
         FROM borrow_events b
         LEFT JOIN books bk ON bk.metadata_id = b.metadata_id
         WHERE b.source = 'history'

@@ -21,6 +21,7 @@
         </div>
         <div class="history-body">
           <div class="title">{{ c.title or c.metadata_id }}</div>
+          {% if c.subtitle %}<div class="sub">{{ c.subtitle }}</div>{% endif %}
           <div class="sub">{{ c.author or '' }}</div>
         </div>
         <span class="history-date">{{ c.checkout_date | due_info(true) or c.checkout_date }}</span>
@@ -42,6 +43,7 @@
         </div>
         <div class="history-body">
           <div class="title">{{ p.title or p.metadata_id }}</div>
+          {% if p.subtitle %}<div class="sub">{{ p.subtitle }}</div>{% endif %}
           <div class="sub">{{ p.author or '' }}</div>
         </div>
         <span class="history-date">{{ p.checkout_date or '' }}</span>
@@ -97,6 +99,7 @@
         + '</div>'
         + '<div class="history-body">'
         + '<div class="title">' + (item.title || item.metadata_id) + '</div>'
+        + (item.subtitle ? '<div class="sub">' + item.subtitle + '</div>' : '')
         + '<div class="sub">' + (item.author || '') + '</div>'
         + '</div>'
         + '<span class="history-date">' + date + '</span>'
