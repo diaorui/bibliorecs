@@ -1,3 +1,5 @@
+from datetime import datetime, date
+
 import config
 import api
 import db
@@ -58,3 +60,78 @@ def sync_checkouts(conn, bc_token, session_id, account_id):
 
     conn.commit()
     return count
+
+
+def auto_renew_checkouts(conn, bc_token, session_id, account_id):
+    data = api.fetch_current_checkouts(bc_token, session_id, account_id)
+    checkouts = data.get("entities", {}).get("checkouts", {})
+
+    now = date.today()
+    renew_ids = []
+    mid_by_cid = {}
+
+    for cid, co in checkouts.items():
+        actions = co.get("actions") or []
+        if "renew" not in actions:
+            continue
+        due = co.get("dueDate")
+        if not due:
+            continue
+        try:
+            due_date = datetime.strptime(due, "%Y-%m-%d").date()
+        except (ValueError, TypeError):
+            continue
+        days_left = (due_date - now).days
+        if days_left <= config.AUTO_RENEW_DAYS_BEFORE_DUE:
+            renew_ids.append(cid)
+            mid_by_cid[cid] = co.get("metadataId")
+
+    if not renew_ids:
+        print(f"  No checkouts need renewal (threshold: {config.AUTO_RENEW_DAYS_BEFORE_DUE} days)")
+        return 0
+
+    print(f"  Renewing {len(renew_ids)} checkout(s): {renew_ids}")
+
+    try:
+        result = api.renew_checkouts(bc_token, session_id, account_id, renew_ids)
+    except Exception as e:
+        print(f"  Renewal failed: {e}")
+        return 0
+
+    renewed_ents = result.get("entities", {}).get("checkouts", {}) or {}
+    failures_raw = result.get("failures") or []
+
+    failures = {}
+    if isinstance(failures_raw, dict):
+        for k, v in failures_raw.items():
+            failures[str(k)] = str(v)
+    elif isinstance(failures_raw, list):
+        for item in failures_raw:
+            if not isinstance(item, dict):
+                continue
+            cid = item.get("checkoutId") or item.get("id") or ""
+            if cid:
+                failures[str(cid)] = item.get("message") or item.get("error") or str(item)
+
+    updated = 0
+    for cid in renew_ids:
+        if cid in failures:
+            mid = mid_by_cid.get(cid)
+            reason = failures[cid]
+            print(f"    {mid} ({cid}): renewal failed — {reason}")
+            continue
+        entity = renewed_ents.get(cid) or {}
+        new_due = entity.get("dueDate")
+        mid = mid_by_cid.get(cid)
+        if mid and new_due:
+            conn.execute(
+                "UPDATE borrow_events SET checkout_date = ? WHERE metadata_id = ? AND is_current = 1",
+                (new_due, mid)
+            )
+            updated += 1
+
+    if updated:
+        conn.commit()
+
+    print(f"  {updated} checkouts renewed (due dates updated in DB)")
+    return updated

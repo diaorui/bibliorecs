@@ -310,6 +310,44 @@ def fetch_borrowing_history(bc_token, session_id, account_id, page=0):
     )
 
 
+def _gateway_patch(path, bc_token, session_id, body, retries=3):
+    url = f"{GATEWAY_BASE}{path}?locale=en-US"
+    headers = _gateway_headers(bc_token, session_id)
+    headers["Content-Type"] = "application/json"
+    for attempt in range(retries):
+        try:
+            data = json.dumps(body).encode()
+            req = urllib.request.Request(url, data=data, headers=headers, method="PATCH")
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                return json.loads(resp.read().decode())
+        except urllib.error.HTTPError as e:
+            if e.code == 401:
+                _invalidate_auth()
+                new_auth = _get_auth()
+                headers = _gateway_headers(new_auth[0], new_auth[1])
+                continue
+            if attempt < retries - 1 and e.code >= 500:
+                time.sleep(2 ** attempt)
+                continue
+            raise
+        except (urllib.error.URLError, OSError, json.JSONDecodeError) as e:
+            if attempt < retries - 1:
+                time.sleep(2 ** attempt)
+                continue
+            raise
+
+
+def renew_checkouts(bc_token, session_id, account_id, checkout_ids):
+    if not checkout_ids:
+        return {"entities": {"checkouts": {}}, "failures": []}
+    body = {
+        "accountId": account_id,
+        "checkoutIds": checkout_ids,
+        "renew": True,
+    }
+    return _gateway_patch("/checkouts", bc_token, session_id, body)
+
+
 def fetch_current_checkouts(bc_token, session_id, account_id):
     return _gateway_get(
         "/checkouts", bc_token, session_id,

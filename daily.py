@@ -30,6 +30,10 @@ def main():
     checkout_count = patron.sync_checkouts(conn, bc_token, session_id, account_id)
     print(f"  {checkout_count} current checkouts")
 
+    print("\nAuto-renewing checkouts close to due...")
+    renewed = patron.auto_renew_checkouts(conn, bc_token, session_id, account_id)
+    print(f"  {renewed} checkouts renewed")
+
     print("\nComputing recommendations...")
     recommend.compute(conn)
 
