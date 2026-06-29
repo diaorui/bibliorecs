@@ -701,29 +701,40 @@ th {
   flex: 1;
 }
 
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
 .btn-card {
   width: 100%;
   padding: 5px 0;
   font-size: 0.72rem;
   font-weight: 600;
   border: none;
-  border-top: 1px solid #e5e5ea;
   cursor: pointer;
-  background: #fff;
-  color: #2563eb;
-  transition: background 0.12s;
-  flex-shrink: 0;
-  opacity: 0;
+  color: transparent;
   pointer-events: none;
+  flex-shrink: 0;
+  background: linear-gradient(90deg, #e8e8ed 25%, #f0f0f6 50%, #e8e8ed 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
 }
 
-.btn-card-revealed { opacity: 1; pointer-events: auto; }
-.btn-card:hover:not(:disabled) { background: #f0f5ff; }
-.btn-card:disabled { cursor: default; }
-
+.btn-card-revealed {
+  color: #2563eb;
+  background: #fff;
+  background-size: auto;
+  animation: none;
+  pointer-events: auto;
+  border-top: 1px solid #e5e5ea;
+  transition: background 0.12s;
+}
 .btn-card-checked { color: #7c3aed; background: #f5f3ff; border-top-color: #e5e5ea; }
 .btn-card-ready   { color: #d97706; background: #fffbeb; border-top-color: #e5e5ea; }
 .btn-card-hold    { color: #6b7280; background: #f9fafb; border-top-color: #e5e5ea; }
+.btn-card:hover:not(:disabled) { background: #f0f5ff; }
+.btn-card:disabled { cursor: default; }
 
 /* ── toast ── */
 
