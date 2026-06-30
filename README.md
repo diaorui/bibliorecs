@@ -2,6 +2,8 @@
 
 Personalized children's book recommendation engine built on top of the [Bibliocommons](https://sclibrary.bibliocommons.com) library catalog API. Designed for the Santa Clara City Library children's collection.
 
+![Bibliorecs home page](screenshot.png)
+
 ## Features
 
 - **Recommendations** — per-category carousels (Picture Books, Fiction, Graphic Novels, etc.) computed from borrowing history using sentence-transformer embeddings + MaxSim/centroid blend + MMR diversity
@@ -72,8 +74,6 @@ python daily.py
 ```
 
 Downloads checkout history and current checkouts, auto-renews eligible checkouts, and computes recommendation scores for each category. Run this periodically to refresh recommendations.
-
-![Bibliorecs home page](screenshot.png)
 
 ### 2. Start the web app
 
