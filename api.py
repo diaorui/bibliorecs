@@ -36,7 +36,7 @@ def search_bibs_json(query, formats=None, f_circ=None,
     if f_circ:
         body["f_CIRC"] = f_circ
     if sort:
-        body["sortBy"] = sort
+        body["sort"] = sort
 
     url = f"{GATEWAY_BASE}/bibs/search?locale=en-US"
     headers = {
