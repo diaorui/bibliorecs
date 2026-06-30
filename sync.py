@@ -48,14 +48,14 @@ def run_sync(formats=None, max_pages=None, resume_from=None):
     if resume_from:
         page = resume_from
         log_id = _get_latest_sync_log_id(conn)
-        data = api.search_bibs_json(QUERY, formats=fmt_list, page=page)
+        data = api.search_bibs_json(QUERY, formats=fmt_list, f_circ="CIRC", page=page)
         pagination = api.parse_pagination(data)
         total_pages = pagination.get("pages", 1)
         if max_pages:
             total_pages = min(page + max_pages - 1, total_pages)
     else:
         page = 1
-        data = api.search_bibs_json(QUERY, formats=fmt_list, page=page)
+        data = api.search_bibs_json(QUERY, formats=fmt_list, f_circ="CIRC", page=page)
         pagination = api.parse_pagination(data)
         total_pages = pagination.get("pages", 1)
         total_count = pagination.get("count", 0)
@@ -109,7 +109,7 @@ def run_sync(formats=None, max_pages=None, resume_from=None):
 def _fetch_and_process_page(conn, page, formats, sort=None):
     for attempt in range(MAX_PAGE_RETRIES):
         try:
-            data = api.search_bibs_json(QUERY, formats=formats, page=page, sort=sort)
+            data = api.search_bibs_json(QUERY, formats=formats, f_circ="CIRC", page=page, sort=sort)
         except Exception as e:
             if attempt < MAX_PAGE_RETRIES - 1:
                 wait = 2 ** attempt
@@ -200,7 +200,7 @@ def run_incremental(formats=None):
 
     conn = db.get_conn()
 
-    data = api.search_bibs_json(QUERY, formats=fmt_list,
+    data = api.search_bibs_json(QUERY, formats=fmt_list, f_circ="CIRC",
                                 page=1, sort="newly_acquired")
     pagination = api.parse_pagination(data)
     total_pages = pagination.get("pages", 1)

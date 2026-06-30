@@ -21,12 +21,8 @@ REQUEST_DELAY = 0.6
 # ─────────────────────────── public catalog API ───────────────────────────
 
 
-def search_bibs_json(query, formats=None,
+def search_bibs_json(query, formats=None, f_circ=None,
                      search_type="bl", page=1, sort=None, retries=3):
-    if formats:
-        fmt_clause = " OR ".join(formats)
-        query = f'{query} formatcode:({fmt_clause})'
-
     body = {
         "query": query,
         "searchType": search_type,
@@ -35,6 +31,10 @@ def search_bibs_json(query, formats=None,
         "page": str(page),
         "view": "small",
     }
+    if formats:
+        body["f_FORMAT"] = "|".join(formats)
+    if f_circ:
+        body["f_CIRC"] = f_circ
     if sort:
         body["sortBy"] = sort
 
