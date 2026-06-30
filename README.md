@@ -73,6 +73,8 @@ python daily.py
 
 Downloads checkout history and current checkouts, auto-renews eligible checkouts, and computes recommendation scores for each category. Run this periodically to refresh recommendations.
 
+![Bibliorecs home page](screenshot.png)
+
 ### 2. Start the web app
 
 ```bash
