@@ -121,14 +121,9 @@ def show_book(metadata_id):
     print(f"  BOOK DETAIL: {row['title']}")
     print("=" * 60)
     for key, val in row.items():
-        if key == "raw_json":
-            continue
         if isinstance(val, str) and len(val) > 200:
             val = val[:200] + "..."
         print(f"  {key}: {val}")
-    print()
-    print("  --- Full Raw JSON (first 2000 chars) ---")
-    print((row.get("raw_json") or "")[:2000])
     conn.close()
 
 

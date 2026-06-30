@@ -23,7 +23,6 @@ CREATE TABLE IF NOT EXISTS books (
     series TEXT,
     super_formats TEXT,
     consumption_format TEXT,
-    raw_json TEXT,
     first_synced TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     active INTEGER DEFAULT 1
