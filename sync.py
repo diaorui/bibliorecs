@@ -48,14 +48,14 @@ def run_sync(formats=None, max_pages=None, resume_from=None):
     if resume_from:
         page = resume_from
         log_id = _get_latest_sync_log_id(conn)
-        data = api.search_bibs_json(QUERY, formats=fmt_list, f_circ="CIRC", page=page)
+        data = api.search_bibs_json(QUERY, formats=fmt_list, f_circ="CIRC", page=page, sort="newly_acquired")
         pagination = api.parse_pagination(data)
         total_pages = pagination.get("pages", 1)
         if max_pages:
             total_pages = min(page + max_pages - 1, total_pages)
     else:
         page = 1
-        data = api.search_bibs_json(QUERY, formats=fmt_list, f_circ="CIRC", page=page)
+        data = api.search_bibs_json(QUERY, formats=fmt_list, f_circ="CIRC", page=page, sort="newly_acquired")
         pagination = api.parse_pagination(data)
         total_pages = pagination.get("pages", 1)
         total_count = pagination.get("count", 0)
@@ -72,7 +72,7 @@ def run_sync(formats=None, max_pages=None, resume_from=None):
         page = 2
 
     while page <= total_pages:
-        ok, page_mids = _fetch_and_process_page(conn, page, fmt_list, sort=None)
+        ok, page_mids = _fetch_and_process_page(conn, page, fmt_list, sort="newly_acquired")
         if ok:
             synced_mids.update(page_mids)
             db.update_sync_progress(conn, log_id, page)
