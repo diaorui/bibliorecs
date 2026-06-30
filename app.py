@@ -253,7 +253,7 @@ def api_hold_place():
     try:
         bc_token, session_id, account_id, _ = api._get_auth()
         data = api.place_hold(bc_token, session_id, account_id,
-                              body["metadata_id"], config.CENTRAL_PARK_BRANCH_CODE)
+                              body["metadata_id"], config.HOME_BRANCH_CODE)
         holds = data.get("entities", {}).get("holds", {})
         if holds:
             hid = next(iter(holds))

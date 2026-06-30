@@ -19,7 +19,7 @@ import db
 import api
 import generate_embeddings
 
-QUERY = 'audience:"children" branch:"' + config.CENTRAL_PARK_BRANCH + '"'
+QUERY = 'audience:"children" branch:"' + config.HOME_BRANCH + '"'
 PAPER_FORMATS = ["BK", "PICTURE_BOOK", "PAPERBACK", "BOARD_BK", "GRAPHIC_NOVEL"]
 
 FORMAT_LABELS = {

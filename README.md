@@ -36,8 +36,8 @@ Edit `config.py` to match your library:
 
 | Variable | Default | Description |
 |---|---|---|
-| `CENTRAL_PARK_BRANCH` | `"Central Park Library"` | Home branch name (as it appears in the API) |
-| `CENTRAL_PARK_BRANCH_CODE` | `"C"` | Branch code used when placing holds |
+| `HOME_BRANCH` | `"Central Park Library"` | Home branch name (as it appears in the API) |
+| `HOME_BRANCH_CODE` | `"C"` | Branch code used when placing holds |
 | `EMBEDDING_MODEL` | `"BAAI/bge-small-en-v1.5"` | Sentence transformer model for book embeddings |
 | `FILTER_ENGLISH` | `True` | Only recommend English-language books |
 | `AVAILABILITY_CACHE_SECONDS` | `900` | How long to cache availability data |

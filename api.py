@@ -365,7 +365,7 @@ def extract_home_availability(metadata_id, data):
     cp_statuses = []
     for item in items.values():
         branch = item.get("branch", {})
-        if branch.get("name") != config.CENTRAL_PARK_BRANCH:
+        if branch.get("name") != config.HOME_BRANCH:
             continue
         cp_statuses.append(item.get("availability", {}).get("status", ""))
 

@@ -1,5 +1,5 @@
-CENTRAL_PARK_BRANCH = "Central Park Library"
-CENTRAL_PARK_BRANCH_CODE = "C"
+HOME_BRANCH = "Central Park Library"
+HOME_BRANCH_CODE = "C"
 EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
 EMBEDDING_PATH = "embeddings.npy"
 EMBEDDING_MIDS_PATH = "embedding_mids.json"
