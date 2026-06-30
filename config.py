@@ -17,9 +17,6 @@ MMR_LAMBDA = 0.5
 MMR_TOP_K = 100
 FILTER_ENGLISH = True
 
-# ── Cache ────────────────────────────────────────────────────────────
-AVAILABILITY_CACHE_SECONDS = 900
-
 # ── Scheduling ───────────────────────────────────────────────────────
 UPDATE_WINDOW_START = 2       # 2 AM
 UPDATE_WINDOW_END = 4         # 4 AM

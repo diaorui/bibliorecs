@@ -43,7 +43,6 @@ Edit `config.py` to match your library:
 | `SYNDETICS_CLIENT` | `"sepup"` | Syndetics client ID for cover images |
 | `EMBEDDING_MODEL` | `"BAAI/bge-small-en-v1.5"` | Sentence transformer model for book embeddings |
 | `FILTER_ENGLISH` | `True` | Only recommend English-language books |
-| `AVAILABILITY_CACHE_SECONDS` | `900` | How long to cache availability data |
 | `TIME_DECAY_HALF_LIFE_DAYS` | `90` | Borrow recency weight half-life (exponential decay) |
 | `TOP_CANDIDATES` | `20` | Recommendations per category |
 | `MMR_LAMBDA` | `0.5` | Diversity vs. relevance trade-off |

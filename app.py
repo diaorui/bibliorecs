@@ -4,7 +4,7 @@ import sys
 import re
 import urllib.error
 from collections import defaultdict
-from datetime import datetime, timedelta
+
 from flask import Flask, render_template, abort, jsonify, request, redirect
 import api
 import config
@@ -153,61 +153,26 @@ def api_batch_availability():
 
 def _resolve_availability(conn, metadata_ids):
     """Return dict of metadata_id → {at_home, available_copies, ...}.
-    Checks cache first, fetches fresh from API only for stale or missing entries."""
-    cutoff = (datetime.utcnow() - timedelta(seconds=config.AVAILABILITY_CACHE_SECONDS)).isoformat()
-
-    rows = conn.execute("""
-        SELECT metadata_id, at_home, status, available_copies, total_copies, held_copies, last_checked
-        FROM availability
-        WHERE metadata_id IN ({})
-    """.format(",".join("?" * len(metadata_ids))), metadata_ids).fetchall()
-
-    cached = {r["metadata_id"]: r for r in rows}
+    Fetches live from API; returns zeros on failure."""
     result = {}
-    stale = []
-
-    for mid in metadata_ids:
-        r = cached.get(mid)
-        if r and r["last_checked"] and r["last_checked"] >= cutoff:
-            result[mid] = {
-                "owns_home": r["total_copies"] > 0,
-                "at_home": bool(r["at_home"]),
-                "status": r["status"] or "",
-                "available_copies": r["available_copies"],
-                "total_copies": r["total_copies"],
-                "held_copies": r["held_copies"],
-            }
-        else:
-            stale.append(mid)
-
-    if stale:
-        try:
-            fresh = api.fetch_batch_availability(stale)
-            for mid in stale:
-                info = fresh.get(mid)
-                if info:
-                    result[mid] = {
-                        "owns_home": info.get("owns_home", False),
-                        "at_home": info.get("at_home", False),
-                        "status": info.get("status", ""),
-                        "available_copies": info.get("available_copies", 0),
-                        "total_copies": info.get("total_copies", 0),
-                        "held_copies": info.get("held_copies", 0),
-                    }
-                    db.upsert_availability(conn, metadata_id=mid, status=info.get("status", ""),
-                                           available_copies=info.get("available_copies", 0),
-                                           total_copies=info.get("total_copies", 0),
-                                           held_copies=info.get("held_copies", 0),
-                                           at_home=info.get("at_home", False))
-                else:
-                    result[mid] = {"at_home": False}
-            conn.commit()
-        except Exception as e:
-            for mid in stale:
-                r = cached.get(mid)
-                result[mid] = {"at_home": bool(r["at_home"]) if r else False,
-                               "_stale": True}
-
+    try:
+        fresh = api.fetch_batch_availability(metadata_ids)
+        for mid in metadata_ids:
+            info = fresh.get(mid)
+            if info:
+                result[mid] = {
+                    "owns_home": info.get("owns_home", False),
+                    "at_home": info.get("at_home", False),
+                    "status": info.get("status", ""),
+                    "available_copies": info.get("available_copies", 0),
+                    "total_copies": info.get("total_copies", 0),
+                    "held_copies": info.get("held_copies", 0),
+                }
+            else:
+                result[mid] = {"at_home": False}
+    except Exception:
+        for mid in metadata_ids:
+            result[mid] = {"at_home": False}
     return result
 
 
