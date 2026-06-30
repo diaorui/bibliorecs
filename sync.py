@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Sync Santa Clara City Library children's paper books into SQLite.
+Sync library children's paper books into SQLite.
 
 Usage:
     python sync.py                    # full sync (all paper formats)

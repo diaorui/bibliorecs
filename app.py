@@ -19,7 +19,7 @@ app = Flask(__name__)
 app.config["DEBUG_MODE"] = "--debug" in sys.argv or os.environ.get("BIBLIORECS_DEBUG") == "1"
 
 OL_URL = "https://covers.openlibrary.org/b/isbn/{isbn}-{size}.jpg"
-SYN_URL = "https://secure.syndetics.com/index.aspx?isbn={isbn}/{size}.GIF&client=sepup&type=xw12&oclc="
+SYN_URL = f"https://secure.syndetics.com/index.aspx?isbn={{isbn}}/{{size}}.GIF&client={config.SYNDETICS_CLIENT}&type=xw12&oclc="
 PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='180' viewBox='0 0 120 180'%3E%3Crect width='120' height='180' fill='%23e8e8ed' rx='4'/%3E%3Cpath d='M45 55v70l15-8 15 8V55z' fill='%2386868b' opacity='.4'/%3E%3Crect x='48' y='65' width='24' height='2' fill='%2386868b' opacity='.3'/%3E%3C/svg%3E"
 
 
@@ -100,7 +100,7 @@ def book_detail(metadata_id):
                        (metadata_id,)).fetchone()
     if not row:
         conn.close()
-        return redirect(f"https://sclibrary.bibliocommons.com/v2/record/{metadata_id}")
+        return redirect(f"{config.CATALOG_BASE}/v2/record/{metadata_id}")
     book = dict(row)
 
     borrows = conn.execute("""
@@ -118,7 +118,7 @@ def book_detail(metadata_id):
         subjects=_json_list(book.get("subjects")),
         genres=_json_list(book.get("genres")),
         series=_json_list(book.get("series")),
-        catalog_url=f"https://sclibrary.bibliocommons.com/v2/record/{metadata_id}",
+        catalog_url=f"{config.CATALOG_BASE}/v2/record/{metadata_id}",
         img_url=img,
         fallback_url=fallback,
     )

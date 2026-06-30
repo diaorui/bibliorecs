@@ -38,6 +38,9 @@ Edit `config.py` to match your library:
 |---|---|---|
 | `HOME_BRANCH` | `"Central Park Library"` | Home branch name (as it appears in the API) |
 | `HOME_BRANCH_CODE` | `"C"` | Branch code used when placing holds |
+| `CATALOG_BASE` | `"https://sclibrary.bibliocommons.com"` | Bibliocommons catalog base URL |
+| `GATEWAY_BASE` | `"https://gateway.bibliocommons.com/v2/libraries/sclibrary"` | Gateway API base URL |
+| `SYNDETICS_CLIENT` | `"sepup"` | Syndetics client ID for cover images |
 | `EMBEDDING_MODEL` | `"BAAI/bge-small-en-v1.5"` | Sentence transformer model for book embeddings |
 | `FILTER_ENGLISH` | `True` | Only recommend English-language books |
 | `AVAILABILITY_CACHE_SECONDS` | `900` | How long to cache availability data |

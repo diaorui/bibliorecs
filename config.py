@@ -1,5 +1,8 @@
 HOME_BRANCH = "Central Park Library"
 HOME_BRANCH_CODE = "C"
+CATALOG_BASE = "https://sclibrary.bibliocommons.com"
+GATEWAY_BASE = "https://gateway.bibliocommons.com/v2/libraries/sclibrary"
+SYNDETICS_CLIENT = "sepup"
 EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
 EMBEDDING_PATH = "embeddings.npy"
 EMBEDDING_MIDS_PATH = "embedding_mids.json"

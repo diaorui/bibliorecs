@@ -10,11 +10,11 @@ import re
 import config
 
 
-CATALOG_BASE = "https://sclibrary.bibliocommons.com"
-GATEWAY_BASE = "https://gateway.bibliocommons.com/v2/libraries/sclibrary"
+CATALOG_BASE = config.CATALOG_BASE
+GATEWAY_BASE = config.GATEWAY_BASE
 PUBLIC_HEADERS = {
     "Accept": "application/json",
-    "Origin": "https://sclibrary.bibliocommons.com",
+    "Origin": CATALOG_BASE,
 }
 REQUEST_DELAY = 0.6
 
