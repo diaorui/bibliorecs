@@ -456,12 +456,10 @@ def stats():
     languages = db.get_language_distribution(conn)
     years = db.get_year_distribution(conn)
     sync_time = db.get_recommendation_sync_time(conn)
-    total_borrows = conn.execute("SELECT COUNT(*) FROM borrow_events").fetchone()[0]
     conn.close()
     return render_template("stats.html", stats=s, formats=formats,
                            content_types=content_types, languages=languages,
                            years=years, sync_time=sync_time,
-                           total_borrows=total_borrows,
                            update_status=updater.status(),
                            update_window_start=config.UPDATE_WINDOW_START,
                            update_window_end=config.UPDATE_WINDOW_END)
