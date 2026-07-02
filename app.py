@@ -462,7 +462,7 @@ def stats():
     for r in cat_rows:
         cat_counts[book_category(r["call_number"])] += 1
     chart_cats = [{"label": k, "count": v}
-                  for k, v in sorted(cat_counts.items(), key=lambda x: (-x[1], x[0] == "Other"))]
+                  for k, v in sorted(cat_counts.items(), key=lambda x: (x[0] == "Other", -x[1]))]
 
     conn.close()
 
