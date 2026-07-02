@@ -189,15 +189,18 @@ var __chartData = {{ chart_data | tojson }};
       ctx.fillText(v, W - PAD.right + 6, yy);
     }
 
-    // X axis labels — show every few months
+    // X axis labels — skip to avoid overlap
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
-    var step = Math.max(1, Math.floor(n / 10));
-    for (var i = 0; i < n; i += step) {
-      var label = months[i].m;
-      ctx.fillText(label, xPos(i), PAD.top + plotH + 6);
+    var maxLabelW = 0;
+    for (var i = 0; i < n; i++) {
+      var w = ctx.measureText(months[i].m).width;
+      if (w > maxLabelW) maxLabelW = w;
     }
-    // always show last
+    var step = Math.max(1, Math.ceil((maxLabelW + 6) / (plotW / n)));
+    for (var i = 0; i < n; i += step) {
+      ctx.fillText(months[i].m, xPos(i), PAD.top + plotH + 6);
+    }
     if ((n - 1) % step !== 0) {
       ctx.fillText(months[n - 1].m, xPos(n - 1), PAD.top + plotH + 6);
     }
