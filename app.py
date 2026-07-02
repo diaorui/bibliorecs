@@ -467,7 +467,7 @@ def stats():
     if other_count > 0:
         chart_langs.append({"label": "Other", "count": other_count})
 
-    chart_years = [{"label": str(y["publication_year"]), "count": y["count"]} for y in years]
+    chart_years = [{"label": str(y["publication_year"]), "count": y["count"]} for y in reversed(years)]
 
     return render_template("stats.html", stats=s, formats=formats,
                            content_types=content_types, languages=languages,
