@@ -7,6 +7,16 @@
   <span id="sync-indicator" class="sync-indicator" style="display:none"></span>
 </h1>
 
+{% if chart_data %}
+<div id="chart-wrap">
+  <canvas id="history-chart"></canvas>
+</div>
+{% endif %}
+
+<script>
+var __chartData = {{ chart_data | tojson }};
+</script>
+
 <div id="history-content">
   {% if current %}
   <div class="section" id="section-current">
@@ -67,6 +77,132 @@
 {% block scripts %}
 <script>
 (function() {
+  var chartData = window.__chartData || [];
+
+  function drawChart() {
+    var canvas = document.getElementById('history-chart');
+    if (!canvas || !chartData.length) return;
+
+    var wrap = document.getElementById('chart-wrap');
+    var rect = wrap.getBoundingClientRect();
+    var dpr = window.devicePixelRatio || 1;
+    var W = rect.width;
+    var H = 200;
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+
+    var ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+
+    var PAD = {top: 20, bottom: 30, left: 36, right: 36};
+    var plotW = W - PAD.left - PAD.right;
+    var plotH = H - PAD.top - PAD.bottom;
+
+    var maxB = 0, maxC = 0;
+    var months = chartData;
+    months.forEach(function(m) {
+      if (m.b > maxB) maxB = m.b;
+      if (m.c > maxC) maxC = m.c;
+    });
+    if (maxB === 0) maxB = 1;
+    if (maxC === 0) maxC = 1;
+
+    var n = months.length;
+    var barW = Math.min(20, plotW / n * 0.7);
+    var gap = plotW / n;
+
+    function xPos(i) { return PAD.left + i * gap + gap / 2; }
+    function yBar(v) { return PAD.top + plotH - (v / maxB) * plotH; }
+    function yLine(v) { return PAD.top + plotH - (v / maxC) * plotH; }
+
+    ctx.clearRect(0, 0, W, H);
+
+    // light horizontal grid lines
+    ctx.strokeStyle = '#f0f0f2';
+    ctx.lineWidth = 1;
+    for (var g = 0; g <= 4; g++) {
+      var yy = PAD.top + plotH * (1 - g / 4);
+      ctx.beginPath();
+      ctx.moveTo(PAD.left, yy);
+      ctx.lineTo(W - PAD.right, yy);
+      ctx.stroke();
+    }
+
+    // bars
+    for (var i = 0; i < n; i++) {
+      var x = xPos(i) - barW / 2;
+      var y = yBar(months[i].b);
+      var h = PAD.top + plotH - y;
+      ctx.fillStyle = '#c7d2fe';
+      ctx.beginPath();
+      ctx.moveTo(x, PAD.top + plotH);
+      ctx.lineTo(x, y + 4);
+      ctx.quadraticCurveTo(x, y, x + 4, y);
+      ctx.lineTo(x + barW - 4, y);
+      ctx.quadraticCurveTo(x + barW, y, x + barW, y + 4);
+      ctx.lineTo(x + barW, PAD.top + plotH);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // cumulative line
+    ctx.strokeStyle = '#2563eb';
+    ctx.lineWidth = 2;
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    for (var i = 0; i < n; i++) {
+      var xx = xPos(i);
+      var yy = yLine(months[i].c);
+      if (i === 0) ctx.moveTo(xx, yy);
+      else ctx.lineTo(xx, yy);
+    }
+    ctx.stroke();
+
+    // dots on line
+    for (var i = 0; i < n; i++) {
+      var xx = xPos(i);
+      var yy = yLine(months[i].c);
+      ctx.fillStyle = '#2563eb';
+      ctx.beginPath();
+      ctx.arc(xx, yy, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Y axis labels (left — monthly)
+    ctx.fillStyle = '#86868b';
+    ctx.font = '10px -apple-system, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    for (var g = 0; g <= 4; g++) {
+      var v = Math.round(maxB * g / 4);
+      var yy = PAD.top + plotH * (1 - g / 4);
+      ctx.fillText(v, PAD.left - 6, yy);
+    }
+
+    // Y axis labels (right — cumulative)
+    ctx.textAlign = 'left';
+    for (var g = 0; g <= 4; g++) {
+      var v = Math.round(maxC * g / 4);
+      var yy = PAD.top + plotH * (1 - g / 4);
+      ctx.fillText(v, W - PAD.right + 6, yy);
+    }
+
+    // X axis labels — show every few months
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    var step = Math.max(1, Math.floor(n / 10));
+    for (var i = 0; i < n; i += step) {
+      var label = months[i].m;
+      ctx.fillText(label, xPos(i), PAD.top + plotH + 6);
+    }
+    // always show last
+    if ((n - 1) % step !== 0) {
+      ctx.fillText(months[n - 1].m, xPos(n - 1), PAD.top + plotH + 6);
+    }
+  }
+
   var indicator = document.getElementById('sync-indicator');
 
   function setIndicator(text, cls) {
@@ -149,6 +285,11 @@
                   updateContent(data);
                 }
                 hideIndicator();
+                // refresh chart
+                fetch('/api/history/chart-data')
+                  .then(function(r) { return r.json(); })
+                  .then(function(d) { if (d && d.length) { chartData = d; drawChart(); } })
+                  .catch(function() {});
               })
               .catch(function() { hideIndicator(); });
           }, 1500);
@@ -163,6 +304,12 @@
       });
   }
 
+  drawChart();
+  var resizeTimer;
+  window.addEventListener('resize', function() {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(drawChart, 200);
+  });
   doSync();
 })();
 </script>

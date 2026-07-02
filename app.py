@@ -356,6 +356,30 @@ def api_history_data():
         conn.close()
 
 
+@app.route("/api/history/chart-data")
+def api_history_chart_data():
+    conn = db.get_conn()
+    try:
+        rows = conn.execute("""
+            SELECT strftime('%Y-%m', checkout_date) AS month,
+                   COUNT(*) AS borrowed
+            FROM borrow_events
+            WHERE checkout_date IS NOT NULL
+            GROUP BY month
+            ORDER BY month
+        """).fetchall()
+        cumulative = 0
+        result = []
+        for r in rows:
+            cumulative += r["borrowed"]
+            result.append({"m": r["month"], "b": r["borrowed"], "c": cumulative})
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)})
+    finally:
+        conn.close()
+
+
 @app.route("/holds")
 def holds_page():
     return render_template("holds.html")
@@ -397,10 +421,30 @@ def history():
         p["fallback_url"] = fallback
         past_list.append(p)
 
+    chart_data = conn.execute("""
+        SELECT strftime('%Y-%m', checkout_date) AS month,
+               COUNT(*) AS borrowed
+        FROM borrow_events
+        WHERE checkout_date IS NOT NULL
+        GROUP BY month
+        ORDER BY month
+    """).fetchall()
+
+    cumulative = 0
+    chart_months = []
+    for row in chart_data:
+        cumulative += row["borrowed"]
+        chart_months.append({
+            "m": row["month"],
+            "b": row["borrowed"],
+            "c": cumulative,
+        })
+
     conn.close()
     return render_template("history.html",
                            current=current_list,
-                           past=past_list)
+                           past=past_list,
+                           chart_data=chart_months)
 
 
 @app.route("/stats")

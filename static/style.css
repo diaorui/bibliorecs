@@ -400,6 +400,22 @@ th {
   letter-spacing: 0.03em;
 }
 
+/* ── history chart ── */
+
+#chart-wrap {
+  margin-bottom: 24px;
+  background: #fff;
+  border-radius: 10px;
+  border: 1px solid #e8e8ed;
+  padding: 8px;
+}
+
+#history-chart {
+  display: block;
+  width: 100%;
+  height: 200px;
+}
+
 /* ── history rows ── */
 
 .history-item {
