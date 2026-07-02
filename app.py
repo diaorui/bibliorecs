@@ -457,7 +457,7 @@ def stats():
     years = db.get_year_distribution(conn)
     sync_time = db.get_recommendation_sync_time(conn)
 
-    cat_rows = conn.execute("SELECT call_number FROM books WHERE active = 1 AND primary_language = 'eng'").fetchall()
+    cat_rows = conn.execute("SELECT call_number FROM books WHERE active = 1").fetchall()
     cat_counts = defaultdict(int)
     for r in cat_rows:
         cat_counts[book_category(r["call_number"])] += 1
