@@ -201,9 +201,6 @@ var __chartData = {{ chart_data | tojson }};
     for (var i = 0; i < n; i += step) {
       ctx.fillText(months[i].m, xPos(i), PAD.top + plotH + 6);
     }
-    if ((n - 1) - (Math.floor((n - 1) / step) * step) >= Math.ceil(step / 2)) {
-      ctx.fillText(months[n - 1].m, xPos(n - 1), PAD.top + plotH + 6);
-    }
   }
 
   var indicator = document.getElementById('sync-indicator');
