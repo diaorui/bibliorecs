@@ -45,14 +45,12 @@ def _cover_large(isbn):
 def index():
     conn = db.get_conn()
 
-    english_where = "AND b.primary_language = 'eng'" if config.FILTER_ENGLISH else ""
-    rows = conn.execute(f"""
+    rows = conn.execute("""
         SELECT r.category, r.category_rank, r.metadata_id, r.score,
                b.title, b.subtitle, b.author, b.isbn, b.format,
                b.content_type, b.subjects, b.genres, b.description, b.series
         FROM recommendation_cache r
         INNER JOIN books b ON b.metadata_id = r.metadata_id
-        WHERE 1=1 {english_where}
         ORDER BY r.category, r.category_rank
     """).fetchall()
 
