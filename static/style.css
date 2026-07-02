@@ -534,6 +534,13 @@ th {
   margin-top: 4px;
 }
 
+.stats-note {
+  font-size: 0.78rem;
+  color: #86868b;
+  margin: -16px 0 28px;
+
+}
+
 /* ── carousel ── */
 
 .carousel-section {
