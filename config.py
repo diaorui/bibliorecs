@@ -12,7 +12,7 @@ EMBEDDING_MIDS_PATH = "embedding_mids.json"
 
 # ── Recommendations ──────────────────────────────────────────────────
 TIME_DECAY_HALF_LIFE_DAYS = 90
-TOP_CANDIDATES = 20
+TOP_CANDIDATES = 15
 MMR_LAMBDA = 0.5
 MMR_TOP_K = 100
 FILTER_ENGLISH = True
