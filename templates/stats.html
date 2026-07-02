@@ -95,6 +95,13 @@
 </div>
 {% endif %}
 
+{% if chart_cats %}
+<div class="section chart-section">
+  <h2 class="section-title">Books by Category</h2>
+  <canvas class="stats-chart" data-chart="cat"></canvas>
+</div>
+{% endif %}
+
 <div class="section">
   <button onclick="restartServer()" class="btn-restart">Restart Server</button>
 </div>
@@ -103,6 +110,7 @@
 var __formatData = {{ chart_formats | tojson }};
 var __langData = {{ chart_langs | tojson }};
 var __yearData = {{ chart_years | tojson }};
+var __catData = {{ chart_cats | tojson }};
 
 function drawHorizBars(canvas, items) {
   var wrap = canvas.parentElement;
@@ -268,6 +276,7 @@ function drawAllCharts() {
     if (type === 'format') drawHorizBars(canvas, __formatData);
     else if (type === 'lang') drawHorizBars(canvas, __langData);
     else if (type === 'year') drawYearChart(canvas, __yearData);
+    else if (type === 'cat') drawHorizBars(canvas, __catData);
   });
 }
 

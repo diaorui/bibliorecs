@@ -456,6 +456,14 @@ def stats():
     languages = db.get_language_distribution(conn)
     years = db.get_year_distribution(conn)
     sync_time = db.get_recommendation_sync_time(conn)
+
+    cat_rows = conn.execute("SELECT call_number FROM books WHERE active = 1 AND primary_language = 'eng'").fetchall()
+    cat_counts = defaultdict(int)
+    for r in cat_rows:
+        cat_counts[book_category(r["call_number"])] += 1
+    chart_cats = [{"label": k, "count": v}
+                  for k, v in sorted(cat_counts.items(), key=lambda x: (-x[1], x[0] == "Other"))]
+
     conn.close()
 
     chart_formats = [{"label": _FORMAT_LABELS.get(f["format"], f["format"].replace("_", " ").title().strip()),
@@ -472,9 +480,10 @@ def stats():
     return render_template("stats.html", stats=s, formats=formats,
                            content_types=content_types, languages=languages,
                            years=years, sync_time=sync_time,
-                           chart_formats=chart_formats,
-                           chart_langs=chart_langs,
-                           chart_years=chart_years,
+                            chart_formats=chart_formats,
+                            chart_langs=chart_langs,
+                            chart_years=chart_years,
+                            chart_cats=chart_cats,
                            update_status=updater.status(),
                            update_window_start=config.UPDATE_WINDOW_START,
                            update_window_end=config.UPDATE_WINDOW_END)
