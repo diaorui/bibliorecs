@@ -9,6 +9,7 @@ Personalized children's book recommendation engine built on top of the [Biblioco
 - **Recommendations** — per-category carousels (Picture Books, Fiction, Graphic Novels, etc.) computed from borrowing history using sentence-transformer embeddings + MaxSim/centroid blend + MMR diversity
 - **Real-time hold status** — live hold and checkout state on every card, fetched on page load; buttons start as shimmer skeleton until API returns
 - **Hold management** — place and cancel holds with status transitions (On Hold, Ready for Pickup, Checked Out)
+- **Charts** — monthly borrowing history (bars + cumulative line) and library stats (format, language, year, category) rendered with Canvas 2D API, zero external dependencies
 - **Borrow history** — server-rendered from DB instantly with background sync; compact two-line due dates with remaining days
 - **Book detail** — hold status, borrow history, Google Books Preview (JSONP availability check + iframe embed), and similar books section
 - **Auto-renewal** — daily pipeline renews checkouts within 3 days of due date
@@ -46,7 +47,7 @@ Edit `config.py` to match your library:
 | `EMBEDDING_MODEL` | `"BAAI/bge-small-en-v1.5"` | Sentence transformer model for book embeddings |
 | `FILTER_ENGLISH` | `True` | Only recommend English-language books |
 | `TIME_DECAY_HALF_LIFE_DAYS` | `90` | Borrow recency weight half-life (exponential decay) |
-| `TOP_CANDIDATES` | `20` | Recommendations per category |
+| `TOP_CANDIDATES` | `15` | Recommendations per category |
 | `MMR_LAMBDA` | `0.5` | Diversity vs. relevance trade-off |
 | `MMR_TOP_K` | `100` | Candidates considered before MMR reranking |
 | `AUTO_RENEW_DAYS_BEFORE_DUE` | `3` | Auto-renew checkouts within this many days of due date |
@@ -65,7 +66,7 @@ Downloads all active children's paper books from the library:
 python sync.py
 ```
 
-This creates `books.db` with ~79,000 active books (branch-filtered). Options: `--incremental`, `--pages N`, `--format BK`.
+This creates `books.db` with ~62,000 active books (branch-filtered, active = 1). Options: `--incremental`, `--pages N`, `--format BK`.
 
 ### 1. Sync history + compute recommendations
 
@@ -131,7 +132,7 @@ Hold, checkout, and renewal status are fetched from the API on user view, not pr
 | `GET /book/<id>` | Book detail page (hold status, history, Google Books Preview, similar books) |
 | `GET /holds` | Hold management page (client-side rendered, cancel from here only) |
 | `GET /history` | Borrow history (server-rendered from DB + background JS sync) |
-| `GET /stats` | Collection statistics + auto-update status + restart button |
+| `GET /stats` | Collection statistics with charts + auto-update status + restart button |
 | `GET /api/availability/<id>` | Live availability for one book |
 | `GET /api/availability/batch?ids=A,B,C` | Batch availability |
 | `GET /api/holds` | Current holds (with DB-enriched title/author/isbn) |
@@ -140,6 +141,7 @@ Hold, checkout, and renewal status are fetched from the API on user view, not pr
 | `GET /api/checkouts` | Currently checked-out book IDs |
 | `POST /api/sync-history` | Trigger background sync of checkouts and borrowing history |
 | `GET /api/history/data` | Borrowing history as JSON (with cover URLs, due labels) |
+| `GET /api/history/chart-data` | Monthly borrowing aggregates for the history chart |
 | `POST /api/restart` | Restart the server (spawns subprocess, delays bind) |
 
 ## License
