@@ -452,7 +452,6 @@ def stats():
     conn = db.get_conn()
     s = db.get_stats(conn)
     formats = db.get_format_distribution(conn)
-    content_types = db.get_content_type_distribution(conn)
     languages = db.get_language_distribution(conn)
     years = db.get_year_distribution(conn)
     sync_time = db.get_recommendation_sync_time(conn)
@@ -478,7 +477,7 @@ def stats():
     chart_years = [{"label": str(y["publication_year"]), "count": y["count"]} for y in reversed(years)]
 
     return render_template("stats.html", stats=s, formats=formats,
-                           content_types=content_types, languages=languages,
+                           languages=languages,
                            years=years, sync_time=sync_time,
                            chart_formats=chart_formats,
                            chart_langs=chart_langs,
