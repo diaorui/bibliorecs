@@ -457,9 +457,24 @@ def stats():
     years = db.get_year_distribution(conn)
     sync_time = db.get_recommendation_sync_time(conn)
     conn.close()
+
+    chart_formats = [{"label": _FORMAT_LABELS.get(f["format"], f["format"].replace("_", " ").title().strip()),
+                       "count": f["count"]} for f in formats]
+
+    top_langs = languages[:10]
+    other_count = sum(l["count"] for l in languages[10:])
+    chart_langs = [{"label": l["primary_language"], "count": l["count"]} for l in top_langs]
+    if other_count > 0:
+        chart_langs.append({"label": "Other", "count": other_count})
+
+    chart_years = [{"label": str(y["publication_year"]), "count": y["count"]} for y in years]
+
     return render_template("stats.html", stats=s, formats=formats,
                            content_types=content_types, languages=languages,
                            years=years, sync_time=sync_time,
+                           chart_formats=chart_formats,
+                           chart_langs=chart_langs,
+                           chart_years=chart_years,
                            update_status=updater.status(),
                            update_window_start=config.UPDATE_WINDOW_START,
                            update_window_end=config.UPDATE_WINDOW_END)
@@ -728,6 +743,7 @@ _FORMAT_LABELS = {
     "EBOOK": "eBook",
     "AUDIOBOOK": "Audiobook",
     "LARGE_PRINT": "Large Print",
+    "UK": "Unknown",
 }
 
 _GENRE_LABELS = {

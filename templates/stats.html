@@ -58,19 +58,10 @@
 </div>
 {% endif %}
 
-{% if formats %}
-<div class="section">
+{% if chart_formats %}
+<div class="section chart-section">
   <h2 class="section-title">Format Distribution</h2>
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th>Format</th><th>Count</th></tr></thead>
-      <tbody>
-        {% for f in formats %}
-        <tr><td>{{ f.format }}</td><td>{{ f.count }}</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+  <canvas class="stats-chart" data-chart="format"></canvas>
 </div>
 {% endif %}
 
@@ -90,35 +81,17 @@
 </div>
 {% endif %}
 
-{% if languages %}
-<div class="section">
-  <h2 class="section-title">Language Distribution (top 20)</h2>
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th>Language</th><th>Count</th></tr></thead>
-      <tbody>
-        {% for l in languages %}
-        <tr><td>{{ l.primary_language }}</td><td>{{ l.count }}</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+{% if chart_langs %}
+<div class="section chart-section">
+  <h2 class="section-title">Language Distribution</h2>
+  <canvas class="stats-chart" data-chart="lang"></canvas>
 </div>
 {% endif %}
 
-{% if years %}
-<div class="section">
-  <h2 class="section-title">Recent Years</h2>
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th>Year</th><th>Count</th></tr></thead>
-      <tbody>
-        {% for y in years %}
-        <tr><td>{{ y.publication_year }}</td><td>{{ y.count }}</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+{% if chart_years %}
+<div class="section chart-section">
+  <h2 class="section-title">Books by Publication Year</h2>
+  <canvas class="stats-chart" data-chart="year" style="height:220px"></canvas>
 </div>
 {% endif %}
 
@@ -127,6 +100,182 @@
 </div>
 
 <script>
+var __formatData = {{ chart_formats | tojson }};
+var __langData = {{ chart_langs | tojson }};
+var __yearData = {{ chart_years | tojson }};
+
+function drawHorizBars(canvas, items) {
+  var wrap = canvas.parentElement;
+  var dpr = window.devicePixelRatio || 1;
+  var W = wrap.clientWidth;
+  var H = Math.max(120, items.length * 28 + 24);
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+
+  var ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  var maxVal = 0;
+  items.forEach(function(it) { if (it.count > maxVal) maxVal = it.count; });
+  if (maxVal === 0) return;
+
+  var padL = 0;
+  // measure max label width
+  ctx.font = '12px -apple-system, sans-serif';
+  items.forEach(function(it) {
+    var w = ctx.measureText(it.label).width;
+    if (w > padL) padL = w;
+  });
+  padL = Math.min(padL + 16, W * 0.4);
+
+  var padR = 56;
+  var barL = padL;
+  var barR = W - padR;
+  var barArea = barR - barL;
+  var rowH = Math.min(20, (H - 20) / items.length);
+  var gap = (H - 20 - rowH * items.length) / (items.length - 1) || 0;
+
+  ctx.clearRect(0, 0, W, H);
+
+  // bars + labels
+  ctx.textBaseline = 'middle';
+  for (var i = 0; i < items.length; i++) {
+    var y = 10 + i * (rowH + gap) + rowH / 2;
+    var barW = (items[i].count / maxVal) * barArea;
+
+    // label
+    ctx.fillStyle = '#515154';
+    ctx.font = '12px -apple-system, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(items[i].label, padL - 8, y);
+
+    // bar
+    ctx.fillStyle = '#c7d2fe';
+    ctx.beginPath();
+    var bx = barL;
+    var by = y - rowH / 2;
+    var bw = Math.max(barW, 2);
+    var br = Math.min(rowH / 2, 4);
+    ctx.moveTo(bx + br, by);
+    ctx.lineTo(bx + bw - br, by);
+    ctx.quadraticCurveTo(bx + bw, by, bx + bw, by + br);
+    ctx.lineTo(bx + bw, by + rowH - br);
+    ctx.quadraticCurveTo(bx + bw, by + rowH, bx + bw - br, by + rowH);
+    ctx.lineTo(bx + br, by + rowH);
+    ctx.quadraticCurveTo(bx, by + rowH, bx, by + rowH - br);
+    ctx.lineTo(bx, by + br);
+    ctx.quadraticCurveTo(bx, by, bx + br, by);
+    ctx.closePath();
+    ctx.fill();
+
+    // count
+    ctx.fillStyle = '#86868b';
+    ctx.font = '12px -apple-system, sans-serif';
+    ctx.textAlign = 'left';
+    var countLabel = items[i].count.toLocaleString();
+    ctx.fillText(countLabel, barR + 8, y);
+  }
+}
+
+function drawYearChart(canvas, items) {
+  var wrap = canvas.parentElement;
+  var dpr = window.devicePixelRatio || 1;
+  var W = wrap.clientWidth;
+  var H = 220;
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+
+  var ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  var PAD = {top: 20, bottom: 30, left: 44, right: 16};
+  var plotW = W - PAD.left - PAD.right;
+  var plotH = H - PAD.top - PAD.bottom;
+
+  var maxVal = 0;
+  items.forEach(function(it) { if (it.count > maxVal) maxVal = it.count; });
+  if (maxVal === 0) return;
+
+  var n = items.length;
+  var barW = Math.max(2, Math.min(16, plotW / n * 0.7));
+  var gap = plotW / n;
+
+  function xPos(i) { return PAD.left + i * gap + gap / 2; }
+  function yVal(v) { return PAD.top + plotH - (v / maxVal) * plotH; }
+
+  ctx.clearRect(0, 0, W, H);
+
+  // grid lines
+  ctx.strokeStyle = '#f0f0f2';
+  ctx.lineWidth = 1;
+  for (var g = 0; g <= 4; g++) {
+    var yy = PAD.top + plotH * (1 - g / 4);
+    ctx.beginPath();
+    ctx.moveTo(PAD.left, yy);
+    ctx.lineTo(W - PAD.right, yy);
+    ctx.stroke();
+  }
+
+  // bars
+  for (var i = 0; i < n; i++) {
+    var x = xPos(i) - barW / 2;
+    var y = yVal(items[i].count);
+    var h = PAD.top + plotH - y;
+    ctx.fillStyle = '#c7d2fe';
+    ctx.beginPath();
+    ctx.moveTo(x, PAD.top + plotH);
+    ctx.lineTo(x, y + Math.min(h, 4));
+    ctx.quadraticCurveTo(x, y, x + Math.min(h, 4), y);
+    ctx.lineTo(x + barW - Math.min(h, 4), y);
+    ctx.quadraticCurveTo(x + barW, y, x + barW, y + Math.min(h, 4));
+    ctx.lineTo(x + barW, PAD.top + plotH);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // Y axis labels
+  ctx.fillStyle = '#86868b';
+  ctx.font = '10px -apple-system, sans-serif';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  for (var g = 0; g <= 4; g++) {
+    var v = Math.round(maxVal * g / 4);
+    var yy = PAD.top + plotH * (1 - g / 4);
+    ctx.fillText(v.toLocaleString(), PAD.left - 6, yy);
+  }
+
+  // X axis labels
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  var step = Math.max(1, Math.floor(n / 12));
+  for (var i = 0; i < n; i += step) {
+    ctx.fillText(items[i].label, xPos(i), PAD.top + plotH + 6);
+  }
+  if ((n - 1) % step !== 0) {
+    ctx.fillText(items[n - 1].label, xPos(n - 1), PAD.top + plotH + 6);
+  }
+}
+
+function drawAllCharts() {
+  document.querySelectorAll('.stats-chart').forEach(function(canvas) {
+    var type = canvas.getAttribute('data-chart');
+    if (type === 'format') drawHorizBars(canvas, __formatData);
+    else if (type === 'lang') drawHorizBars(canvas, __langData);
+    else if (type === 'year') drawYearChart(canvas, __yearData);
+  });
+}
+
+drawAllCharts();
+var statsResizeTimer;
+window.addEventListener('resize', function() {
+  clearTimeout(statsResizeTimer);
+  statsResizeTimer = setTimeout(drawAllCharts, 200);
+});
+
 function restartServer() {
   if (!confirm('Restart the server now?')) return;
   var btns = document.querySelectorAll('.btn-restart');
