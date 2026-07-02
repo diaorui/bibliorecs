@@ -54,8 +54,6 @@
       }
       function showPlaceholder() {
         img.style.display = 'none';
-        var card = img.closest('.carousel-card');
-        if (card) { card.style.display = 'none'; return; }
         var ph = img.parentNode.querySelector('.cover-placeholder');
         if (ph) ph.style.display = 'flex';
       }
