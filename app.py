@@ -50,7 +50,8 @@ def index():
     rows = conn.execute("""
         SELECT r.category, r.category_rank, r.metadata_id, r.score,
                b.title, b.subtitle, b.author, b.isbn, b.format,
-               b.content_type, b.subjects, b.genres, b.description, b.series
+               b.content_type, b.subjects, b.genres, b.description, b.series,
+               b.call_number
         FROM recommendation_cache r
         INNER JOIN books b ON b.metadata_id = r.metadata_id
         ORDER BY r.category, r.category_rank
