@@ -3,6 +3,8 @@ import os
 import sys
 import re
 import urllib.error
+import urllib.request
+import urllib.parse
 from collections import defaultdict
 
 from flask import Flask, render_template, abort, jsonify, request, redirect
@@ -378,6 +380,30 @@ def api_history_chart_data():
         return jsonify({"error": str(e)})
     finally:
         conn.close()
+
+
+_ol_cover_cache = {}
+
+@app.route("/api/ol-cover-search/<isbn>")
+def api_ol_cover_search(isbn):
+    if not isbn:
+        return jsonify({"cover_url": None})
+    cached = _ol_cover_cache.get(isbn)
+    if cached is not None:
+        return jsonify({"cover_url": cached})
+    try:
+        url = "https://openlibrary.org/search.json?q=" + urllib.parse.quote(isbn)
+        with urllib.request.urlopen(url, timeout=5) as resp:
+            data = json.loads(resp.read().decode())
+        docs = data.get("docs", [])
+        cover_url = None
+        if docs and docs[0].get("cover_i") is not None:
+            cover_url = f"https://covers.openlibrary.org/b/id/{docs[0]['cover_i']}-L.jpg"
+        _ol_cover_cache[isbn] = cover_url
+        return jsonify({"cover_url": cover_url})
+    except Exception:
+        _ol_cover_cache[isbn] = None
+        return jsonify({"cover_url": None})
 
 
 @app.route("/holds")

@@ -27,6 +27,8 @@
       var d = new Date(el.getAttribute('datetime'));
       if (!isNaN(d)) el.textContent = d.toLocaleString();
     });
+    var PLACEHOLDER_SVG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='180' viewBox='0 0 120 180'%3E%3Crect width='120' height='180' fill='%23e8e8ed' rx='4'/%3E%3Cpath d='M45 55v70l15-8 15 8V55z' fill='%2386868b' opacity='.4'/%3E%3Crect x='48' y='65' width='24' height='2' fill='%2386868b' opacity='.3'/%3E%3C/svg%3E";
+
     document.querySelectorAll('img.cover-img').forEach(function(img) {
       var fallbacks = [];
       var fb = img.getAttribute('data-fallback');
@@ -34,7 +36,7 @@
       var fbIdx = 0;
       var done = false;
       var olSearched = false;
-      var olTimer = null;
+      var svgShown = false;
 
       function tryFallback() {
         if (done) return false;
@@ -42,43 +44,31 @@
           img.src = fallbacks[fbIdx++];
           return true;
         }
-        if (!olSearched) return tryOlSearch();
+        if (!olSearched) {
+          olSearched = true;
+          tryOlSearch();
+        }
+        if (!svgShown) {
+          svgShown = true;
+          img.src = PLACEHOLDER_SVG;
+          return true;
+        }
         showPlaceholder();
         return false;
       }
 
       function tryOlSearch() {
-        olSearched = true;
         var isbn = img.getAttribute('data-isbn');
-        if (!isbn) return false;
-
-        var safe = isbn.replace(/[^a-zA-Z0-9]/g, '_');
-        var callbackName = 'ol_cb_' + safe;
-        var timedOut = false;
-
-        olTimer = setTimeout(function() {
-          timedOut = true;
-          window[callbackName] = function(){};
-          showPlaceholder();
-        }, 5000);
-
-        window[callbackName] = function(data) {
-          clearTimeout(olTimer);
-          if (timedOut) return;
-          try { delete window[callbackName]; } catch(e) {}
-          window[callbackName] = null;
-          if (data && data.docs && data.docs.length > 0 && data.docs[0].cover_i != null) {
-            done = false;
-            img.src = 'https://covers.openlibrary.org/b/id/' + data.docs[0].cover_i + '-L.jpg';
-          } else {
-            showPlaceholder();
-          }
-        };
-
-        var script = document.createElement('script');
-        script.src = 'https://openlibrary.org/search.json?q=' + encodeURIComponent(isbn) + '&callback=' + callbackName;
-        document.head.appendChild(script);
-        return true;
+        if (!isbn) return;
+        fetch('/api/ol-cover-search/' + encodeURIComponent(isbn))
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            if (data.cover_url) {
+              done = false;
+              img.src = data.cover_url;
+            }
+          })
+          .catch(function() {});
       }
 
       function handleLoad() {
@@ -96,6 +86,7 @@
       }
 
       function showPlaceholder() {
+        if (done) return;
         done = true;
         img.style.display = 'none';
         var ph = img.parentNode.querySelector('.cover-placeholder');
