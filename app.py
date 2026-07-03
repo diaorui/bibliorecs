@@ -865,6 +865,8 @@ def _fmt_rec(r):
     series = _json_list(r.get("series"))
     r["series_name"] = series[0] if series else None
 
+    r["book_category"] = book_category(r.get("call_number"))
+
     return r
 
 

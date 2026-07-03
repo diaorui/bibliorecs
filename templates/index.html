@@ -17,6 +17,9 @@
     <div class="carousel-card" data-mid="{{ r.metadata_id }}">
       <a href="/book/{{ r.metadata_id }}" class="carousel-card-link">
         <div class="carousel-cover-wrap">
+          {% if carousel.name == "Top Picks" %}
+          <div class="carousel-cat-label">{{ r.book_category }}</div>
+          {% endif %}
           <img class="carousel-cover cover-img" src="{{ r.img_url }}"
                alt="{{ r.title }}" loading="lazy"
                data-fallback="{{ r.fallback_url }}"
