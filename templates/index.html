@@ -19,7 +19,8 @@
         <div class="carousel-cover-wrap">
           <img class="carousel-cover cover-img" src="{{ r.img_url }}"
                alt="{{ r.title }}" loading="lazy"
-               data-fallback="{{ r.fallback_url }}">
+               data-fallback="{{ r.fallback_url }}"
+               data-isbn="{{ r.isbn or '' }}">
           <div class="cover-placeholder">📖<br>{{ r.title[:30] }}</div>
         </div>
         <div class="carousel-body">

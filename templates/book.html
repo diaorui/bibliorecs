@@ -7,7 +7,8 @@
     <div class="book-cover-wrap">
       <img class="cover-img" src="{{ img_url }}"
            alt="{{ book.title }}" loading="lazy"
-           data-fallback="{{ fallback_url }}">
+           data-fallback="{{ fallback_url }}"
+           data-isbn="{{ book.isbn or '' }}">
       <div class="cover-placeholder cover-placeholder-lg">📖<br>{{ book.title[:50] }}</div>
     </div>
 
