@@ -124,8 +124,8 @@
     .then(function(r) { return r.json(); })
     .then(function(data) {
       if (data.success) {
-        btn.textContent = 'On Hold';
-        btn.className = 'btn-card btn-card-hold btn-card-revealed';
+        __holdsByMid[mid] = {status: 'ON_HOLD', metadata_id: mid};
+        applyButtonStates();
       } else {
         btn.textContent = 'Failed';
         btn.disabled = false;

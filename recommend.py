@@ -181,6 +181,28 @@ def compute(conn):
 
         print(f" {top_n} recommended")
 
+    # Global Top Picks (uncategorized, across all categories)
+    print(f"  [Top Picks] computing global mix...", end="")
+    if has_profile:
+        all_book_indices = np.concatenate(list(by_cat.values()))
+        global_sims = maxsim[all_book_indices]
+        top_k = min(config.MMR_TOP_K, len(all_book_indices))
+        sorted_idx = np.argsort(global_sims)[::-1][:top_k]
+        subset = emb_norm[all_book_indices[sorted_idx]]
+        pairwise_sim = subset @ subset.T
+        mmr_selected = _mmr(
+            global_sims[sorted_idx],
+            pairwise_sim,
+            config.MMR_LAMBDA,
+            config.TOP_CANDIDATES,
+        )
+        top_indices = all_book_indices[sorted_idx[mmr_selected]].tolist()
+        for rank, idx in enumerate(top_indices, 1):
+            db.upsert_recommendation(conn, idx_to_mid[idx], float(maxsim[idx]), "Top Picks", rank)
+        print(f" {len(top_indices)} recommended")
+    else:
+        print(" skipped (no profile)")
+
     conn.commit()
 
     total = conn.execute("SELECT COUNT(*) FROM recommendation_cache").fetchone()[0]

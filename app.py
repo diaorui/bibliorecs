@@ -67,7 +67,7 @@ def index():
         cat_counts[cat] += _time_weight(row["checkout_date"], row["is_current"])
 
     cat_order = sorted(
-        (c for c in by_cat if c != "Other"),
+        (c for c in by_cat if c != "Other" and c != "Top Picks"),
         key=lambda c: -cat_counts.get(c, 0),
     )
     if "Other" in by_cat:
@@ -82,6 +82,8 @@ def index():
     }
 
     carousels = []
+    if "Top Picks" in by_cat:
+        carousels.append({"name": "Top Picks", "books": by_cat["Top Picks"]})
     for c in cat_order:
         entry = {"name": c, "books": by_cat[c]}
         if c in SUB_LABELS:
