@@ -382,6 +382,28 @@ def api_history_chart_data():
         conn.close()
 
 
+@app.route("/api/history/category-data")
+def api_history_category_data():
+    conn = db.get_conn()
+    try:
+        rows = conn.execute("""
+            SELECT bk.call_number
+            FROM borrow_events be
+            LEFT JOIN books bk ON bk.metadata_id = be.metadata_id
+            WHERE be.checkout_date IS NOT NULL
+        """).fetchall()
+        cat_counts = defaultdict(int)
+        for r in rows:
+            cat_counts[book_category(r["call_number"])] += 1
+        result = [{"label": k, "count": v}
+                  for k, v in sorted(cat_counts.items(), key=lambda x: (x[0] == "Other", -x[1]))]
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)})
+    finally:
+        conn.close()
+
+
 _ol_cover_cache = {}
 
 @app.route("/api/ol-cover-search/<isbn>")
@@ -466,11 +488,24 @@ def history():
             "c": cumulative,
         })
 
+    cat_rows = conn.execute("""
+        SELECT bk.call_number
+        FROM borrow_events be
+        LEFT JOIN books bk ON bk.metadata_id = be.metadata_id
+        WHERE be.checkout_date IS NOT NULL
+    """).fetchall()
+    cat_counts = defaultdict(int)
+    for r in cat_rows:
+        cat_counts[book_category(r["call_number"])] += 1
+    chart_cats = [{"label": k, "count": v}
+                  for k, v in sorted(cat_counts.items(), key=lambda x: (x[0] == "Other", -x[1]))]
+
     conn.close()
     return render_template("history.html",
                            current=current_list,
                            past=past_list,
-                           chart_data=chart_months)
+                           chart_data=chart_months,
+                           chart_cats=chart_cats)
 
 
 @app.route("/stats")

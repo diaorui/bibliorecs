@@ -13,8 +13,16 @@
 </div>
 {% endif %}
 
+{% if chart_cats %}
+<div class="section chart-section">
+  <h2 class="section-title">Borrows by Category</h2>
+  <canvas id="history-cat-chart"></canvas>
+</div>
+{% endif %}
+
 <script>
 var __chartData = {{ chart_data | tojson }};
+var __catData = {{ chart_cats | tojson }};
 </script>
 
 <div id="history-content">
@@ -205,6 +213,82 @@ var __chartData = {{ chart_data | tojson }};
     }
   }
 
+  var catData = window.__catData || [];
+
+  function drawCatBars() {
+    var canvas = document.getElementById('history-cat-chart');
+    if (!canvas || !catData.length) return;
+
+    var wrap = canvas.parentElement;
+    var dpr = window.devicePixelRatio || 1;
+    var W = wrap.clientWidth;
+    var H = Math.max(100, catData.length * 28 + 20);
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+
+    var ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+
+    var maxVal = 0;
+    catData.forEach(function(it) { if (it.count > maxVal) maxVal = it.count; });
+    if (maxVal === 0) return;
+
+    var maxLabelW = 0;
+    ctx.font = '12px -apple-system, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    catData.forEach(function(it) {
+      var w = ctx.measureText(it.label).width;
+      if (w > maxLabelW) maxLabelW = w;
+    });
+
+    var padL = maxLabelW + 14;
+    var padR = 56;
+    var barL = padL;
+    var barR = W - padR;
+    var barArea = barR - barL;
+    var rowH = Math.min(20, (H - 20) / catData.length);
+    var gap = (H - 20 - rowH * catData.length) / (catData.length - 1) || 0;
+
+    ctx.clearRect(0, 0, W, H);
+
+    ctx.textBaseline = 'middle';
+    for (var i = 0; i < catData.length; i++) {
+      var y = 10 + i * (rowH + gap) + rowH / 2;
+      var barW = (catData[i].count / maxVal) * barArea;
+
+      ctx.fillStyle = '#515154';
+      ctx.font = '12px -apple-system, sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText(catData[i].label, padL - 8, y);
+
+      ctx.fillStyle = '#c7d2fe';
+      ctx.beginPath();
+      var bx = barL;
+      var by = y - rowH / 2;
+      var bw = Math.max(barW, 2);
+      var br = Math.min(rowH / 2, 4);
+      ctx.moveTo(bx + br, by);
+      ctx.lineTo(bx + bw - br, by);
+      ctx.quadraticCurveTo(bx + bw, by, bx + bw, by + br);
+      ctx.lineTo(bx + bw, by + rowH - br);
+      ctx.quadraticCurveTo(bx + bw, by + rowH, bx + bw - br, by + rowH);
+      ctx.lineTo(bx + br, by + rowH);
+      ctx.quadraticCurveTo(bx, by + rowH, bx, by + rowH - br);
+      ctx.lineTo(bx, by + br);
+      ctx.quadraticCurveTo(bx, by, bx + br, by);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#86868b';
+      ctx.font = '12px -apple-system, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(catData[i].count.toLocaleString(), barR + 8, y);
+    }
+  }
+
   var indicator = document.getElementById('sync-indicator');
 
   function setIndicator(text, cls) {
@@ -287,10 +371,13 @@ var __chartData = {{ chart_data | tojson }};
                   updateContent(data);
                 }
                 hideIndicator();
-                // refresh chart
                 fetch('/api/history/chart-data')
                   .then(function(r) { return r.json(); })
                   .then(function(d) { if (d && d.length) { chartData = d; drawChart(); } })
+                  .catch(function() {});
+                fetch('/api/history/category-data')
+                  .then(function(r) { return r.json(); })
+                  .then(function(d) { if (d && d.length) { catData = d; drawCatBars(); } })
                   .catch(function() {});
               })
               .catch(function() { hideIndicator(); });
@@ -307,10 +394,12 @@ var __chartData = {{ chart_data | tojson }};
   }
 
   drawChart();
+  drawCatBars();
   var resizeTimer;
+  var onResize = function() { drawChart(); drawCatBars(); };
   window.addEventListener('resize', function() {
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(drawChart, 200);
+    resizeTimer = setTimeout(onResize, 200);
   });
   doSync();
 })();
