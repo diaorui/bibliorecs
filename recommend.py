@@ -134,17 +134,10 @@ def compute(conn):
         weights = np.array(weights, dtype=float)
 
         borrow_embs = emb_norm[indices]
-        weighted = borrow_embs * weights[:, np.newaxis]
-        weights_total = weights.sum()
 
-        # MaxSim: max similarity to any single borrowed book
-        maxsim = np.max(borrow_embs @ emb_norm.T, axis=0)
-
-        # Blend with weighted profile for books that don't strongly match any single borrow
-        avg_profile = np.sum(weighted, axis=0) / weights_total
-        avg_norm = avg_profile / np.linalg.norm(avg_profile)
-        profile_sim = emb_norm @ avg_norm
-        maxsim = np.where(profile_sim > maxsim, profile_sim, maxsim)
+        # Weighted MaxSim: max time-weighted similarity to any single borrowed book
+        weighted_embs = borrow_embs * weights[:, np.newaxis]
+        maxsim = np.max(weighted_embs @ emb_norm.T, axis=0)
 
         for i in borrowed_indices:
             maxsim[i] = -1
