@@ -247,12 +247,10 @@ def upsert_recommendation(conn, metadata_id, score, category, category_rank):
 
 def get_category_order(conn):
     rows = conn.execute("""
-        SELECT b.call_number, COUNT(*) as cnt
+        SELECT b.call_number, e.checkout_date, e.is_current
         FROM borrow_events e
         INNER JOIN books b ON b.metadata_id = e.metadata_id
-        WHERE b.active = 1
-        GROUP BY b.call_number
-        ORDER BY cnt DESC
+        WHERE b.active = 1 AND e.checkout_date IS NOT NULL
     """).fetchall()
     return [dict(r) for r in rows]
 

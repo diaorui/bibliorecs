@@ -11,7 +11,7 @@ import config
 import db
 import patron
 import updater
-from recommend import book_category
+from recommend import book_category, _time_weight
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -59,10 +59,10 @@ def index():
         by_cat[r["category"]].append(_fmt_rec(dict(r)))
 
     call_counts = db.get_category_order(conn)
-    cat_counts = defaultdict(int)
+    cat_counts = defaultdict(float)
     for row in call_counts:
         cat = book_category(row["call_number"])
-        cat_counts[cat] += row["cnt"]
+        cat_counts[cat] += _time_weight(row["checkout_date"], row["is_current"])
 
     cat_order = sorted(
         (c for c in by_cat if c != "Other"),
