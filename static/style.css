@@ -661,7 +661,7 @@ th {
 
 .carousel-cat-label {
   position: absolute;
-  top: 0;
+  bottom: 0;
   left: 0;
   right: 0;
   padding: 4px 6px;
@@ -669,7 +669,7 @@ th {
   font-weight: 600;
   color: #fff;
   background: rgba(0, 0, 0, 0.55);
-  border-radius: 8px 8px 0 0;
+  border-radius: 0 0 8px 8px;
   text-align: center;
   backdrop-filter: blur(2px);
   z-index: 1;
