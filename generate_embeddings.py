@@ -11,21 +11,57 @@ import config
 import db
 
 
+BOILERPLATE = [
+    " juvenile fiction", " juvenile literature", " comic books, strips, etc",
+    " juvenile fiction comic books, strips, etc",
+    " juvenile literature comic books, strips, etc",
+]
+
+def _clean_subj(s):
+    s = s.lower()
+    for bp in BOILERPLATE:
+        s = s.replace(bp, "")
+    return s.strip()
+
+
 def embed_text(b):
     parts = []
     if b.get("title"):
         parts.append("title: " + b["title"])
     if b.get("author"):
-        parts.append("author: " + b["author"].replace(",", " ").strip())
+        parts.append("author: " + b["author"])
     series = json.loads(b["series"]) if b.get("series") else []
-    if series:
-        parts.extend("series: " + s for s in series)
+    seen_s = set()
+    for s in series:
+        k = s.lower().strip()
+        if k not in seen_s:
+            seen_s.add(k)
+            parts.append("series: " + s)
     subjects = json.loads(b["subjects"]) if b.get("subjects") else []
     if subjects:
-        parts.append("subjects: " + " ".join(subjects))
+        cleaned = [_clean_subj(s) for s in subjects]
+        cleaned = [s for s in cleaned if s]
+        seen_sub = set()
+        deduped = []
+        for s in cleaned:
+            k = s.lower()
+            if k not in seen_sub:
+                seen_sub.add(k)
+                deduped.append(s)
+        if deduped:
+            parts.append("subjects: " + " ".join(deduped))
     genres = json.loads(b["genres"]) if b.get("genres") else []
     if genres:
-        parts.append("genres: " + " ".join("#" + g for g in genres))
+        seen_g = set()
+        clean_g = []
+        for g in genres:
+            g2 = g.replace("<delimit>", " ").replace("|", " ").strip()
+            k = g2.lower()
+            if k not in seen_g:
+                seen_g.add(k)
+                clean_g.append(g2)
+        if clean_g:
+            parts.append("genres: " + " ".join(clean_g))
     return " | ".join(parts)
 
 
