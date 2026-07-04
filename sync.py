@@ -95,8 +95,8 @@ def run_sync(formats=None, max_pages=None, resume_from=None):
                 data = f.result()
                 mids = _process_page(conn, data)
                 synced_mids.update(mids)
-                db.update_sync_progress(conn, log_id, p)
                 processed += 1
+                db.update_sync_progress(conn, log_id, processed)
 
                 if p % COMMIT_INTERVAL == 0:
                     conn.commit()
