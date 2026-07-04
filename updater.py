@@ -42,19 +42,12 @@ def _loop():
 
 
 def _run_due_tasks():
-    status = read_status() or {}
-    now = time.time()
+    s = read_status() or {}
+    today = time.strftime("%Y-%m-%d")
+    daily_last_date = s.get("daily", {}).get("last_run_date", "")
 
-    daily_last = _parse_time(status.get("daily", {}).get("last_run"))
-    catalog_last = _parse_time(status.get("catalog", {}).get("last_run"))
-
-    daily_due = now - daily_last >= config.UPDATE_DAILY_INTERVAL_HOURS * 3600
-    catalog_due = now - catalog_last >= config.UPDATE_CATALOG_INTERVAL_HOURS * 3600
-
-    if daily_due:
+    if daily_last_date != today:
         _run("daily.py", "daily")
-    if catalog_due:
-        _run("sync.py", "catalog")
 
 
 # ──────────────────────────── task runner ────────────────────────────
@@ -68,18 +61,21 @@ def _run(script, task_name):
     ts_start = time.strftime("%Y-%m-%dT%H:%M:%S")
     t0 = time.monotonic()
 
+    remaining = (config.UPDATE_WINDOW_END - time.localtime().tm_hour) * 3600 - 60
+    timeout = max(min(remaining, 7200), 600)
+
     try:
         result = subprocess.run(
             [sys.executable, script],
             capture_output=True, text=True,
             cwd=_SCRIPT_DIR,
-            timeout=7200,
+            timeout=timeout,
         )
 
         elapsed = round(time.monotonic() - t0)
         ok = result.returncode == 0
-        info = {"last_run": ts_start, "duration_sec": elapsed,
-                "state": "ok" if ok else "failed"}
+        info = {"last_run": ts_start, "last_run_date": time.strftime("%Y-%m-%d"),
+                "duration_sec": elapsed, "state": "ok" if ok else "failed"}
         if ok:
             info["last_ok"] = time.strftime("%Y-%m-%dT%H:%M:%S")
         else:
@@ -90,12 +86,12 @@ def _run(script, task_name):
         _set_status(task_name, info)
 
     except subprocess.TimeoutExpired:
-        _set_status(task_name, {"last_run": ts_start, "duration_sec": 7200,
-                                "state": "failed", "error": "timed out"})
+        _set_status(task_name, {"last_run": ts_start, "last_run_date": time.strftime("%Y-%m-%d"),
+                                "duration_sec": timeout, "state": "failed", "error": "timed out"})
     except Exception as e:
         elapsed = round(time.monotonic() - t0)
-        _set_status(task_name, {"last_run": ts_start, "duration_sec": elapsed,
-                                "state": "failed", "error": str(e)[:500]})
+        _set_status(task_name, {"last_run": ts_start, "last_run_date": time.strftime("%Y-%m-%d"),
+                                "duration_sec": elapsed, "state": "failed", "error": str(e)[:500]})
     finally:
         _set_status("now", "idle")
         _release_lock()

@@ -22,7 +22,7 @@ REQUEST_DELAY = 0.6
 
 
 def search_bibs_json(query, formats=None, f_circ=None,
-                     search_type="bl", page=1, sort=None, retries=3):
+                     search_type="bl", page=1, sort=None, retries=3, limit=100):
     body = {
         "query": query,
         "searchType": search_type,
@@ -37,6 +37,8 @@ def search_bibs_json(query, formats=None, f_circ=None,
         body["f_CIRC"] = f_circ
     if sort:
         body["sort"] = sort
+    if limit:
+        body["limit"] = str(limit)
 
     url = f"{GATEWAY_BASE}/bibs/search?locale=en-US"
     headers = {

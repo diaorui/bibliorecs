@@ -13,6 +13,7 @@ Usage:
 import sys
 import json
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import config
 import db
@@ -33,8 +34,12 @@ FORMAT_LABELS = {
 MAX_PAGE_RETRIES = 3
 COMMIT_INTERVAL = 50
 
+_t0 = 0
+
 
 def run_sync(formats=None, max_pages=None, resume_from=None):
+    global _t0
+    _t0 = time.time()
     fmt_list = formats or PAPER_FORMATS
     fmt_label = ", ".join(FORMAT_LABELS.get(f, f) for f in fmt_list)
     print(f"Sync: query='{QUERY}' | formats: [{fmt_label}]")
@@ -48,14 +53,20 @@ def run_sync(formats=None, max_pages=None, resume_from=None):
     if resume_from:
         page = resume_from
         log_id = _get_latest_sync_log_id(conn)
-        data = api.search_bibs_json(QUERY, formats=fmt_list, f_circ="CIRC", page=page, sort="newly_acquired")
+        data = api.search_bibs_json(QUERY, formats=fmt_list, f_circ="CIRC",
+                                    page=page, sort="newly_acquired", limit=100)
         pagination = api.parse_pagination(data)
         total_pages = pagination.get("pages", 1)
         if max_pages:
             total_pages = min(page + max_pages - 1, total_pages)
+        synced_mids.update(_process_page(conn, data))
+        db.update_sync_progress(conn, log_id, page)
+        print(f"  Page {page}/{total_pages} done — {db.get_book_count(conn):,} books")
+        page += 1
     else:
         page = 1
-        data = api.search_bibs_json(QUERY, formats=fmt_list, f_circ="CIRC", page=page, sort="newly_acquired")
+        data = api.search_bibs_json(QUERY, formats=fmt_list, f_circ="CIRC",
+                                    page=page, sort="newly_acquired", limit=100)
         pagination = api.parse_pagination(data)
         total_pages = pagination.get("pages", 1)
         total_count = pagination.get("count", 0)
@@ -71,23 +82,35 @@ def run_sync(formats=None, max_pages=None, resume_from=None):
         print(f"  Page 1/{total_pages} done — {count:,} books so far")
         page = 2
 
-    while page <= total_pages:
-        ok, page_mids = _fetch_and_process_page(conn, page, fmt_list, sort="newly_acquired")
-        if ok:
-            synced_mids.update(page_mids)
-            db.update_sync_progress(conn, log_id, page)
-        else:
-            failed_pages.append(page)
+    processed = 1
+    with ThreadPoolExecutor(max_workers=10) as pool:
+        fut_map = {
+            pool.submit(_fetch_page, p, fmt_list): p
+            for p in range(page, total_pages + 1)
+        }
 
-        if page % COMMIT_INTERVAL == 0:
-            conn.commit()
-            elapsed = time.time() - _t0
-            rate = page / elapsed * 60
-            eta_min = (total_pages - page) / rate if rate > 0 else 0
-            print(f"  Page {page}/{total_pages} — {db.get_book_count(conn):,} books"
-                  f" — {rate:.0f} pg/min — ETA {eta_min:.0f} min")
+        for f in as_completed(fut_map):
+            p = fut_map[f]
+            try:
+                data = f.result()
+                mids = _process_page(conn, data)
+                synced_mids.update(mids)
+                db.update_sync_progress(conn, log_id, p)
+                processed += 1
 
-        page += 1
+                if p % COMMIT_INTERVAL == 0:
+                    conn.commit()
+                    elapsed = time.time() - _t0
+                    rate = processed / elapsed * 60
+                    eta_min = (total_pages - processed) / rate if rate > 0 else 0
+                    print(f"  Page {p}/{total_pages} ({processed} done)"
+                          f" — {db.get_book_count(conn):,} books"
+                          f" — {rate:.0f} pg/min — ETA {eta_min:.0f} min")
+            except Exception as e:
+                failed_pages.append(p)
+                print(f"  Page {p} FAILED: {e}")
+
+        conn.commit()
 
     if not max_pages and not resume_from:
         _deactivate_stale_books(conn, synced_mids)
@@ -106,10 +129,28 @@ def run_sync(formats=None, max_pages=None, resume_from=None):
     print(f"\nDONE! {total_books:,} books in database.")
 
 
+def _fetch_page(page, formats):
+    """Fetch a single page from the API (no DB writes). Safe to call from any thread."""
+    for attempt in range(MAX_PAGE_RETRIES):
+        try:
+            return api.search_bibs_json(QUERY, formats=formats, f_circ="CIRC",
+                                        page=page, sort="newly_acquired", limit=100)
+        except Exception as e:
+            if attempt < MAX_PAGE_RETRIES - 1:
+                wait = 2 ** attempt
+                print(f"  Page {page} error (attempt {attempt + 1}): {e}"
+                      f" — retrying in {wait}s")
+                time.sleep(wait)
+                continue
+            raise
+    raise RuntimeError(f"Page {page} exhausted retries")
+
+
 def _fetch_and_process_page(conn, page, formats, sort=None):
     for attempt in range(MAX_PAGE_RETRIES):
         try:
-            data = api.search_bibs_json(QUERY, formats=formats, f_circ="CIRC", page=page, sort=sort)
+            data = api.search_bibs_json(QUERY, formats=formats, f_circ="CIRC",
+                                        page=page, sort=sort, limit=100)
         except Exception as e:
             if attempt < MAX_PAGE_RETRIES - 1:
                 wait = 2 ** attempt
@@ -201,7 +242,7 @@ def run_incremental(formats=None):
     conn = db.get_conn()
 
     data = api.search_bibs_json(QUERY, formats=fmt_list, f_circ="CIRC",
-                                page=1, sort="newly_acquired")
+                                page=1, sort="newly_acquired", limit=100)
     pagination = api.parse_pagination(data)
     total_pages = pagination.get("pages", 1)
     print(f"  Recent: {pagination.get('count', 0):,} books, {total_pages} pages")

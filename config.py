@@ -20,6 +20,4 @@ FILTER_ENGLISH = True
 # ── Scheduling ───────────────────────────────────────────────────────
 UPDATE_WINDOW_START = 2       # 2 AM
 UPDATE_WINDOW_END = 4         # 4 AM
-UPDATE_DAILY_INTERVAL_HOURS = 24
-UPDATE_CATALOG_INTERVAL_HOURS = 168
 AUTO_RENEW_DAYS_BEFORE_DUE = 3
