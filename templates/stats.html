@@ -48,6 +48,8 @@
   <p style="font-size:0.82rem;color:#86868b;margin-top:8px">
     {% if update_status.now == 'idle' %}
       Idle. Next window: {{ update_window_start }}:00–{{ update_window_end }}:00
+      <button onclick="triggerUpdate(this)"
+        style="margin-left:10px;padding:4px 10px;font-size:0.78rem;border-radius:6px;border:1px solid #2563eb;background:#fff;color:#2563eb;cursor:pointer;font-weight:500;vertical-align:middle">Run Now</button>
     {% else %}
       <strong style="color:#2563eb">{{ update_status.now }}</strong>
     {% endif %}
@@ -267,6 +269,26 @@ window.addEventListener('resize', function() {
   clearTimeout(statsResizeTimer);
   statsResizeTimer = setTimeout(drawAllCharts, 200);
 });
+
+function triggerUpdate(btn) {
+  btn.disabled = true;
+  btn.textContent = 'Starting...';
+  fetch('/api/update', { method: 'POST' })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.success) {
+        btn.textContent = 'Running...';
+        setTimeout(function() { location.reload(); }, 3000);
+      } else {
+        btn.textContent = 'Already running';
+        setTimeout(function() { btn.disabled = false; btn.textContent = 'Run Now'; }, 3000);
+      }
+    })
+    .catch(function() {
+      btn.textContent = 'Failed';
+      setTimeout(function() { btn.disabled = false; btn.textContent = 'Run Now'; }, 3000);
+    });
+}
 
 function restartServer() {
   if (!confirm('Restart the server now?')) return;

@@ -511,6 +511,12 @@ def history():
                            chart_cats=chart_cats)
 
 
+@app.route("/api/update", methods=["POST"])
+def trigger_update():
+    ok = updater.run_manual()
+    return jsonify({"success": ok})
+
+
 @app.route("/stats")
 def stats():
     conn = db.get_conn()

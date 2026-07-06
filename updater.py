@@ -62,7 +62,7 @@ def _run(script, task_name):
     t0 = time.monotonic()
 
     remaining = (config.UPDATE_WINDOW_END - time.localtime().tm_hour) * 3600 - 60
-    timeout = max(min(remaining, 7200), 600)
+    timeout = max(min(remaining, 7200), 1800)
 
     try:
         result = subprocess.run(
@@ -134,6 +134,15 @@ def _write(s):
             json.dump(s, f, indent=2)
     except Exception:
         pass
+
+
+def run_manual():
+    """Trigger daily pipeline in background thread. Returns True if accepted."""
+    if not _acquire_lock():
+        return False
+    _release_lock()
+    Thread(target=_run, args=("daily.py", "daily"), daemon=True).start()
+    return True
 
 
 def _read_nested(s, path):
