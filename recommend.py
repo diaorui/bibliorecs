@@ -101,7 +101,7 @@ def compute(conn):
 
     books = conn.execute("""
         SELECT metadata_id, call_number
-        FROM books WHERE active = 1
+        FROM books WHERE active = 1 AND isbn IS NOT NULL AND isbn != ''
     """ + (" AND primary_language = 'eng'" if config.FILTER_ENGLISH else "")).fetchall()
     books = [dict(r) for r in books]
 

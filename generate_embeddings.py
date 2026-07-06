@@ -68,7 +68,7 @@ def embed_text(b):
 def main():
     conn = db.get_conn()
     rows = conn.execute(
-        "SELECT metadata_id, title, author, subjects, genres, series FROM books WHERE active = 1"
+        "SELECT metadata_id, title, author, subjects, genres, series FROM books WHERE active = 1 AND isbn IS NOT NULL AND isbn != ''"
     ).fetchall()
     books = [dict(r) for r in rows]
     mids = [b["metadata_id"] for b in books]
