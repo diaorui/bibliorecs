@@ -21,19 +21,24 @@
     var openlibrary = isbn ? 'https://covers.openlibrary.org/b/isbn/' + isbn + '-L.jpg' : placeholder;
     var dataIsbn = ' data-isbn="' + isbn + '"';
     var isReady = h.status === 'READY_FOR_PICKUP';
-    var badge = isReady
-      ? '<span class="hold-badge hold-ready">Ready for Pickup</span>'
-      : '<span class="hold-badge hold-queued">' + (h.position && h.position > 0 ? 'Position #' + h.position : 'On Hold') + '</span>';
-    var expiry = '';
+    var formatted = '';
+    var daysLeft = '';
     if (isReady && h.expiry_date) {
       var d = new Date(h.expiry_date);
       var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-      var formatted = months[d.getMonth()] + ' ' + d.getDate();
+      formatted = months[d.getMonth()] + ' ' + d.getDate();
       var today = new Date(); today.setHours(0,0,0,0);
       var delta = Math.round((d - today) / 86400000);
-      var daysLeft = delta > 0 ? delta + ' days left' : (delta === 0 ? 'today' : (-delta) + ' days ago');
-      expiry = '<span class="hold-expiry"><span class="due-date">Pick up by ' + formatted + '</span><span class="due-relative">' + daysLeft + '</span></span>';
+      daysLeft = delta > 0 ? delta + ' days left' : (delta === 0 ? 'today' : (-delta) + ' days ago');
     }
+    var badge = isReady && h.expiry_date
+      ? '<span class="hold-badge hold-ready">Pick up by ' + formatted + '</span>'
+      : isReady
+        ? '<span class="hold-badge hold-ready">Ready for Pickup</span>'
+        : '<span class="hold-badge hold-queued">' + (h.position && h.position > 0 ? 'Position #' + h.position : 'On Hold') + '</span>';
+    var expiry = isReady && h.expiry_date
+      ? '<span class="hold-expiry"><span class="due-relative">' + daysLeft + '</span></span>'
+      : '';
 
     return '<a href="/book/' + h.metadata_id + '" class="history-item">'
       + '<div class="history-cover-wrap">'
