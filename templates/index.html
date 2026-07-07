@@ -71,6 +71,7 @@
       applyButtonStates();
       revealButtons();
     }).catch(function() {
+      showToast('Could not load hold/checkout status', 6000);
       revealButtons();
     });
   }
