@@ -369,7 +369,7 @@ def api_history_chart_data():
             SELECT strftime('%Y-%m', checkout_date) AS month,
                    COUNT(*) AS borrowed
             FROM borrow_events
-            WHERE checkout_date IS NOT NULL
+            WHERE checkout_date IS NOT NULL AND source != 'checkout'
             GROUP BY month
             ORDER BY month
         """).fetchall()
@@ -393,7 +393,7 @@ def api_history_category_data():
             SELECT bk.call_number
             FROM borrow_events be
             LEFT JOIN books bk ON bk.metadata_id = be.metadata_id
-            WHERE be.checkout_date IS NOT NULL
+            WHERE be.checkout_date IS NOT NULL AND be.source != 'checkout'
         """).fetchall()
         cat_counts = defaultdict(int)
         for r in rows:
@@ -476,7 +476,7 @@ def history():
         SELECT strftime('%Y-%m', checkout_date) AS month,
                COUNT(*) AS borrowed
         FROM borrow_events
-        WHERE checkout_date IS NOT NULL
+        WHERE checkout_date IS NOT NULL AND source != 'checkout'
         GROUP BY month
         ORDER BY month
     """).fetchall()
@@ -495,7 +495,7 @@ def history():
         SELECT bk.call_number
         FROM borrow_events be
         LEFT JOIN books bk ON bk.metadata_id = be.metadata_id
-        WHERE be.checkout_date IS NOT NULL
+        WHERE be.checkout_date IS NOT NULL AND be.source != 'checkout'
     """).fetchall()
     cat_counts = defaultdict(int)
     for r in cat_rows:
