@@ -16,6 +16,7 @@ TOP_CANDIDATES = 15
 MMR_LAMBDA = 0.5
 MMR_TOP_K = 100
 FILTER_ENGLISH = True
+NEW_BOOK_MAX_AGE_YEARS = 1   # recommend books published within this many years
 
 # ── Scheduling ───────────────────────────────────────────────────────
 UPDATE_WINDOW_START = 2       # 2 AM

@@ -100,18 +100,23 @@ def compute(conn):
     print(f"  Loaded {len(mid_list):,} embeddings (dim={emb.shape[1]})")
 
     books = conn.execute("""
-        SELECT metadata_id, call_number
+        SELECT metadata_id, call_number, publication_year
         FROM books WHERE active = 1 AND isbn IS NOT NULL AND isbn != ''
     """ + (" AND primary_language = 'eng'" if config.FILTER_ENGLISH else "")).fetchall()
     books = [dict(r) for r in books]
 
+    min_year = date.today().year - config.NEW_BOOK_MAX_AGE_YEARS
     by_cat = defaultdict(list)
+    new_indices = []
     for b in books:
         mid = b["metadata_id"]
         if mid not in mid_to_idx:
             continue
+        idx = mid_to_idx[mid]
         cat = book_category(b.get("call_number"))
-        by_cat[cat].append(mid_to_idx[mid])
+        by_cat[cat].append(idx)
+        if b["publication_year"] and b["publication_year"] >= min_year:
+            new_indices.append(idx)
 
     print(f"  {len(books):,} books across {len(by_cat)} categories")
 
@@ -202,6 +207,39 @@ def compute(conn):
         print(f" {len(top_indices)} recommended")
     else:
         print(" skipped (no profile)")
+
+    # New books carousel (by publication year)
+    print(f"  [New] computing new book picks...", end="")
+    if new_indices:
+        new_arr = np.array(new_indices, dtype=int)
+        new_sims = maxsim[new_arr]
+        top_n = min(config.TOP_CANDIDATES, len(new_arr))
+
+        if has_profile:
+            sorted_idx = np.argsort(new_sims)[::-1][:config.MMR_TOP_K]
+            sorted_idx = sorted_idx[sorted_idx < len(new_sims)]
+
+            subset = emb_norm[new_arr[sorted_idx]]
+            pairwise_sim = subset @ subset.T
+
+            mmr_selected = _mmr(
+                new_sims[sorted_idx],
+                pairwise_sim,
+                config.MMR_LAMBDA,
+                top_n,
+            )
+            top_indices = new_arr[sorted_idx[mmr_selected]].tolist()
+        else:
+            rng = np.random.default_rng()
+            top_indices = rng.choice(new_arr, size=top_n, replace=False).tolist()
+
+        candidate_mids = [idx_to_mid[i] for i in top_indices]
+        candidate_scores = [float(maxsim[i]) for i in top_indices]
+        for rank, (mid, score) in enumerate(zip(candidate_mids, candidate_scores)):
+            db.upsert_recommendation(conn, mid, score, "New", rank + 1)
+        print(f" {len(top_indices)} recommended")
+    else:
+        print(" skipped (no new books)")
 
     conn.commit()
 
