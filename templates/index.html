@@ -7,10 +7,8 @@
 {% for carousel in carousels %}
 <section class="carousel-section" data-category="{{ carousel.name }}">
   <h2 class="carousel-heading">{{ carousel.name }}</h2>
-  {% if carousel.subs %}
-  <div class="carousel-subs">
-    {% for s in carousel.subs %}<span class="carousel-sub">{{ s }}</span>{% endfor %}
-  </div>
+  {% if carousel.description %}
+  <p class="carousel-desc">{{ carousel.description }}</p>
   {% endif %}
   <div class="carousel-track">
     {% for r in carousel.books %}

@@ -6,6 +6,7 @@ import urllib.error
 import urllib.request
 import urllib.parse
 from collections import defaultdict
+from datetime import date
 
 from flask import Flask, render_template, abort, jsonify, request, redirect
 import api
@@ -74,23 +75,36 @@ def index():
     if "Other" in by_cat:
         cat_order.append("Other")
 
-    SUB_LABELS = {
-        "Science": ["Animals", "Dinosaurs", "Space", "Earth & Nature", "Insects & Bugs"],
-        "History": ["US History", "World History", "Exploration & Travel", "Ancient Times"],
-        "Technology": ["Vehicles", "Pets & Farms", "Cooking", "How Things Work"],
-        "Arts & Recreation": ["Sports", "Games", "Drawing & Crafts", "Music"],
-        "Social Sciences": ["Fairy Tales & Folklore", "Holidays & Traditions", "Community & Family", "Social Issues"],
+    ROW_DESCRIPTIONS = {
+        "Top Picks": "Based on your borrowing history",
+        "Graphic Novels": "Comics and illustrated stories",
+        "Picture Books": "Stories told with full-page art",
+        "Easy Readers": "Beginning and early chapter books",
+        "Fiction": "Chapter books and novels",
+        "Board Books": "Sturdy books for the youngest readers",
+        "Biography": "Real people and their stories",
+        "Science": "Animals, space, earth & experiments",
+        "History": "Countries, places & the past",
+        "Technology": "Vehicles, pets, cooking & the human body",
+        "Arts & Recreation": "Sports, drawing, crafts, games & music",
+        "Social Sciences": "Folktales, holidays & how we live together",
+        "Other": "Poetry, myths, coding & more",
     }
+
+    new_year_cutoff = date.today().year - config.NEW_BOOK_MAX_AGE_YEARS
+    new_desc = f"Published {new_year_cutoff}–{date.today().year}"
 
     carousels = []
     if "Top Picks" in by_cat:
-        carousels.append({"name": "Top Picks", "books": by_cat["Top Picks"]})
+        carousels.append({"name": "Top Picks", "books": by_cat["Top Picks"],
+                          "description": ROW_DESCRIPTIONS["Top Picks"]})
     if "New" in by_cat:
-        carousels.append({"name": "New", "books": by_cat["New"]})
+        carousels.append({"name": "New", "books": by_cat["New"],
+                          "description": new_desc})
     for c in cat_order:
         entry = {"name": c, "books": by_cat[c]}
-        if c in SUB_LABELS:
-            entry["subs"] = SUB_LABELS[c]
+        if c in ROW_DESCRIPTIONS:
+            entry["description"] = ROW_DESCRIPTIONS[c]
         carousels.append(entry)
 
     sync_time = db.get_recommendation_sync_time(conn)

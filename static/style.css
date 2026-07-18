@@ -554,21 +554,11 @@ th {
   padding-left: 4px;
 }
 
-.carousel-subs {
+.carousel-desc {
+  font-size: 0.78rem;
+  color: #86868b;
   padding-left: 4px;
   margin-bottom: 8px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.carousel-sub {
-  font-size: 0.68rem;
-  color: #86868b;
-  background: #f1f1f3;
-  padding: 1px 7px;
-  border-radius: 999px;
-  white-space: nowrap;
 }
 
 .carousel-track {
