@@ -76,7 +76,7 @@ def index():
         cat_order.append("Other")
 
     ROW_DESCRIPTIONS = {
-        "Top Picks": "Based on your borrowing history",
+        "Top Picks": "Best matches across all categories",
         "Graphic Novels": "Comics and illustrated stories",
         "Picture Books": "Stories told with full-page art",
         "Easy Readers": "Beginning and early chapter books",
