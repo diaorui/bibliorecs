@@ -13,15 +13,6 @@ LIBRARY_ID = config.LIBRARY_ID
 QUERY = 'audience:"children"'
 PAPER_FORMATS = ["BK", "PICTURE_BOOK", "PAPERBACK", "BOARD_BK", "GRAPHIC_NOVEL"]
 
-FORMAT_LABELS = {
-    "BK": "Book",
-    "PICTURE_BOOK": "Picture Book",
-    "PAPERBACK": "Paperback",
-    "BOARD_BK": "Board Book",
-    "GRAPHIC_NOVEL": "Graphic Novel",
-    "LPRINT": "Large Print",
-}
-
 MAX_PAGE_RETRIES = 3
 COMMIT_INTERVAL = 50
 
@@ -56,7 +47,7 @@ def run_sync(formats=None, max_pages=None, resume_from=None):
     if formats is None:
         formats = _discover_formats()
     fmt_list = formats
-    fmt_label = ", ".join(FORMAT_LABELS.get(f, f) for f in fmt_list)
+    fmt_label = ", ".join(fmt_list)
     print(f"Sync [{LIBRARY_ID}]: query='{QUERY}' | formats: [{fmt_label}]")
     if max_pages:
         print(f"      max pages: {max_pages}")
