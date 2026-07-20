@@ -100,6 +100,16 @@ def _run(script, task_name):
 # ──────────────────────────── file helpers ────────────────────────────
 
 
+def stop():
+    """Kill running daily.py process and reset state."""
+    try:
+        subprocess.run(["pkill", "-f", r"python.*daily\.py"], capture_output=True)
+    except Exception:
+        pass
+    _set_status("now", "idle")
+    _release_lock()
+
+
 def _acquire_lock():
     if os.path.exists(LOCK_FILE):
         age = time.time() - os.path.getmtime(LOCK_FILE)

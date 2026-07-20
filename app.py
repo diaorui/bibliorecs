@@ -481,6 +481,12 @@ def trigger_update():
     return jsonify({"success": ok})
 
 
+@app.route("/api/stop-update", methods=["POST"])
+def trigger_stop_update():
+    updater.stop()
+    return jsonify({"success": True})
+
+
 @app.route("/stats")
 def stats():
     conn = db.get_conn()
