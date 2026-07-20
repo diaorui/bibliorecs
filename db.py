@@ -43,7 +43,6 @@ CREATE TABLE IF NOT EXISTS availability (
     on_order_copies INTEGER DEFAULT 0,
     localised_status TEXT,
     status_type TEXT,
-    at_home INTEGER DEFAULT 0,
     last_checked TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -107,14 +106,6 @@ def _migrate_schema(conn):
                  if r[2] is not None]
     if "idx_rec_cat" not in idx_names:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_rec_cat ON recommendation_cache(category)")
-
-    avail_cols = [r[1] for r in conn.execute("PRAGMA table_info(availability)").fetchall()]
-    if "at_central" in avail_cols:
-        conn.execute("ALTER TABLE availability RENAME COLUMN at_central TO at_home")
-        print("  Migration: renamed at_central to at_home")
-    elif "at_home" not in avail_cols:
-        conn.execute("ALTER TABLE availability ADD COLUMN at_home INTEGER DEFAULT 0")
-        print("  Migration: added at_home to availability")
 
 def _create_rec_cache(conn):
     conn.execute("""
@@ -181,14 +172,13 @@ def upsert_book(conn, metadata_id, title, subtitle=None, author=None,
 
 def upsert_availability(conn, metadata_id, status, available_copies,
                         total_copies, held_copies, on_order_copies=0,
-                        localised_status=None, status_type=None,
-                        at_home=0):
+                        localised_status=None, status_type=None):
     conn.execute("""
         INSERT INTO availability (metadata_id, status, available_copies,
                                   total_copies, held_copies, on_order_copies,
-                                  localised_status, status_type, at_home,
+                                  localised_status, status_type,
                                   last_checked)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(metadata_id) DO UPDATE SET
             status=excluded.status,
             available_copies=excluded.available_copies,
@@ -197,12 +187,11 @@ def upsert_availability(conn, metadata_id, status, available_copies,
             on_order_copies=excluded.on_order_copies,
             localised_status=excluded.localised_status,
             status_type=excluded.status_type,
-            at_home=excluded.at_home,
             last_checked=excluded.last_checked
     """, (
         metadata_id, status, available_copies,
         total_copies, held_copies, on_order_copies,
-        localised_status, status_type, int(at_home),
+        localised_status, status_type,
         datetime.utcnow().isoformat()
     ))
 
