@@ -21,8 +21,14 @@ def main():
     t0 = time.time()
 
     print("=== Step 1/5: Downloading fresh OL dumps ===")
-    _download_dump(OL_EDITIONS_URL, config.OL_EDITIONS_DUMP)
-    _download_dump(OL_WORKS_URL, config.OL_WORKS_DUMP)
+    if _needs_download(OL_EDITIONS_URL, config.OL_EDITIONS_DUMP):
+        _download_dump(OL_EDITIONS_URL, config.OL_EDITIONS_DUMP)
+    else:
+        print("  Editions dump unchanged, skipping")
+    if _needs_download(OL_WORKS_URL, config.OL_WORKS_DUMP):
+        _download_dump(OL_WORKS_URL, config.OL_WORKS_DUMP)
+    else:
+        print("  Works dump unchanged, skipping")
 
     print("\n=== Step 2/5: Resetting database to latest schema ===")
     reset_db.reset()
@@ -43,6 +49,18 @@ def main():
 
     elapsed = time.time() - t0
     print(f"\nDone in {elapsed:.1f}s")
+
+
+def _needs_download(url, dest):
+    if not os.path.exists(dest):
+        return True
+    try:
+        req = urllib.request.Request(url, method='HEAD')
+        with urllib.request.urlopen(req) as resp:
+            remote_size = int(resp.headers.get('Content-Length', 0))
+    except Exception:
+        return True
+    return remote_size != os.path.getsize(dest)
 
 
 def _download_dump(url, dest):
