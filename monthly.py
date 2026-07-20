@@ -18,8 +18,6 @@ OL_WORKS_URL = "https://openlibrary.org/data/ol_dump_works_latest.txt.gz"
 
 
 def main():
-    db.init_db()
-
     t0 = time.time()
 
     print("=== Step 1/5: Downloading fresh OL dumps ===")
