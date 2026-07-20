@@ -87,16 +87,23 @@ def run(conn):
 
 
 def _map_isbns_to_works(con, conn, editions_path, isbn_set):
-    print(f"    Loading editions dump into memory...", end="", flush=True)
+    print(f"    Loading editions dump and extracting ISBNs...", end="", flush=True)
     con.execute(f"""
         CREATE TEMP TABLE raw_eds AS
-        SELECT json AS j
-        FROM read_csv('{editions_path}', delim='\t', header=false,
-                      columns={{'type': 'VARCHAR', 'key': 'VARCHAR',
-                                'revision': 'INT', 'last_modified': 'VARCHAR',
-                                'json': 'VARCHAR'}},
-                      auto_detect=false, max_line_size=100000000)
-        WHERE json IS NOT NULL
+        SELECT
+            json_extract_string(j, '$.isbn_13[0]') AS isbn13,
+            json_extract_string(j, '$.isbn_10[0]') AS isbn10,
+            json_extract_string(j, '$.works[0].key') AS work_key
+        FROM (
+            SELECT json AS j
+            FROM read_csv('{editions_path}', delim='\t', header=false,
+                          columns={{'type': 'VARCHAR', 'key': 'VARCHAR',
+                                    'revision': 'INT', 'last_modified': 'VARCHAR',
+                                    'json': 'VARCHAR'}},
+                          auto_detect=false, max_line_size=100000000)
+            WHERE json IS NOT NULL
+        )
+        WHERE json_extract_string(j, '$.works[0].key') IS NOT NULL
     """)
     row_count = con.execute("SELECT COUNT(*) FROM raw_eds").fetchone()[0]
     print(f" {row_count:,} rows loaded")
@@ -110,13 +117,9 @@ def _map_isbns_to_works(con, conn, editions_path, isbn_set):
         in_clause = ", ".join(repr(b) for b in batch)
 
         result = con.execute(f"""
-            SELECT json_extract_string(j, '$.isbn_13[0]') AS isbn13,
-                   json_extract_string(j, '$.isbn_10[0]') AS isbn10,
-                   json_extract_string(j, '$.works[0].key') AS work_key
+            SELECT isbn13, isbn10, work_key
             FROM raw_eds
-            WHERE (json_extract_string(j, '$.isbn_13[0]') IN ({in_clause})
-                   OR json_extract_string(j, '$.isbn_10[0]') IN ({in_clause}))
-              AND json_extract_string(j, '$.works[0].key') IS NOT NULL
+            WHERE isbn13 IN ({in_clause}) OR isbn10 IN ({in_clause})
         """).fetchall()
 
         for isbn13, isbn10, work_key in result:
