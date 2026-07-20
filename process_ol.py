@@ -109,31 +109,27 @@ def _map_isbns_to_works(con, conn, editions_path, isbn_set):
     print(f" {row_count:,} rows loaded")
 
     isbn_list = sorted(isbn_set)
-    batch_size = 5000
+    values = ", ".join(f"('{v}')" for v in isbn_list)
+    con.execute(f"CREATE TEMP TABLE lookup_isbns AS SELECT * FROM (VALUES {values}) AS t(isbn)")
+
+    result = con.execute("""
+        SELECT DISTINCT e.isbn13, e.isbn10, e.work_key
+        FROM raw_eds e
+        INNER JOIN lookup_isbns l ON e.isbn13 = l.isbn OR e.isbn10 = l.isbn
+    """).fetchall()
+
+    con.execute("DROP TABLE lookup_isbns")
+
     matched = 0
-
-    for i in range(0, len(isbn_list), batch_size):
-        batch = isbn_list[i:i + batch_size]
-        in_clause = ", ".join(repr(b) for b in batch)
-
-        result = con.execute(f"""
-            SELECT isbn13, isbn10, work_key
-            FROM raw_eds
-            WHERE isbn13 IN ({in_clause}) OR isbn10 IN ({in_clause})
-        """).fetchall()
-
-        for isbn13, isbn10, work_key in result:
-            work_id = work_key.replace("/works/", "")
-            isbn = isbn13 or isbn10
-            if isbn:
-                conn.execute(
-                    "UPDATE books_in_library SET work_id = ? WHERE isbn = ? AND work_id IS NULL",
-                    (work_id, isbn)
-                )
-                matched += 1
-
-        if (i // batch_size) % 5 == 0:
-            conn.commit()
+    for isbn13, isbn10, work_key in result:
+        work_id = work_key.replace("/works/", "")
+        isbn = isbn13 or isbn10
+        if isbn:
+            conn.execute(
+                "UPDATE books_in_library SET work_id = ? WHERE isbn = ? AND work_id IS NULL",
+                (work_id, isbn)
+            )
+            matched += 1
 
     con.execute("DROP TABLE raw_eds")
     conn.commit()
@@ -162,84 +158,79 @@ def _populate_works(con, conn, works_path):
     row_count = con.execute("SELECT COUNT(*) FROM raw_works").fetchone()[0]
     print(f" {row_count:,} rows loaded, fetching {len(work_ids):,} works...")
 
-    work_key_set = {f"/works/{w}" for w in work_ids}
-    work_key_tupled = tuple(sorted(work_key_set))
+    work_key_list = [f"/works/{w}" for w in work_ids]
+    values = ", ".join(f"('{k}')" for k in work_key_list)
+    con.execute(f"CREATE TEMP TABLE lookup_work_keys AS SELECT * FROM (VALUES {values}) AS t(wk)")
 
-    batch_size = 5000
+    rows = con.execute("""
+        SELECT j FROM raw_works r
+        INNER JOIN lookup_work_keys l ON r.key = l.wk
+    """).fetchall()
+
+    con.execute("DROP TABLE lookup_work_keys")
+
     populated = 0
+    for (j,) in rows:
+        try:
+            w = json.loads(j)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        work_id = w.get("key", "").replace("/works/", "")
+        if not work_id:
+            continue
 
-    for i in range(0, len(work_key_tupled), batch_size):
-        batch = work_key_tupled[i:i + batch_size]
-        in_clause = ", ".join(repr(k) for k in batch)
+        title = w.get("title", "")
+        subjects = w.get("subjects")
+        series_raw = w.get("series")
+        description = _extract_description(w)
+        year = _extract_year(w.get("first_publish_date"))
 
-        rows = con.execute(f"""
-            SELECT j FROM raw_works WHERE key IN ({in_clause})
-        """).fetchall()
+        subjects_json = json.dumps(subjects, ensure_ascii=False) if subjects else None
+        series_json = None
+        if series_raw:
+            names = [s.get("series", {}).get("key", "") for s in series_raw
+                     if isinstance(s, dict)]
+            series_json = json.dumps(names, ensure_ascii=False) if names else None
 
-        for (j,) in rows:
-            try:
-                w = json.loads(j)
-            except (json.JSONDecodeError, TypeError):
-                continue
-            work_id = w.get("key", "").replace("/works/", "")
-            if not work_id:
-                continue
+        db.upsert_work(
+            conn, work_id, title=title,
+            description=description, subjects=subjects_json,
+            series=series_json, first_publish_year=year,
+        )
 
-            title = w.get("title", "")
-            subjects = w.get("subjects")
-            series_raw = w.get("series")
-            description = _extract_description(w)
-            year = _extract_year(w.get("first_publish_date"))
-
-            subjects_json = json.dumps(subjects, ensure_ascii=False) if subjects else None
-            series_json = None
-            if series_raw:
-                names = [s.get("series", {}).get("key", "") for s in series_raw
-                         if isinstance(s, dict)]
-                series_json = json.dumps(names, ensure_ascii=False) if names else None
-
-            db.upsert_work(
-                conn, work_id, title=title,
-                description=description, subjects=subjects_json,
-                series=series_json, first_publish_year=year,
+        author_rows = conn.execute("""
+            SELECT DISTINCT author FROM books_in_library
+            WHERE work_id = ? AND author IS NOT NULL AND author != ''
+        """, (work_id,)).fetchall()
+        if author_rows:
+            authors_list = [r["author"] for r in author_rows]
+            best_author = max(set(authors_list), key=authors_list.count)
+            conn.execute(
+                "UPDATE works SET author = ? WHERE work_id = ? AND (author IS NULL OR author = '')",
+                (best_author, work_id)
             )
 
-            author_rows = conn.execute("""
-                SELECT DISTINCT author FROM books_in_library
-                WHERE work_id = ? AND author IS NOT NULL AND author != ''
-            """, (work_id,)).fetchall()
-            if author_rows:
-                authors_list = [r["author"] for r in author_rows]
-                best_author = max(set(authors_list), key=authors_list.count)
+        series_rows = conn.execute("""
+            SELECT series FROM books_in_library
+            WHERE work_id = ? AND series IS NOT NULL AND series != '[]'
+        """, (work_id,)).fetchall()
+        if series_rows:
+            candidates = []
+            for r in series_rows:
+                try:
+                    parsed = json.loads(r["series"])
+                    if parsed:
+                        candidates.extend(parsed)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            if candidates:
+                best_series = max(set(candidates), key=candidates.count)
                 conn.execute(
-                    "UPDATE works SET author = ? WHERE work_id = ? AND (author IS NULL OR author = '')",
-                    (best_author, work_id)
+                    "UPDATE works SET series = ? WHERE work_id = ? AND (series IS NULL OR series = '[]')",
+                    (json.dumps([best_series], ensure_ascii=False), work_id)
                 )
 
-            series_rows = conn.execute("""
-                SELECT series FROM books_in_library
-                WHERE work_id = ? AND series IS NOT NULL AND series != '[]'
-            """, (work_id,)).fetchall()
-            if series_rows:
-                candidates = []
-                for r in series_rows:
-                    try:
-                        parsed = json.loads(r["series"])
-                        if parsed:
-                            candidates.extend(parsed)
-                    except (json.JSONDecodeError, TypeError):
-                        pass
-                if candidates:
-                    best_series = max(set(candidates), key=candidates.count)
-                    conn.execute(
-                        "UPDATE works SET series = ? WHERE work_id = ? AND (series IS NULL OR series = '[]')",
-                        (json.dumps([best_series], ensure_ascii=False), work_id)
-                    )
-
-            populated += 1
-
-        if (i // batch_size) % 5 == 0:
-            conn.commit()
+        populated += 1
 
     con.execute("DROP TABLE raw_works")
     conn.commit()
