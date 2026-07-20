@@ -50,20 +50,6 @@ CREATE INDEX IF NOT EXISTS idx_bil_year ON books_in_library(publication_year);
 CREATE INDEX IF NOT EXISTS idx_bil_lang ON books_in_library(primary_language);
 CREATE INDEX IF NOT EXISTS idx_bil_content ON books_in_library(content_type);
 
-CREATE TABLE IF NOT EXISTS availability (
-    metadata_id TEXT NOT NULL,
-    library_id TEXT NOT NULL,
-    status TEXT,
-    available_copies INTEGER DEFAULT 0,
-    total_copies INTEGER DEFAULT 0,
-    held_copies INTEGER DEFAULT 0,
-    on_order_copies INTEGER DEFAULT 0,
-    localised_status TEXT,
-    status_type TEXT,
-    last_checked TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (metadata_id, library_id)
-);
-
 CREATE TABLE IF NOT EXISTS borrow_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     metadata_id TEXT NOT NULL,
@@ -118,6 +104,37 @@ def init_db():
     conn.executescript(SCHEMA_SQL)
     conn.commit()
     conn.close()
+
+
+def schema_matches(conn):
+    """True if all SCHEMA_SQL tables exist with matching columns and no extras."""
+    ref = sqlite3.connect(":memory:")
+    ref.executescript(SCHEMA_SQL)
+
+    expected = set()
+    for line in SCHEMA_SQL.splitlines():
+        line = line.strip()
+        if not line.upper().startswith("CREATE TABLE"):
+            continue
+        name = line.split("(")[0].split()[-1]
+        expected.add(name)
+        try:
+            ref_cols = {r[1]: r[2] for r in ref.execute(f"PRAGMA table_info({name})").fetchall()}
+            cur_cols = {r[1]: r[2] for r in conn.execute(f"PRAGMA table_info({name})").fetchall()}
+        except Exception:
+            ref.close()
+            return False
+        if ref_cols != cur_cols:
+            ref.close()
+            return False
+
+    ref.close()
+
+    actual = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")}
+    if actual - expected:
+        return False
+
+    return True
 
 
 def upsert_book_in_library(conn, library_id, metadata_id, title, subtitle=None,
@@ -185,33 +202,6 @@ def upsert_work(conn, work_id, title, author=None, description=None,
     """, (
         work_id, title, author, description, subjects,
         series, first_publish_year,
-        datetime.utcnow().isoformat()
-    ))
-
-
-def upsert_availability(conn, library_id, metadata_id, status, available_copies,
-                        total_copies, held_copies, on_order_copies=0,
-                        localised_status=None, status_type=None):
-    conn.execute("""
-        INSERT INTO availability (metadata_id, library_id, status,
-                                  available_copies, total_copies,
-                                  held_copies, on_order_copies,
-                                  localised_status, status_type,
-                                  last_checked)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(metadata_id, library_id) DO UPDATE SET
-            status=excluded.status,
-            available_copies=excluded.available_copies,
-            total_copies=excluded.total_copies,
-            held_copies=excluded.held_copies,
-            on_order_copies=excluded.on_order_copies,
-            localised_status=excluded.localised_status,
-            status_type=excluded.status_type,
-            last_checked=excluded.last_checked
-    """, (
-        metadata_id, library_id, status, available_copies,
-        total_copies, held_copies, on_order_copies,
-        localised_status, status_type,
         datetime.utcnow().isoformat()
     ))
 

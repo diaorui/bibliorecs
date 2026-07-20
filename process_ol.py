@@ -41,6 +41,10 @@ def run(conn):
         print("  Install: pip install duckdb")
         return
 
+    print("  Rebuilding works table from fresh dumps...")
+    conn.execute("DELETE FROM works")
+    conn.commit()
+
     editions_path = config.OL_EDITIONS_DUMP
     works_path = config.OL_WORKS_DUMP
 

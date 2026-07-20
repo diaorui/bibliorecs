@@ -198,20 +198,6 @@ def _process_page(conn, data):
             super_formats=book["super_formats"],
             consumption_format=book["consumption_format"],
         )
-
-        avail = api.extract_availability(metadata_id, bib)
-        db.upsert_availability(
-            conn,
-            library_id=LIBRARY_ID,
-            metadata_id=avail["metadata_id"],
-            status=avail["status"],
-            available_copies=avail["available_copies"],
-            total_copies=avail["total_copies"],
-            held_copies=avail["held_copies"],
-            on_order_copies=avail["on_order_copies"],
-            localised_status=avail["localised_status"],
-            status_type=avail["status_type"],
-        )
     return mids
 
 
@@ -233,13 +219,6 @@ def _deactivate_stale_books(conn, active_mids):
     ).fetchone()[0]
     if deactivated:
         print(f"  Deactivated {deactivated:,} books no longer in branch catalog")
-        conn.execute("""
-            DELETE FROM availability
-            WHERE library_id = ? AND metadata_id NOT IN (
-                SELECT metadata_id FROM books_in_library WHERE active = 1 AND library_id = ?
-            )
-        """, (LIBRARY_ID, LIBRARY_ID))
-        print(f"  Cleaned up availability for deactivated books")
 
 
 def _get_latest_sync_log_id(conn):

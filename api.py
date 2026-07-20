@@ -114,20 +114,6 @@ def extract_book_info(metadata_id, bib):
     }
 
 
-def extract_availability(metadata_id, bib):
-    avail = bib.get("availability", {})
-    return {
-        "metadata_id": metadata_id,
-        "status": avail.get("status", ""),
-        "available_copies": avail.get("availableCopies", 0),
-        "total_copies": avail.get("totalCopies", 0),
-        "held_copies": avail.get("heldCopies", 0),
-        "on_order_copies": avail.get("onOrderCopies", 0),
-        "localised_status": avail.get("localisedStatus"),
-        "status_type": avail.get("statusType", ""),
-    }
-
-
 def _parse_year(date_str):
     if not date_str:
         return None
