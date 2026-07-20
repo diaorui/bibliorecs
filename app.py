@@ -143,58 +143,6 @@ def book_detail(metadata_id):
     )
 
 
-@app.route("/api/availability/<metadata_id>")
-def api_availability(metadata_id):
-    conn = db.get_conn()
-    try:
-        result = _resolve_availability(conn, [metadata_id])[metadata_id]
-    except Exception as e:
-        result = {"error": str(e)}
-    conn.close()
-    return jsonify(result)
-
-
-@app.route("/api/availability/batch")
-def api_batch_availability():
-    """Fetch live availability for multiple books. Pass ?ids=A,B,C"""
-    ids = request.args.get("ids", "")
-    metadata_ids = [i.strip() for i in ids.split(",") if i.strip()]
-    if not metadata_ids:
-        return jsonify({})
-    conn = db.get_conn()
-    try:
-        result = _resolve_availability(conn, metadata_ids)
-    except Exception as e:
-        result = {mid: {"error": str(e)} for mid in metadata_ids}
-    conn.close()
-    return jsonify(result)
-
-
-def _resolve_availability(conn, metadata_ids):
-    """Return dict of metadata_id → {at_home, available_copies, ...}.
-    Fetches live from API; returns zeros on failure."""
-    result = {}
-    try:
-        fresh = api.fetch_batch_availability(metadata_ids)
-        for mid in metadata_ids:
-            info = fresh.get(mid)
-            if info:
-                result[mid] = {
-                    "owns_home": info.get("owns_home", False),
-                    "at_home": info.get("at_home", False),
-                    "status": info.get("status", ""),
-                    "available_copies": info.get("available_copies", 0),
-                    "total_copies": info.get("total_copies", 0),
-                    "held_copies": info.get("held_copies", 0),
-                }
-            else:
-                result[mid] = {"at_home": False}
-    except Exception:
-        for mid in metadata_ids:
-            result[mid] = {"at_home": False}
-    return result
-
-
 # ─────────────────────────────── holds ───────────────────────────────
 
 

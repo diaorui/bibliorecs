@@ -29,7 +29,7 @@ def search_bibs_json(query, formats=None, f_circ=None,
         "custom_edit": "false",
         "suppress": "true",
         "page": str(page),
-        "view": "small",
+        "view": "grouped",
     }
     if formats:
         body["f_FORMAT"] = "|".join(formats)
@@ -357,55 +357,7 @@ def fetch_current_checkouts(bc_token, session_id, account_id):
     )
 
 
-def fetch_availability(bc_token, session_id, metadata_id):
-    return _gateway_get(f"/bibs/{metadata_id}/availability", bc_token, session_id)
 
-
-def extract_home_availability(metadata_id, data):
-    """Extract Central Park-specific availability from full API response."""
-    items = data.get("entities", {}).get("bibItems", {})
-    cp_statuses = []
-    for item in items.values():
-        branch = item.get("branch", {})
-        if branch.get("name") != config.HOME_BRANCH:
-            continue
-        cp_statuses.append(item.get("availability", {}).get("status", ""))
-
-    total = len(cp_statuses)
-    available = sum(1 for s in cp_statuses if s == "AVAILABLE")
-    held = sum(1 for s in cp_statuses if s in ("HELD", "ON_HOLD"))
-    owns_home = total > 0
-    at_home = available > 0
-
-    return {
-        "metadata_id": metadata_id,
-        "owns_home": owns_home,
-        "at_home": at_home,
-        "status": "Available" if at_home else "All Checked Out",
-        "available_copies": available,
-        "total_copies": total,
-        "held_copies": held,
-    }
-
-
-def fetch_batch_availability(metadata_ids):
-    """Fetch availability for multiple bibs using a thread pool."""
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-    bc_token, session_id, _, _ = _get_auth()
-    results = {}
-    with ThreadPoolExecutor(max_workers=10) as pool:
-        fut_map = {
-            pool.submit(fetch_availability, bc_token, session_id, mid): mid
-            for mid in metadata_ids
-        }
-        for f in as_completed(fut_map):
-            mid = fut_map[f]
-            try:
-                data = f.result()
-                results[mid] = extract_home_availability(mid, data)
-            except Exception:
-                results[mid] = None
-    return results
 
 
 # ────────────────────────────── holds ──────────────────────────────
