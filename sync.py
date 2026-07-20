@@ -27,10 +27,43 @@ COMMIT_INTERVAL = 50
 _t0 = 0
 
 
+def _discover_formats():
+    FALLBACK = PAPER_FORMATS
+    try:
+        print(f"  Discovering physical book formats...", end="", flush=True)
+        data = api.search_bibs_json(QUERY, gateway_base=config.GATEWAY_BASE,
+                                    f_circ="CIRC", page=1, limit=100)
+        results = api.parse_results(data)
+        bibs = api.parse_bib_entities(data)
+
+        formats = set()
+        for r in results:
+            metadata_id = r.get("bibKey", "")
+            bib = bibs.get(metadata_id, {})
+            info = bib.get("briefInfo", {})
+            if "Book" in info.get("superFormats", []):
+                fmt = info.get("format", "")
+                if fmt:
+                    formats.add(fmt)
+
+        if not formats:
+            print(" none found, using fallback")
+            return FALLBACK
+
+        sorted_fmts = sorted(formats)
+        print(f" {len(sorted_fmts)} found: {', '.join(sorted_fmts)}")
+        return sorted_fmts
+    except Exception as e:
+        print(f" discovery failed ({e}), using fallback")
+        return FALLBACK
+
+
 def run_sync(formats=None, max_pages=None, resume_from=None):
     global _t0
     _t0 = time.time()
-    fmt_list = formats or PAPER_FORMATS
+    if formats is None:
+        formats = _discover_formats()
+    fmt_list = formats
     fmt_label = ", ".join(FORMAT_LABELS.get(f, f) for f in fmt_list)
     print(f"Sync [{LIBRARY_ID}]: query='{QUERY}' | formats: [{fmt_label}]")
     if max_pages:
@@ -235,7 +268,9 @@ def _get_latest_sync_log_id(conn):
 
 
 def run_incremental(formats=None):
-    fmt_list = formats or PAPER_FORMATS
+    if formats is None:
+        formats = _discover_formats()
+    fmt_list = formats
     print(f"Fetching recently added children's paper books...")
 
     conn = db.get_conn()
