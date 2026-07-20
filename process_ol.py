@@ -83,8 +83,21 @@ def run(conn):
 
 
 def _map_isbns_to_works(con, conn, editions_path, isbn_set):
+    print(f"    Loading editions dump into memory...", end="", flush=True)
+    con.execute(f"""
+        CREATE TEMP TABLE raw_eds AS
+        SELECT json AS j
+        FROM read_csv('{editions_path}', delim='\t', header=false,
+                      columns={{'type': 'VARCHAR', 'key': 'VARCHAR',
+                                'revision': 'INT', 'last_modified': 'VARCHAR',
+                                'json': 'VARCHAR'}},
+                      auto_detect=false, max_line_size=100000000)
+        WHERE json IS NOT NULL
+    """)
+    row_count = con.execute("SELECT COUNT(*) FROM raw_eds").fetchone()[0]
+    print(f" {row_count:,} rows loaded")
+
     isbn_list = sorted(isbn_set)
-    # Process in batches to avoid SQL query length limits
     batch_size = 5000
     matched = 0
 
@@ -93,19 +106,10 @@ def _map_isbns_to_works(con, conn, editions_path, isbn_set):
         in_clause = ", ".join(repr(b) for b in batch)
 
         result = con.execute(f"""
-            WITH raw AS (
-                SELECT json AS j
-                FROM read_csv('{editions_path}', delim='\t', header=false,
-                              columns={{'type': 'VARCHAR', 'key': 'VARCHAR',
-                                        'revision': 'INT', 'last_modified': 'VARCHAR',
-                                        'json': 'VARCHAR'}},
-                              auto_detect=false, max_line_size=100000000)
-                WHERE json IS NOT NULL
-            )
             SELECT json_extract_string(j, '$.isbn_13[0]') AS isbn13,
                    json_extract_string(j, '$.isbn_10[0]') AS isbn10,
                    json_extract_string(j, '$.works[0].key') AS work_key
-            FROM raw
+            FROM raw_eds
             WHERE (json_extract_string(j, '$.isbn_13[0]') IN ({in_clause})
                    OR json_extract_string(j, '$.isbn_10[0]') IN ({in_clause}))
               AND json_extract_string(j, '$.works[0].key') IS NOT NULL
@@ -124,6 +128,7 @@ def _map_isbns_to_works(con, conn, editions_path, isbn_set):
         if (i // batch_size) % 5 == 0:
             conn.commit()
 
+    con.execute("DROP TABLE raw_eds")
     conn.commit()
     print(f"    {matched:,} ISBN → work_id mappings found")
 
@@ -137,7 +142,19 @@ def _populate_works(con, conn, works_path):
         print("    No work_ids to process")
         return
 
-    print(f"    Fetching data for {len(work_ids):,} works...")
+    print(f"    Loading works dump into memory...", end="", flush=True)
+    con.execute(f"""
+        CREATE TEMP TABLE raw_works AS
+        SELECT json AS j, key
+        FROM read_csv('{works_path}', delim='\t', header=false,
+                      columns={{'type': 'VARCHAR', 'key': 'VARCHAR',
+                                'revision': 'INT', 'last_modified': 'VARCHAR',
+                                'json': 'VARCHAR'}},
+                      auto_detect=false, max_line_size=100000000)
+    """)
+    row_count = con.execute("SELECT COUNT(*) FROM raw_works").fetchone()[0]
+    print(f" {row_count:,} rows loaded, fetching {len(work_ids):,} works...")
+
     work_key_set = {f"/works/{w}" for w in work_ids}
     work_key_tupled = tuple(sorted(work_key_set))
 
@@ -149,13 +166,7 @@ def _populate_works(con, conn, works_path):
         in_clause = ", ".join(repr(k) for k in batch)
 
         rows = con.execute(f"""
-            SELECT json AS j
-            FROM read_csv('{works_path}', delim='\t', header=false,
-                          columns={{'type': 'VARCHAR', 'key': 'VARCHAR',
-                                    'revision': 'INT', 'last_modified': 'VARCHAR',
-                                    'json': 'VARCHAR'}},
-                          auto_detect=false, max_line_size=100000000)
-            WHERE key IN ({in_clause})
+            SELECT j FROM raw_works WHERE key IN ({in_clause})
         """).fetchall()
 
         for (j,) in rows:
@@ -186,7 +197,6 @@ def _populate_works(con, conn, works_path):
                 series=series_json, first_publish_year=year,
             )
 
-            # Populate author from books_in_library (deduplicated per work_id)
             author_rows = conn.execute("""
                 SELECT DISTINCT author FROM books_in_library
                 WHERE work_id = ? AND author IS NOT NULL AND author != ''
@@ -199,7 +209,6 @@ def _populate_works(con, conn, works_path):
                     (best_author, work_id)
                 )
 
-            # Populate series from books_in_library (take most common)
             series_rows = conn.execute("""
                 SELECT series FROM books_in_library
                 WHERE work_id = ? AND series IS NOT NULL AND series != '[]'
@@ -225,6 +234,7 @@ def _populate_works(con, conn, works_path):
         if (i // batch_size) % 5 == 0:
             conn.commit()
 
+    con.execute("DROP TABLE raw_works")
     conn.commit()
     print(f"    {populated:,} works populated")
 
