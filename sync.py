@@ -1,15 +1,4 @@
 #!/usr/bin/env python3
-"""
-Sync library children's paper books into SQLite.
-
-Usage:
-    python sync.py                    # full sync (all paper formats)
-    python sync.py --format BK        # sync only one format
-    python sync.py --pages 10         # sync first N pages only (test run)
-    python sync.py --resume 42        # resume from page 42
-    python sync.py --incremental      # recently added books
-"""
-
 import sys
 import json
 import time
@@ -19,6 +8,8 @@ import config
 import db
 import api
 import generate_embeddings
+
+LIBRARY_ID = config.LIBRARY_ID
 
 QUERY = 'audience:"children"'
 PAPER_FORMATS = ["BK", "PICTURE_BOOK", "PAPERBACK", "BOARD_BK", "GRAPHIC_NOVEL"]
@@ -42,7 +33,7 @@ def run_sync(formats=None, max_pages=None, resume_from=None):
     _t0 = time.time()
     fmt_list = formats or PAPER_FORMATS
     fmt_label = ", ".join(FORMAT_LABELS.get(f, f) for f in fmt_list)
-    print(f"Sync: query='{QUERY}' | formats: [{fmt_label}]")
+    print(f"Sync [{LIBRARY_ID}]: query='{QUERY}' | formats: [{fmt_label}]")
     if max_pages:
         print(f"      max pages: {max_pages}")
 
@@ -53,7 +44,8 @@ def run_sync(formats=None, max_pages=None, resume_from=None):
     if resume_from:
         page = resume_from
         log_id = _get_latest_sync_log_id(conn)
-        data = api.search_bibs_json(QUERY, formats=fmt_list, f_circ="CIRC",
+        data = api.search_bibs_json(QUERY, gateway_base=config.GATEWAY_BASE,
+                                    formats=fmt_list, f_circ="CIRC",
                                     page=page, sort="newly_acquired", limit=100)
         pagination = api.parse_pagination(data)
         total_pages = pagination.get("pages", 1)
@@ -65,7 +57,8 @@ def run_sync(formats=None, max_pages=None, resume_from=None):
         page += 1
     else:
         page = 1
-        data = api.search_bibs_json(QUERY, formats=fmt_list, f_circ="CIRC",
+        data = api.search_bibs_json(QUERY, gateway_base=config.GATEWAY_BASE,
+                                    formats=fmt_list, f_circ="CIRC",
                                     page=page, sort="newly_acquired", limit=100)
         pagination = api.parse_pagination(data)
         total_pages = pagination.get("pages", 1)
@@ -73,7 +66,7 @@ def run_sync(formats=None, max_pages=None, resume_from=None):
         if max_pages:
             total_pages = min(max_pages, total_pages)
         print(f"      total: {total_count:,} books across {total_pages} pages")
-        log_id = db.start_sync_log(conn, "full",
+        log_id = db.start_sync_log(conn, LIBRARY_ID, "full",
                                    f"query={QUERY}&formats={fmt_list}",
                                    total_pages)
         synced_mids.update(_process_page(conn, data))
@@ -130,10 +123,10 @@ def run_sync(formats=None, max_pages=None, resume_from=None):
 
 
 def _fetch_page(page, formats):
-    """Fetch a single page from the API (no DB writes). Safe to call from any thread."""
     for attempt in range(MAX_PAGE_RETRIES):
         try:
-            return api.search_bibs_json(QUERY, formats=formats, f_circ="CIRC",
+            return api.search_bibs_json(QUERY, gateway_base=config.GATEWAY_BASE,
+                                        formats=formats, f_circ="CIRC",
                                         page=page, sort="newly_acquired", limit=100)
         except Exception as e:
             if attempt < MAX_PAGE_RETRIES - 1:
@@ -149,14 +142,14 @@ def _fetch_page(page, formats):
 def _fetch_and_process_page(conn, page, formats, sort=None):
     for attempt in range(MAX_PAGE_RETRIES):
         try:
-            data = api.search_bibs_json(QUERY, formats=formats, f_circ="CIRC",
+            data = api.search_bibs_json(QUERY, gateway_base=config.GATEWAY_BASE,
+                                        formats=formats, f_circ="CIRC",
                                         page=page, sort=sort, limit=100)
         except Exception as e:
             if attempt < MAX_PAGE_RETRIES - 1:
                 wait = 2 ** attempt
                 print(f"  Page {page} error (attempt {attempt + 1}): {e}"
                       f" — retrying in {wait}s")
-                time.sleep(wait)
                 continue
             print(f"  Page {page} FAILED after {MAX_PAGE_RETRIES} attempts: {e}")
             return False, set()
@@ -173,8 +166,9 @@ def _process_page(conn, data):
     for metadata_id, bib in entities.items():
         mids.add(metadata_id)
         book = api.extract_book_info(metadata_id, bib)
-        db.upsert_book(
+        db.upsert_book_in_library(
             conn,
+            library_id=LIBRARY_ID,
             metadata_id=book["metadata_id"],
             title=book["title"],
             subtitle=book["subtitle"],
@@ -197,6 +191,7 @@ def _process_page(conn, data):
         avail = api.extract_availability(metadata_id, bib)
         db.upsert_availability(
             conn,
+            library_id=LIBRARY_ID,
             metadata_id=avail["metadata_id"],
             status=avail["status"],
             available_copies=avail["available_copies"],
@@ -210,21 +205,29 @@ def _process_page(conn, data):
 
 
 def _deactivate_stale_books(conn, active_mids):
-    total = conn.execute("SELECT COUNT(*) as c FROM books WHERE active = 1").fetchone()[0]
+    total = conn.execute(
+        "SELECT COUNT(*) as c FROM books_in_library WHERE active = 1 AND library_id = ?",
+        (LIBRARY_ID,)
+    ).fetchone()[0]
     mids_json = json.dumps(list(active_mids))
     conn.execute("""
-        UPDATE books SET active = 0
-        WHERE active = 1 AND metadata_id NOT IN (
+        UPDATE books_in_library SET active = 0
+        WHERE active = 1 AND library_id = ? AND metadata_id NOT IN (
             SELECT value FROM json_each(?)
         )
-    """, (mids_json,))
-    deactivated = total - conn.execute("SELECT COUNT(*) as c FROM books WHERE active = 1").fetchone()[0]
+    """, (LIBRARY_ID, mids_json))
+    deactivated = total - conn.execute(
+        "SELECT COUNT(*) as c FROM books_in_library WHERE active = 1 AND library_id = ?",
+        (LIBRARY_ID,)
+    ).fetchone()[0]
     if deactivated:
         print(f"  Deactivated {deactivated:,} books no longer in branch catalog")
         conn.execute("""
             DELETE FROM availability
-            WHERE metadata_id NOT IN (SELECT metadata_id FROM books WHERE active = 1)
-        """)
+            WHERE library_id = ? AND metadata_id NOT IN (
+                SELECT metadata_id FROM books_in_library WHERE active = 1 AND library_id = ?
+            )
+        """, (LIBRARY_ID, LIBRARY_ID))
         print(f"  Cleaned up availability for deactivated books")
 
 
@@ -241,13 +244,14 @@ def run_incremental(formats=None):
 
     conn = db.get_conn()
 
-    data = api.search_bibs_json(QUERY, formats=fmt_list, f_circ="CIRC",
+    data = api.search_bibs_json(QUERY, gateway_base=config.GATEWAY_BASE,
+                                formats=fmt_list, f_circ="CIRC",
                                 page=1, sort="newly_acquired", limit=100)
     pagination = api.parse_pagination(data)
     total_pages = pagination.get("pages", 1)
     print(f"  Recent: {pagination.get('count', 0):,} books, {total_pages} pages")
 
-    log_id = db.start_sync_log(conn, "incremental",
+    log_id = db.start_sync_log(conn, LIBRARY_ID, "incremental",
                                f"query={QUERY}&formatcode=({', '.join(fmt_list)})",
                                total_pages)
 

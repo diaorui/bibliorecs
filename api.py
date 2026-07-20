@@ -18,11 +18,10 @@ PUBLIC_HEADERS = {
 }
 REQUEST_DELAY = 0.6
 
-# ─────────────────────────── public catalog API ───────────────────────────
 
-
-def search_bibs_json(query, formats=None, f_circ=None,
+def search_bibs_json(query, gateway_base=None, formats=None, f_circ=None,
                      search_type="bl", page=1, sort=None, retries=3, limit=100):
+    gateway = gateway_base or GATEWAY_BASE
     body = {
         "query": query,
         "searchType": search_type,
@@ -40,7 +39,7 @@ def search_bibs_json(query, formats=None, f_circ=None,
     if limit:
         body["limit"] = str(limit)
 
-    url = f"{GATEWAY_BASE}/bibs/search?locale=en-US"
+    url = f"{gateway}/bibs/search?locale=en-US"
     headers = {
         "Accept": "application/json",
         "Content-Type": "application/json",
@@ -136,12 +135,10 @@ def _parse_year(date_str):
     return int(match.group(1)) if match else None
 
 
-# ───────────────────────── patron auth + API ─────────────────────────
-
 _AUTH_CACHE = None
 _AUTH_EXPIRES_AT = 0.0
 _AUTH_LOCK = threading.Lock()
-_AUTH_TTL = 1800  # 30 min
+_AUTH_TTL = 1800
 
 
 def _invalidate_auth():
@@ -357,12 +354,6 @@ def fetch_current_checkouts(bc_token, session_id, account_id):
     )
 
 
-
-
-
-# ────────────────────────────── holds ──────────────────────────────
-
-
 def fetch_holds(bc_token, session_id, account_id):
     return _gateway_get("/holds", bc_token, session_id,
                         {"accountId": account_id, "size": 100, "locale": "en-US"})
@@ -392,7 +383,6 @@ def cancel_hold(bc_token, session_id, account_id, hold_id, metadata_id):
 
 
 def fetch_current_checkouts_map(bc_token, session_id, account_id):
-    """Return set of metadata_ids the user currently has checked out."""
     data = _gateway_get("/checkouts", bc_token, session_id,
                         {"accountId": account_id, "size": 100})
     checkouts = data.get("entities", {}).get("checkouts", {})

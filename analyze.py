@@ -1,16 +1,4 @@
 #!/usr/bin/env python3
-"""
-Analyze the synced book database.
-
-Usage:
-    python analyze.py              # summary stats
-    python analyze.py --sample     # random 10 books
-    python analyze.py --sample 20  # random 20 books
-    python analyze.py --export     # export all to CSV
-    python analyze.py --book <id>  # show one book by metadata_id
-    python analyze.py --search <term>  # search by title/author
-"""
-
 import sys
 import json
 import csv
@@ -21,7 +9,6 @@ import db
 
 def print_stats():
     conn = db.get_conn()
-
     stats = db.get_stats(conn)
     print("=" * 60)
     print("  BOOK DATABASE STATISTICS")
@@ -67,7 +54,6 @@ def print_samples(n=10):
         subjects = json.loads(b["subjects"]) if b["subjects"] else []
         genres = json.loads(b["genres"]) if b["genres"] else []
         desc = (b["description"] or "")[:120]
-
         print(f"\n  [{i}] {b['title']}")
         print(f"      Author:    {b['author'] or 'N/A'}")
         print(f"      Format:    {b['format']} | Year: {b['publication_year'] or 'N/A'}")
@@ -80,22 +66,22 @@ def print_samples(n=10):
 def export_csv():
     conn = db.get_conn()
     rows = conn.execute("""
-        SELECT metadata_id, title, author, format, publication_year,
+        SELECT metadata_id, library_id, title, author, format, publication_year,
                primary_language, isbn,
                subjects, genres, series, call_number
-        FROM books
+        FROM books_in_library
         ORDER BY title
     """).fetchall()
 
     out_path = os.path.join(os.path.dirname(db.DB_PATH), "books_export.csv")
     with open(out_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
-        writer.writerow(["metadata_id", "title", "author", "format",
+        writer.writerow(["metadata_id", "library_id", "title", "author", "format",
                          "publication_year", "language", "isbn",
                          "subjects", "genres", "series", "call_number"])
         for row in rows:
             writer.writerow([
-                row["metadata_id"], row["title"], row["author"],
+                row["metadata_id"], row["library_id"], row["title"], row["author"],
                 row["format"], row["publication_year"],
                 row["primary_language"], row["isbn"],
                 row["subjects"], row["genres"], row["series"],
@@ -109,7 +95,11 @@ def export_csv():
 def show_book(metadata_id):
     conn = db.get_conn()
     row = conn.execute("""
-        SELECT * FROM books WHERE metadata_id = ?
+        SELECT b.*, w.work_id
+        FROM books_in_library b
+        LEFT JOIN works w ON w.work_id = b.work_id
+        WHERE b.metadata_id = ?
+        LIMIT 1
     """, (metadata_id,)).fetchone()
     if not row:
         print(f"Book not found: {metadata_id}")
@@ -131,8 +121,8 @@ def search_books(term):
     conn = db.get_conn()
     pattern = f"%{term}%"
     rows = conn.execute("""
-        SELECT metadata_id, title, author, format, publication_year
-        FROM books
+        SELECT metadata_id, library_id, title, author, format, publication_year
+        FROM books_in_library
         WHERE title LIKE ? OR author LIKE ?
         ORDER BY title
         LIMIT 30

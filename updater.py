@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -12,9 +13,14 @@ STATUS_FILE = os.path.join(os.path.dirname(__file__), "update_status.json")
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
+SCRIPTS = {
+    "daily": "daily.py",
+    "weekly": "weekly.py",
+    "monthly": "monthly.py",
+}
+
 
 def start():
-    """Start the daemon background updater thread."""
     t = Thread(target=_loop, daemon=True)
     t.start()
 
@@ -25,9 +31,6 @@ def read_status():
             return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         return None
-
-
-# ──────────────────────────── loop ────────────────────────────
 
 
 def _loop():
@@ -44,16 +47,22 @@ def _loop():
 def _run_due_tasks():
     s = read_status() or {}
     today = time.strftime("%Y-%m-%d")
-    daily_last_date = s.get("daily", {}).get("last_run_date", "")
+    this_week = time.strftime("%G-W%V")
+    this_month = time.strftime("%Y-%m")
 
-    if daily_last_date != today:
-        _run("daily.py", "daily")
+    daily_last = s.get("daily", {}).get("last_run_date", "")
+    weekly_last = s.get("weekly", {}).get("last_run_week", "")
+    monthly_last = s.get("monthly", {}).get("last_run_month", "")
+
+    if daily_last != today:
+        _run("daily", "daily.py")
+    elif weekly_last != this_week:
+        _run("weekly", "weekly.py")
+    elif monthly_last != this_month:
+        _run("monthly", "monthly.py")
 
 
-# ──────────────────────────── task runner ────────────────────────────
-
-
-def _run(script, task_name):
+def _run(task_name, script):
     if not _acquire_lock():
         return
 
@@ -75,6 +84,8 @@ def _run(script, task_name):
         elapsed = round(time.monotonic() - t0)
         ok = result.returncode == 0
         info = {"last_run": ts_start, "last_run_date": time.strftime("%Y-%m-%d"),
+                "last_run_week": time.strftime("%G-W%V"),
+                "last_run_month": time.strftime("%Y-%m"),
                 "duration_sec": elapsed, "state": "ok" if ok else "failed"}
         if ok:
             info["last_ok"] = time.strftime("%Y-%m-%dT%H:%M:%S")
@@ -97,16 +108,23 @@ def _run(script, task_name):
         _release_lock()
 
 
-# ──────────────────────────── file helpers ────────────────────────────
-
-
 def stop():
-    """Kill running daily.py process and reset state."""
-    try:
-        subprocess.run(["pkill", "-f", r"python.*daily\.py"], capture_output=True)
-    except Exception:
-        pass
+    for name, script in SCRIPTS.items():
+        pattern = re.escape(script)
+        try:
+            subprocess.run(["pkill", "-f", rf"python.*{pattern}"],
+                           capture_output=True)
+        except Exception:
+            pass
     _set_status("now", "idle")
+    _release_lock()
+
+
+def acquire_lock():
+    return _acquire_lock()
+
+
+def release_lock():
     _release_lock()
 
 
@@ -147,11 +165,26 @@ def _write(s):
 
 
 def run_manual():
-    """Trigger daily pipeline in background thread. Returns True if accepted."""
     if not _acquire_lock():
         return False
     _release_lock()
-    Thread(target=_run, args=("daily.py", "daily"), daemon=True).start()
+    Thread(target=_run, args=("daily", "daily.py"), daemon=True).start()
+    return True
+
+
+def run_weekly_manual():
+    if not _acquire_lock():
+        return False
+    _release_lock()
+    Thread(target=_run, args=("weekly", "weekly.py"), daemon=True).start()
+    return True
+
+
+def run_monthly_manual():
+    if not _acquire_lock():
+        return False
+    _release_lock()
+    Thread(target=_run, args=("monthly", "monthly.py"), daemon=True).start()
     return True
 
 

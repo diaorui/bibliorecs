@@ -16,10 +16,12 @@ import patron
 import updater
 from recommend import book_category, _time_weight
 
-_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 app = Flask(__name__)
 app.config["DEBUG_MODE"] = "--debug" in sys.argv or os.environ.get("BIBLIORECS_DEBUG") == "1"
+
+LIBRARY_ID = config.LIBRARY_ID
 
 OL_URL = "https://covers.openlibrary.org/b/isbn/{isbn}-{size}.jpg"
 SYN_URL = f"https://secure.syndetics.com/index.aspx?isbn={{isbn}}/{{size}}.GIF&client={config.SYNDETICS_CLIENT}&type=xw12&oclc="
@@ -44,6 +46,10 @@ def _cover_large(isbn):
     )
 
 
+def _prefer(a, b):
+    return a if a else b
+
+
 @app.route("/")
 def index():
     conn = db.get_conn()
@@ -54,15 +60,16 @@ def index():
                b.content_type, b.subjects, b.genres, b.description, b.series,
                b.call_number
         FROM recommendation_cache r
-        INNER JOIN books b ON b.metadata_id = r.metadata_id
+        INNER JOIN books_in_library b
+            ON b.metadata_id = r.metadata_id AND b.library_id = ?
         ORDER BY r.category, r.category_rank
-    """).fetchall()
+    """, (LIBRARY_ID,)).fetchall()
 
     by_cat = defaultdict(list)
     for r in rows:
         by_cat[r["category"]].append(_fmt_rec(dict(r)))
 
-    call_counts = db.get_category_order(conn)
+    call_counts = db.get_category_order(conn, LIBRARY_ID)
     cat_counts = defaultdict(float)
     for row in call_counts:
         cat = book_category(row["call_number"])
@@ -115,17 +122,35 @@ def index():
 @app.route("/book/<metadata_id>")
 def book_detail(metadata_id):
     conn = db.get_conn()
-    row = conn.execute("SELECT * FROM books WHERE metadata_id = ?",
-                       (metadata_id,)).fetchone()
+    row = conn.execute("""
+        SELECT b.*, w.description AS ol_description, w.subjects AS ol_subjects,
+               w.series AS ol_series, w.author AS ol_author, w.title AS ol_title
+        FROM books_in_library b
+        LEFT JOIN works w ON w.work_id = b.work_id
+        WHERE b.metadata_id = ? AND b.library_id = ?
+    """, (metadata_id, LIBRARY_ID)).fetchone()
     if not row:
         conn.close()
         return redirect(f"{config.CATALOG_BASE}/v2/record/{metadata_id}")
     book = dict(row)
 
+    # Prefer OL data for library-independent fields, fall back to BC
+    if book.get("ol_title"):
+        book["title"] = book["ol_title"]
+    if book.get("ol_author"):
+        book["author"] = book["ol_author"]
+    if book.get("ol_description"):
+        book["description"] = book["ol_description"]
+    if book.get("ol_subjects"):
+        book["subjects"] = book["ol_subjects"]
+    if book.get("ol_series"):
+        book["series"] = book["ol_series"]
+
     borrows = conn.execute("""
-        SELECT * FROM borrow_events WHERE metadata_id = ?
+        SELECT * FROM borrow_events
+        WHERE metadata_id = ? AND library_id = ?
         ORDER BY checkout_date DESC
-    """, (metadata_id,)).fetchall()
+    """, (metadata_id, LIBRARY_ID)).fetchall()
 
     img, fallback = _cover_large(book.get("isbn"))
     conn.close()
@@ -143,8 +168,7 @@ def book_detail(metadata_id):
     )
 
 
-# ─────────────────────────────── holds ───────────────────────────────
-
+# ── holds ──
 
 @app.route("/api/holds")
 def api_holds():
@@ -156,7 +180,12 @@ def api_holds():
         holds = []
         for hid, h in holds_ents.items():
             mid = h.get("metadataId")
-            row = conn.execute("SELECT title, subtitle, author, isbn FROM books WHERE metadata_id = ?", (mid,)).fetchone() if mid else None
+            row = None
+            if mid:
+                row = conn.execute(
+                    "SELECT title, subtitle, author, isbn FROM books_in_library WHERE metadata_id = ? AND library_id = ?",
+                    (mid, LIBRARY_ID)
+                ).fetchone()
             holds.append({
                 "hold_id": hid,
                 "metadata_id": mid,
@@ -217,7 +246,7 @@ def api_hold_cancel():
     try:
         bc_token, session_id, account_id, _ = api._get_auth()
         data = api.cancel_hold(bc_token, session_id, account_id,
-                               body["hold_id"], body["metadata_id"])
+                                body["hold_id"], body["metadata_id"])
         failures = data.get("failures") or {}
         if body["hold_id"] in failures:
             return jsonify({"success": False, "error": failures[body["hold_id"]]})
@@ -225,6 +254,8 @@ def api_hold_cancel():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
+
+# ── checkouts ──
 
 @app.route("/api/checkouts")
 def api_checkouts():
@@ -236,28 +267,26 @@ def api_checkouts():
         return jsonify({"checked_out": [], "error": str(e)})
 
 
+# ── misc ──
+
 @app.route("/api/restart", methods=["POST"])
 def api_restart():
     def _do_restart():
         import time, subprocess
 
-        # Let the 200 response reach the browser first
         time.sleep(0.5)
 
-        # Launch a fresh server process.
-        # It will see BIBLIORECS_RESTARTING and sleep before trying to bind.
         env = os.environ.copy()
         env["BIBLIORECS_RESTARTING"] = "1"
         subprocess.Popen(
             [sys.executable, __file__] + sys.argv[1:],
-            cwd=_SCRIPT_DIR,
+            cwd=SCRIPT_DIR,
             start_new_session=True,
             env=env,
             stdout=open(os.devnull, 'w'),
             stderr=open(os.devnull, 'w'),
         )
 
-        # Old process waits longer so the OS releases port 5050
         time.sleep(2.5)
         os._exit(0)
 
@@ -265,6 +294,8 @@ def api_restart():
     threading.Thread(target=_do_restart, daemon=True).start()
     return jsonify({"ok": True})
 
+
+# ── sync history ──
 
 @app.route("/api/sync-history", methods=["POST"])
 def api_sync_history():
@@ -286,18 +317,20 @@ def api_history_data():
         current = conn.execute("""
             SELECT b.*, bk.title, bk.subtitle, bk.author, bk.isbn, bk.metadata_id
             FROM borrow_events b
-            LEFT JOIN books bk ON bk.metadata_id = b.metadata_id
-            WHERE b.is_current = 1
+            LEFT JOIN books_in_library bk
+                ON bk.metadata_id = b.metadata_id AND bk.library_id = b.library_id
+            WHERE b.is_current = 1 AND b.library_id = ?
             ORDER BY COALESCE(b.checkout_date, '9999-12-31') ASC
-        """).fetchall()
+        """, (LIBRARY_ID,)).fetchall()
 
         past = conn.execute("""
             SELECT b.*, bk.title, bk.subtitle, bk.author, bk.isbn, bk.metadata_id
             FROM borrow_events b
-            LEFT JOIN books bk ON bk.metadata_id = b.metadata_id
-            WHERE b.source = 'history'
+            LEFT JOIN books_in_library bk
+                ON bk.metadata_id = b.metadata_id AND bk.library_id = b.library_id
+            WHERE b.source = 'history' AND b.library_id = ?
             ORDER BY b.checkout_date DESC
-        """).fetchall()
+        """, (LIBRARY_ID,)).fetchall()
 
         current_list = []
         for c in current:
@@ -333,10 +366,12 @@ def api_history_chart_data():
             SELECT strftime('%Y-%m', checkout_date) AS month,
                    COUNT(*) AS borrowed
             FROM borrow_events
-            WHERE checkout_date IS NOT NULL AND source != 'checkout'
+            WHERE checkout_date IS NOT NULL
+              AND source != 'checkout'
+              AND library_id = ?
             GROUP BY month
             ORDER BY month
-        """).fetchall()
+        """, (LIBRARY_ID,)).fetchall()
         cumulative = 0
         result = []
         for r in rows:
@@ -356,9 +391,12 @@ def api_history_category_data():
         rows = conn.execute("""
             SELECT bk.call_number
             FROM borrow_events be
-            LEFT JOIN books bk ON bk.metadata_id = be.metadata_id
-            WHERE be.checkout_date IS NOT NULL AND be.source != 'checkout'
-        """).fetchall()
+            LEFT JOIN books_in_library bk
+                ON bk.metadata_id = be.metadata_id AND bk.library_id = be.library_id
+            WHERE be.checkout_date IS NOT NULL
+              AND be.source != 'checkout'
+              AND be.library_id = ?
+        """, (LIBRARY_ID,)).fetchall()
         cat_counts = defaultdict(int)
         for r in rows:
             cat_counts[book_category(r["call_number"])] += 1
@@ -372,6 +410,7 @@ def api_history_category_data():
 
 
 _ol_cover_cache = {}
+
 
 @app.route("/api/ol-cover-search/<isbn>")
 def api_ol_cover_search(isbn):
@@ -407,18 +446,20 @@ def history():
     current = conn.execute("""
         SELECT b.*, bk.title, bk.subtitle, bk.author, bk.isbn, bk.metadata_id
         FROM borrow_events b
-        LEFT JOIN books bk ON bk.metadata_id = b.metadata_id
-        WHERE b.is_current = 1
+        LEFT JOIN books_in_library bk
+            ON bk.metadata_id = b.metadata_id AND bk.library_id = b.library_id
+        WHERE b.is_current = 1 AND b.library_id = ?
         ORDER BY COALESCE(b.checkout_date, '9999-12-31') ASC
-    """).fetchall()
+    """, (LIBRARY_ID,)).fetchall()
 
     past = conn.execute("""
         SELECT b.*, bk.title, bk.subtitle, bk.author, bk.isbn, bk.metadata_id
         FROM borrow_events b
-        LEFT JOIN books bk ON bk.metadata_id = b.metadata_id
-        WHERE b.source = 'history'
+        LEFT JOIN books_in_library bk
+            ON bk.metadata_id = b.metadata_id AND bk.library_id = b.library_id
+        WHERE b.source = 'history' AND b.library_id = ?
         ORDER BY b.checkout_date DESC
-    """).fetchall()
+    """, (LIBRARY_ID,)).fetchall()
 
     current_list = []
     for c in current:
@@ -440,10 +481,12 @@ def history():
         SELECT strftime('%Y-%m', checkout_date) AS month,
                COUNT(*) AS borrowed
         FROM borrow_events
-        WHERE checkout_date IS NOT NULL AND source != 'checkout'
+        WHERE checkout_date IS NOT NULL
+          AND source != 'checkout'
+          AND library_id = ?
         GROUP BY month
         ORDER BY month
-    """).fetchall()
+    """, (LIBRARY_ID,)).fetchall()
 
     cumulative = 0
     chart_months = []
@@ -458,9 +501,12 @@ def history():
     cat_rows = conn.execute("""
         SELECT bk.call_number
         FROM borrow_events be
-        LEFT JOIN books bk ON bk.metadata_id = be.metadata_id
-        WHERE be.checkout_date IS NOT NULL AND be.source != 'checkout'
-    """).fetchall()
+        LEFT JOIN books_in_library bk
+            ON bk.metadata_id = be.metadata_id AND bk.library_id = be.library_id
+        WHERE be.checkout_date IS NOT NULL
+          AND be.source != 'checkout'
+          AND be.library_id = ?
+    """, (LIBRARY_ID,)).fetchall()
     cat_counts = defaultdict(int)
     for r in cat_rows:
         cat_counts[book_category(r["call_number"])] += 1
@@ -475,9 +521,23 @@ def history():
                            chart_cats=chart_cats)
 
 
+# ── update ──
+
 @app.route("/api/update", methods=["POST"])
 def trigger_update():
     ok = updater.run_manual()
+    return jsonify({"success": ok})
+
+
+@app.route("/api/update-weekly", methods=["POST"])
+def trigger_weekly():
+    ok = updater.run_weekly_manual()
+    return jsonify({"success": ok})
+
+
+@app.route("/api/update-monthly", methods=["POST"])
+def trigger_monthly():
+    ok = updater.run_monthly_manual()
     return jsonify({"success": ok})
 
 
@@ -496,7 +556,9 @@ def stats():
     years = db.get_year_distribution(conn)
     sync_time = db.get_recommendation_sync_time(conn)
 
-    cat_rows = conn.execute("SELECT call_number FROM books WHERE active = 1").fetchall()
+    cat_rows = conn.execute("""
+        SELECT call_number FROM books_in_library WHERE active = 1 AND library_id = ?
+    """, (LIBRARY_ID,)).fetchall()
     cat_counts = defaultdict(int)
     for r in cat_rows:
         cat_counts[book_category(r["call_number"])] += 1
@@ -528,6 +590,8 @@ def stats():
                            update_window_start=config.UPDATE_WINDOW_START,
                            update_window_end=config.UPDATE_WINDOW_END)
 
+
+# ── template filters ──
 
 @app.template_filter("fmt_label")
 def _fmt_label_filter(val):
@@ -598,11 +662,11 @@ def _dedup(val):
 @app.template_filter("duration_format")
 def _duration_format(secs):
     if secs is None:
-        return "—"
+        return "\u2014"
     try:
         s = int(secs)
     except (ValueError, TypeError):
-        return "—"
+        return "\u2014"
     if s < 60:
         return f"{s}s"
     return f"{s // 60}m {s % 60}s"
@@ -610,14 +674,6 @@ def _duration_format(secs):
 
 @app.template_filter("best_series")
 def _best_series(series_list, title=None):
-    """Pick the best 1-2 series names to show on the detail page.
-    Strategy:
-    - Clean parentheses and trailing junk like " book"/" series"
-    - Prefer shorter, core names over longer qualified ones
-    - When names overlap (one is substring of another), keep the shorter core
-    - Never drop a series just because it matches the book title (Dog Man etc.)
-    - Return at most 2, nicely capitalized
-    """
     if not series_list:
         return []
 
@@ -632,11 +688,9 @@ def _best_series(series_list, title=None):
     def clean_name(s):
         s = strip_parens(s)
         s = re.sub(r"[\s,;:]+$", "", s).strip()
-        # drop trailing " book" / " books" for display (common noise in series names)
         s = re.sub(r"\s+books?$", "", s, flags=re.IGNORECASE).strip()
         return s
 
-    # Normalize and dedup
     items = []
     seen = set()
     for s in series_list:
@@ -654,22 +708,19 @@ def _best_series(series_list, title=None):
     if not items:
         return []
 
-    # Process shortest first
     items.sort()
 
     kept = []
     for _, name in items:
         lname = name.lower()
-        # Skip if we already have a shorter core that this extends
         if any(lname != kk.lower() and kk.lower() in lname for kk in kept):
             continue
-        # If this is shorter and contained in an existing, replace the longer one
         replaced = False
         new_kept = []
         for k in kept:
             if lname in k.lower() and lname != k.lower():
                 replaced = True
-                continue  # drop the longer
+                continue
             new_kept.append(k)
         kept = new_kept
         if replaced or not any(lname != kk.lower() and lname in kk.lower() for kk in kept):
@@ -677,8 +728,8 @@ def _best_series(series_list, title=None):
         if len(kept) >= 2:
             break
 
-    # Nice display casing
     SMALL = {"a", "an", "the", "and", "or", "of", "in", "on", "for", "to", "with"}
+
     def nice(s):
         words = s.split()
         out = []
@@ -853,8 +904,6 @@ def inject_debug():
 
 
 if __name__ == "__main__":
-    # When the restart button was used, the previous process may still hold port 5050
-    # (TCP TIME_WAIT). Sleep long enough before trying to bind.
     if os.environ.get("BIBLIORECS_RESTARTING"):
         import time
         print("Restart: waiting for previous server to release port 5050...")

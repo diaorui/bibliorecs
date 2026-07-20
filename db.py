@@ -5,8 +5,21 @@ from datetime import datetime
 DB_PATH = os.path.join(os.path.dirname(__file__), "books.db")
 
 SCHEMA_SQL = """
-CREATE TABLE IF NOT EXISTS books (
-    metadata_id TEXT PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS works (
+    work_id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    author TEXT,
+    description TEXT,
+    subjects TEXT,
+    series TEXT,
+    first_publish_year INTEGER,
+    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS books_in_library (
+    metadata_id TEXT NOT NULL,
+    library_id TEXT NOT NULL,
+    work_id TEXT REFERENCES works(work_id),
     title TEXT NOT NULL,
     subtitle TEXT,
     author TEXT,
@@ -23,19 +36,23 @@ CREATE TABLE IF NOT EXISTS books (
     series TEXT,
     super_formats TEXT,
     consumption_format TEXT,
+    active INTEGER DEFAULT 1,
     first_synced TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    active INTEGER DEFAULT 1
+    PRIMARY KEY (metadata_id, library_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_books_format ON books(format);
-CREATE INDEX IF NOT EXISTS idx_books_author ON books(author);
-CREATE INDEX IF NOT EXISTS idx_books_year ON books(publication_year);
-CREATE INDEX IF NOT EXISTS idx_books_lang ON books(primary_language);
-CREATE INDEX IF NOT EXISTS idx_books_content_type ON books(content_type);
+CREATE INDEX IF NOT EXISTS idx_bil_work ON books_in_library(work_id);
+CREATE INDEX IF NOT EXISTS idx_bil_library ON books_in_library(library_id);
+CREATE INDEX IF NOT EXISTS idx_bil_format ON books_in_library(format);
+CREATE INDEX IF NOT EXISTS idx_bil_author ON books_in_library(author);
+CREATE INDEX IF NOT EXISTS idx_bil_year ON books_in_library(publication_year);
+CREATE INDEX IF NOT EXISTS idx_bil_lang ON books_in_library(primary_language);
+CREATE INDEX IF NOT EXISTS idx_bil_content ON books_in_library(content_type);
 
 CREATE TABLE IF NOT EXISTS availability (
-    metadata_id TEXT PRIMARY KEY,
+    metadata_id TEXT NOT NULL,
+    library_id TEXT NOT NULL,
     status TEXT,
     available_copies INTEGER DEFAULT 0,
     total_copies INTEGER DEFAULT 0,
@@ -43,12 +60,14 @@ CREATE TABLE IF NOT EXISTS availability (
     on_order_copies INTEGER DEFAULT 0,
     localised_status TEXT,
     status_type TEXT,
-    last_checked TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    last_checked TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (metadata_id, library_id)
 );
 
 CREATE TABLE IF NOT EXISTS borrow_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     metadata_id TEXT NOT NULL,
+    library_id TEXT NOT NULL,
     checkout_date TEXT,
     source TEXT NOT NULL CHECK(source IN ('history', 'checkout')),
     library_entry_id TEXT UNIQUE,
@@ -56,11 +75,13 @@ CREATE TABLE IF NOT EXISTS borrow_events (
     synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_borrow_events_meta ON borrow_events(metadata_id);
-CREATE INDEX IF NOT EXISTS idx_borrow_events_source ON borrow_events(source);
+CREATE INDEX IF NOT EXISTS idx_be_meta ON borrow_events(metadata_id);
+CREATE INDEX IF NOT EXISTS idx_be_source ON borrow_events(source);
+CREATE INDEX IF NOT EXISTS idx_be_library ON borrow_events(library_id);
 
 CREATE TABLE IF NOT EXISTS sync_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    library_id TEXT NOT NULL,
     sync_type TEXT NOT NULL,
     query_params TEXT,
     pages_total INTEGER DEFAULT 0,
@@ -70,6 +91,17 @@ CREATE TABLE IF NOT EXISTS sync_log (
     started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     completed_at TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS recommendation_cache (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    metadata_id TEXT NOT NULL,
+    score REAL,
+    category TEXT NOT NULL,
+    category_rank INTEGER NOT NULL,
+    synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_rec_cat ON recommendation_cache(category);
 """
 
 
@@ -81,70 +113,31 @@ def get_conn():
     return conn
 
 
-def _migrate_schema(conn):
-    cols = [r[1] for r in conn.execute("PRAGMA table_info(books)").fetchall()]
-    if "cover_url" in cols:
-        conn.execute("ALTER TABLE books DROP COLUMN cover_url")
-        print("  Migration: dropped cover_url column from books")
-
-    tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
-    if "recommendation_cache" in tables:
-        rec_cols = [r[1] for r in conn.execute("PRAGMA table_info(recommendation_cache)").fetchall()]
-        if "owns_home" in rec_cols:
-            conn.execute("DROP INDEX IF EXISTS idx_rec_owns")
-            conn.execute("ALTER TABLE recommendation_cache DROP COLUMN owns_home")
-            print("  Migration: dropped owns_home from recommendation_cache")
-        if "rank" in rec_cols or "owns_central" in rec_cols:
-            conn.execute("DROP TABLE recommendation_cache")
-            print("  Migration: dropped old recommendation_cache table")
-            _create_rec_cache(conn)
-            print("  Migration: created new recommendation_cache table")
-    else:
-        _create_rec_cache(conn)
-
-    idx_names = [r[2] for r in conn.execute("SELECT * FROM sqlite_master WHERE type='index'").fetchall()
-                 if r[2] is not None]
-    if "idx_rec_cat" not in idx_names:
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_rec_cat ON recommendation_cache(category)")
-
-def _create_rec_cache(conn):
-    conn.execute("""
-        CREATE TABLE recommendation_cache (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            metadata_id TEXT NOT NULL,
-            score REAL,
-            category TEXT NOT NULL,
-            category_rank INTEGER NOT NULL,
-            synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-
-
 def init_db():
     conn = get_conn()
     conn.executescript(SCHEMA_SQL)
-    _migrate_schema(conn)
     conn.commit()
     conn.close()
 
 
-def upsert_book(conn, metadata_id, title, subtitle=None, author=None,
-                format=None, content_type=None, description=None,
-                call_number=None, publication_year=None,
-                primary_language=None, isbn=None, subjects=None,
-                composite_subjects=None, genres=None, series=None,
-                super_formats=None, consumption_format=None,
-                active=1):
+def upsert_book_in_library(conn, library_id, metadata_id, title, subtitle=None,
+                           author=None, format=None, content_type=None,
+                           description=None, call_number=None,
+                           publication_year=None, primary_language=None,
+                           isbn=None, subjects=None,
+                           composite_subjects=None, genres=None, series=None,
+                           super_formats=None, consumption_format=None,
+                           active=1):
     conn.execute("""
-        INSERT INTO books (metadata_id, title, subtitle, author, format,
-                           content_type, description, call_number,
-                           publication_year, primary_language, isbn,
-                           subjects, composite_subjects, genres, series,
-                           super_formats, consumption_format,
-                           active, last_updated)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                ?, ?)
-        ON CONFLICT(metadata_id) DO UPDATE SET
+        INSERT INTO books_in_library (
+            library_id, metadata_id, title, subtitle, author, format,
+            content_type, description, call_number,
+            publication_year, primary_language, isbn,
+            subjects, composite_subjects, genres, series,
+            super_formats, consumption_format,
+            active, last_updated
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(metadata_id, library_id) DO UPDATE SET
             title=excluded.title, subtitle=excluded.subtitle,
             author=excluded.author, format=excluded.format,
             content_type=excluded.content_type,
@@ -161,7 +154,7 @@ def upsert_book(conn, metadata_id, title, subtitle=None, author=None,
             last_updated=excluded.last_updated,
             active=excluded.active
     """, (
-        metadata_id, title, subtitle, author, format,
+        library_id, metadata_id, title, subtitle, author, format,
         content_type, description, call_number,
         publication_year, primary_language, isbn,
         subjects, composite_subjects, genres, series,
@@ -170,16 +163,43 @@ def upsert_book(conn, metadata_id, title, subtitle=None, author=None,
     ))
 
 
-def upsert_availability(conn, metadata_id, status, available_copies,
+def update_work_id(conn, library_id, metadata_id, work_id):
+    conn.execute(
+        "UPDATE books_in_library SET work_id = ? WHERE metadata_id = ? AND library_id = ?",
+        (work_id, metadata_id, library_id)
+    )
+
+
+def upsert_work(conn, work_id, title, author=None, description=None,
+                subjects=None, series=None, first_publish_year=None):
+    conn.execute("""
+        INSERT INTO works (work_id, title, author, description, subjects,
+                           series, first_publish_year, last_updated)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(work_id) DO UPDATE SET
+            title=excluded.title, author=excluded.author,
+            description=excluded.description, subjects=excluded.subjects,
+            series=excluded.series,
+            first_publish_year=excluded.first_publish_year,
+            last_updated=excluded.last_updated
+    """, (
+        work_id, title, author, description, subjects,
+        series, first_publish_year,
+        datetime.utcnow().isoformat()
+    ))
+
+
+def upsert_availability(conn, library_id, metadata_id, status, available_copies,
                         total_copies, held_copies, on_order_copies=0,
                         localised_status=None, status_type=None):
     conn.execute("""
-        INSERT INTO availability (metadata_id, status, available_copies,
-                                  total_copies, held_copies, on_order_copies,
+        INSERT INTO availability (metadata_id, library_id, status,
+                                  available_copies, total_copies,
+                                  held_copies, on_order_copies,
                                   localised_status, status_type,
                                   last_checked)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(metadata_id) DO UPDATE SET
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(metadata_id, library_id) DO UPDATE SET
             status=excluded.status,
             available_copies=excluded.available_copies,
             total_copies=excluded.total_copies,
@@ -189,19 +209,21 @@ def upsert_availability(conn, metadata_id, status, available_copies,
             status_type=excluded.status_type,
             last_checked=excluded.last_checked
     """, (
-        metadata_id, status, available_copies,
+        metadata_id, library_id, status, available_copies,
         total_copies, held_copies, on_order_copies,
         localised_status, status_type,
         datetime.utcnow().isoformat()
     ))
 
 
-def upsert_borrow_event(conn, metadata_id, checkout_date, source, library_entry_id, is_current=0):
+def upsert_borrow_event(conn, library_id, metadata_id, checkout_date, source,
+                        library_entry_id, is_current=0):
     conn.execute("""
-        INSERT INTO borrow_events (metadata_id, checkout_date, source, library_entry_id, is_current)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO borrow_events (library_id, metadata_id, checkout_date,
+                                   source, library_entry_id, is_current)
+        VALUES (?, ?, ?, ?, ?, ?)
         ON CONFLICT(library_entry_id) DO NOTHING
-    """, (metadata_id, checkout_date, source, library_entry_id, is_current))
+    """, (library_id, metadata_id, checkout_date, source, library_entry_id, is_current))
 
 
 def clear_current_checkouts(conn):
@@ -213,13 +235,14 @@ def get_borrow_event_ids(conn):
     return {r["library_entry_id"] for r in rows}
 
 
-def get_borrow_events_for_recommendation(conn):
+def get_borrow_events_for_recommendation(conn, library_id):
     rows = conn.execute("""
         SELECT b.metadata_id, b.checkout_date, b.is_current
         FROM borrow_events b
-        INNER JOIN books bk ON bk.metadata_id = b.metadata_id
-        WHERE bk.active = 1
-    """).fetchall()
+        INNER JOIN books_in_library bk
+            ON bk.metadata_id = b.metadata_id AND bk.library_id = b.library_id
+        WHERE bk.active = 1 AND b.library_id = ?
+    """, (library_id,)).fetchall()
     return [dict(r) for r in rows]
 
 
@@ -234,13 +257,14 @@ def upsert_recommendation(conn, metadata_id, score, category, category_rank):
     """, (metadata_id, score, category, category_rank))
 
 
-def get_category_order(conn):
+def get_category_order(conn, library_id):
     rows = conn.execute("""
         SELECT b.call_number, e.checkout_date, e.is_current
         FROM borrow_events e
-        INNER JOIN books b ON b.metadata_id = e.metadata_id
-        WHERE b.active = 1 AND e.checkout_date IS NOT NULL
-    """).fetchall()
+        INNER JOIN books_in_library b
+            ON b.metadata_id = e.metadata_id AND b.library_id = e.library_id
+        WHERE b.active = 1 AND e.checkout_date IS NOT NULL AND e.library_id = ?
+    """, (library_id,)).fetchall()
     return [dict(r) for r in rows]
 
 
@@ -251,11 +275,37 @@ def get_recommendation_sync_time(conn):
     return None
 
 
-def start_sync_log(conn, sync_type, query_params, pages_total):
+def get_work_ids_with_isbns(conn):
+    rows = conn.execute("""
+        SELECT DISTINCT work_id FROM books_in_library
+        WHERE work_id IS NOT NULL
+    """).fetchall()
+    return [r["work_id"] for r in rows]
+
+
+def get_isbns_without_work(conn):
+    rows = conn.execute("""
+        SELECT DISTINCT isbn FROM books_in_library
+        WHERE isbn IS NOT NULL AND isbn != '' AND work_id IS NULL
+    """).fetchall()
+    return [r["isbn"] for r in rows]
+
+
+def get_active_books(conn, library_id):
+    rows = conn.execute("""
+        SELECT b.metadata_id, b.call_number, b.publication_year, w.work_id
+        FROM books_in_library b
+        LEFT JOIN works w ON w.work_id = b.work_id
+        WHERE b.active = 1 AND b.library_id = ?
+    """, (library_id,)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def start_sync_log(conn, library_id, sync_type, query_params, pages_total):
     cur = conn.execute("""
-        INSERT INTO sync_log (sync_type, query_params, pages_total, status)
-        VALUES (?, ?, ?, 'running')
-    """, (sync_type, query_params, pages_total))
+        INSERT INTO sync_log (library_id, sync_type, query_params, pages_total, status)
+        VALUES (?, ?, ?, ?, 'running')
+    """, (library_id, sync_type, query_params, pages_total))
     conn.commit()
     return cur.lastrowid
 
@@ -286,7 +336,7 @@ def get_stats(conn):
             SUM(CASE WHEN description IS NOT NULL AND description != '' THEN 1 ELSE 0 END) as with_description,
             SUM(CASE WHEN content_type IS NOT NULL THEN 1 ELSE 0 END) as with_content_type,
             SUM(CASE WHEN series IS NOT NULL AND series != '[]' THEN 1 ELSE 0 END) as with_series
-        FROM books WHERE active = 1
+        FROM books_in_library WHERE active = 1
     """).fetchone()
     return dict(row)
 
@@ -294,7 +344,7 @@ def get_stats(conn):
 def get_format_distribution(conn):
     rows = conn.execute("""
         SELECT format, COUNT(*) as count
-        FROM books WHERE active = 1 GROUP BY format ORDER BY count DESC
+        FROM books_in_library WHERE active = 1 GROUP BY format ORDER BY count DESC
     """).fetchall()
     return [dict(r) for r in rows]
 
@@ -302,7 +352,7 @@ def get_format_distribution(conn):
 def get_content_type_distribution(conn):
     rows = conn.execute("""
         SELECT content_type, COUNT(*) as count
-        FROM books WHERE active = 1 GROUP BY content_type ORDER BY count DESC
+        FROM books_in_library WHERE active = 1 GROUP BY content_type ORDER BY count DESC
     """).fetchall()
     return [dict(r) for r in rows]
 
@@ -310,7 +360,8 @@ def get_content_type_distribution(conn):
 def get_language_distribution(conn):
     rows = conn.execute("""
         SELECT primary_language, COUNT(*) as count
-        FROM books WHERE active = 1 GROUP BY primary_language ORDER BY count DESC LIMIT 20
+        FROM books_in_library WHERE active = 1 GROUP BY primary_language
+        ORDER BY count DESC LIMIT 20
     """).fetchall()
     return [dict(r) for r in rows]
 
@@ -318,7 +369,7 @@ def get_language_distribution(conn):
 def get_year_distribution(conn):
     rows = conn.execute("""
         SELECT publication_year, COUNT(*) as count
-        FROM books WHERE active = 1 AND publication_year IS NOT NULL
+        FROM books_in_library WHERE active = 1 AND publication_year IS NOT NULL
         GROUP BY publication_year ORDER BY publication_year DESC LIMIT 30
     """).fetchall()
     return [dict(r) for r in rows]
@@ -326,14 +377,14 @@ def get_year_distribution(conn):
 
 def get_sample_books(conn, n=10):
     rows = conn.execute("""
-        SELECT metadata_id, title, subtitle, author, format,
+        SELECT metadata_id, library_id, title, subtitle, author, format,
                content_type, publication_year,
                subjects, genres, description
-        FROM books ORDER BY RANDOM() LIMIT ?
+        FROM books_in_library ORDER BY RANDOM() LIMIT ?
     """, (n,)).fetchall()
     return [dict(r) for r in rows]
 
 
 def get_book_count(conn):
-    row = conn.execute("SELECT COUNT(*) as cnt FROM books").fetchone()
+    row = conn.execute("SELECT COUNT(*) as cnt FROM books_in_library").fetchone()
     return row['cnt']

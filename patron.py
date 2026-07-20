@@ -4,6 +4,8 @@ import config
 import api
 import db
 
+LIBRARY_ID = config.LIBRARY_ID
+
 
 def sync_history(conn, bc_token, session_id, account_id):
     before = db.get_borrow_event_ids(conn)
@@ -31,7 +33,7 @@ def sync_history(conn, bc_token, session_id, account_id):
             if not mid:
                 continue
             db.upsert_borrow_event(
-                conn, mid, entry.get("checkedoutDate"),
+                conn, LIBRARY_ID, mid, entry.get("checkedoutDate"),
                 "history", eid, 0
             )
             total_new += 1
@@ -53,7 +55,7 @@ def sync_checkouts(conn, bc_token, session_id, account_id):
         if not mid:
             continue
         db.upsert_borrow_event(
-            conn, mid, checkout.get("dueDate"),
+            conn, LIBRARY_ID, mid, checkout.get("dueDate"),
             "checkout", f"co_{cid}", 1
         )
         count += 1

@@ -32,24 +32,28 @@
 <div class="section">
   <h2 class="section-title">Auto-Update</h2>
   <table>
-    <thead><tr><th>Task</th><th>Last Run</th><th>Duration</th><th>State</th></tr></thead>
+    <thead><tr><th>Task</th><th>Schedule</th><th>Last Run</th><th>Duration</th><th>State</th><th></th></tr></thead>
     <tbody>
+      {% for task, label, schedule, api in [
+        ('daily', 'Daily', 'every day', '/api/update'),
+        ('weekly', 'Weekly', 'every week', '/api/update-weekly'),
+        ('monthly', 'Monthly', 'every month', '/api/update-monthly'),
+      ] %}
+      {% set t = update_status.get(task, {}) %}
       <tr>
-        <td>Daily Update</td>
-        <td>{% set d = update_status.get('daily', {}) %}
-          {%- set ts = d.get('last_ok') or d.get('last_run') -%}
-          {%- if ts %}<time class="local-time" datetime="{{ ts }}">{{ ts }}</time>{% else %}never{% endif -%}
-        </td>
-        <td>{{ d.get('duration_sec') | duration_format }}</td>
-        <td>{{ d.get('state', '—') }}{% if d.get('error') %} — {{ d.error }}{% endif %}</td>
+        <td><strong>{{ label }}</strong></td>
+        <td style="font-size:0.82rem;color:#86868b">{{ schedule }}</td>
+        <td>{% set ts = t.get('last_ok') or t.get('last_run') %}{% if ts %}<time class="local-time" datetime="{{ ts }}">{{ ts }}</time>{% else %}never{% endif %}</td>
+        <td>{{ t.get('duration_sec') | duration_format }}</td>
+        <td>{{ t.get('state', '—') }}{% if t.get('error') %} — {{ t.error }}{% endif %}</td>
+        <td><button onclick="triggerNamed(this, '{{ api }}')" style="padding:2px 8px;font-size:0.75rem;border-radius:5px;border:1px solid #2563eb;background:#fff;color:#2563eb;cursor:pointer;font-weight:500">Run</button></td>
       </tr>
+      {% endfor %}
     </tbody>
   </table>
   <p style="font-size:0.82rem;color:#86868b;margin-top:8px">
     {% if update_status.now == 'idle' %}
       Idle. Next window: {{ update_window_start }}:00–{{ update_window_end }}:00
-      <button onclick="triggerUpdate(this)"
-        style="margin-left:10px;padding:4px 10px;font-size:0.78rem;border-radius:6px;border:1px solid #2563eb;background:#fff;color:#2563eb;cursor:pointer;font-weight:500;vertical-align:middle">Run Now</button>
     {% else %}
       <strong style="color:#2563eb">{{ update_status.now }}</strong>
       <button onclick="triggerStop(this)"
@@ -289,6 +293,21 @@ function triggerUpdate(btn) {
     .catch(function() {
       btn.textContent = 'Failed';
       setTimeout(function() { btn.disabled = false; btn.textContent = 'Run Now'; }, 3000);
+    });
+}
+
+function triggerNamed(btn, url) {
+  btn.disabled = true;
+  btn.textContent = '...';
+  fetch(url, { method: 'POST' })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      btn.textContent = data.success ? 'Started' : 'Busy';
+      setTimeout(function() { location.reload(); }, 3000);
+    })
+    .catch(function() {
+      btn.textContent = 'Error';
+      setTimeout(function() { location.reload(); }, 3000);
     });
 }
 
