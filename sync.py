@@ -19,6 +19,7 @@ FORMAT_LABELS = {
     "PAPERBACK": "Paperback",
     "BOARD_BK": "Board Book",
     "GRAPHIC_NOVEL": "Graphic Novel",
+    "LPRINT": "Large Print",
 }
 
 MAX_PAGE_RETRIES = 3
@@ -28,34 +29,25 @@ _t0 = 0
 
 
 def _discover_formats():
-    FALLBACK = PAPER_FORMATS
-    try:
-        print(f"  Discovering physical book formats...", end="", flush=True)
-        data = api.search_bibs_json(QUERY, gateway_base=config.GATEWAY_BASE,
-                                    f_circ="CIRC", page=1, limit=100)
-        results = api.parse_results(data)
-        bibs = api.parse_bib_entities(data)
+    print(f"  Discovering physical book formats...", end="", flush=True)
+    data = api.search_bibs_json(QUERY, gateway_base=config.GATEWAY_BASE,
+                                f_circ="CIRC", page=1, limit=100)
+    bibs = api.parse_bib_entities(data)
 
-        formats = set()
-        for r in results:
-            metadata_id = r.get("bibKey", "")
-            bib = bibs.get(metadata_id, {})
-            info = bib.get("briefInfo", {})
-            if "Book" in info.get("superFormats", []):
-                fmt = info.get("format", "")
-                if fmt:
-                    formats.add(fmt)
+    formats = set()
+    for metadata_id, bib in bibs.items():
+        info = bib.get("briefInfo", {})
+        if "BOOKS" in info.get("superFormats", []):
+            fmt = info.get("format", "")
+            if fmt:
+                formats.add(fmt)
 
-        if not formats:
-            print(" none found, using fallback")
-            return FALLBACK
+    if not formats:
+        raise RuntimeError("no physical book formats discovered from BC API")
 
-        sorted_fmts = sorted(formats)
-        print(f" {len(sorted_fmts)} found: {', '.join(sorted_fmts)}")
-        return sorted_fmts
-    except Exception as e:
-        print(f" discovery failed ({e}), using fallback")
-        return FALLBACK
+    sorted_fmts = sorted(formats)
+    print(f" {len(sorted_fmts)} found: {', '.join(sorted_fmts)}")
+    return sorted_fmts
 
 
 def run_sync(formats=None, max_pages=None, resume_from=None):
