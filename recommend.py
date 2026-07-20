@@ -86,6 +86,10 @@ def _load_embeddings():
         print(f"  Embeddings not found — generating with {config.EMBEDDING_MODEL}...")
         import generate_embeddings
         generate_embeddings.main()
+        if not os.path.exists(config.EMBEDDING_PATH):
+            raise RuntimeError(
+                "Embeddings could not be generated — works table may be empty."
+            )
     emb = np.load(config.EMBEDDING_PATH)
     with open(config.EMBEDDING_WIDS_PATH) as f:
         wids = json.load(f)
@@ -93,6 +97,12 @@ def _load_embeddings():
 
 
 def compute(conn):
+    work_count = conn.execute("SELECT COUNT(*) FROM works").fetchone()[0]
+    if work_count == 0:
+        print("  Works table is empty — skipping recommendations")
+        print("  (OL processing may not have run yet)")
+        return
+
     print(f"  Loading embeddings ({config.EMBEDDING_PATH})...")
     emb, wid_list = _load_embeddings()
     emb_norm = normalize(emb, norm="l2", axis=1)

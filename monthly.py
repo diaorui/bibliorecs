@@ -36,16 +36,27 @@ def main():
     print("\n=== Step 3/5: Full catalog sync ===")
     sync.run_sync()
 
-    print("\n=== Step 4/5: OpenLibrary data processing ===")
-    conn = db.get_conn()
-    process_ol.run(conn)
-    conn.close()
+    try:
+        import duckdb
+        duckdb_ok = True
+    except ImportError:
+        duckdb_ok = False
 
-    print("\n=== Step 5/5: Regenerating embeddings & recommendations ===")
-    generate_embeddings.main()
-    conn = db.get_conn()
-    recommend.compute(conn)
-    conn.close()
+    if duckdb_ok:
+        print("\n=== Step 4/5: OpenLibrary data processing ===")
+        conn = db.get_conn()
+        process_ol.run(conn)
+        conn.close()
+
+        print("\n=== Step 5/5: Regenerating embeddings & recommendations ===")
+        generate_embeddings.main()
+        conn = db.get_conn()
+        recommend.compute(conn)
+        conn.close()
+    else:
+        print("\n=== Step 4/5: OpenLibrary data processing ===")
+        print("  duckdb not installed — skipping OL processing, embeddings, and recommendations")
+        print("  Install: pip install duckdb")
 
     elapsed = time.time() - t0
     print(f"\nDone in {elapsed:.1f}s")
