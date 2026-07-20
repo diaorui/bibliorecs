@@ -99,7 +99,8 @@ def _map_isbns_to_works(con, conn, editions_path, isbn_set):
                               columns={{'type': 'VARCHAR', 'key': 'VARCHAR',
                                         'revision': 'INT', 'last_modified': 'VARCHAR',
                                         'json': 'VARCHAR'}},
-                              auto_detect=false, max_line_size=5000000)
+                              auto_detect=false, max_line_size=5000000,
+                              ignore_errors=true)
                 WHERE json IS NOT NULL
             )
             SELECT json_extract_string(j, '$.isbn_13[0]') AS isbn13,
@@ -154,7 +155,8 @@ def _populate_works(con, conn, works_path):
                           columns={{'type': 'VARCHAR', 'key': 'VARCHAR',
                                     'revision': 'INT', 'last_modified': 'VARCHAR',
                                     'json': 'VARCHAR'}},
-                          auto_detect=false, max_line_size=5000000)
+                          auto_detect=false, max_line_size=5000000,
+                          ignore_errors=true)
             WHERE key IN ({in_clause})
         """).fetchall()
 
