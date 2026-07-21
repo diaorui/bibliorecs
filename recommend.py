@@ -9,8 +9,6 @@ from sklearn.preprocessing import normalize
 import config
 import db
 
-LIBRARY_ID = config.LIBRARY_ID
-
 _EMB_CACHE = None
 _EMB_IDS_CACHE = None
 _EMB_MTIME = 0
@@ -96,7 +94,7 @@ def _load_embeddings():
     return _EMB_CACHE, _EMB_IDS_CACHE
 
 
-def get_recommendations(conn):
+def get_recommendations(conn, library_id):
     if not os.path.exists(config.EMBEDDING_PATH):
         return {"by_cat": {}, "has_profile": False}
 
@@ -114,7 +112,7 @@ def get_recommendations(conn):
         FROM books_in_library
         WHERE active = 1 AND library_id = ?
           AND primary_language = 'eng'
-    """, (LIBRARY_ID,)).fetchall()
+    """, (library_id,)).fetchall()
 
     min_year = date.today().year - config.NEW_BOOK_MAX_AGE_YEARS
     by_cat = defaultdict(list)
@@ -133,7 +131,7 @@ def get_recommendations(conn):
         if b["publication_year"] and b["publication_year"] >= min_year:
             new_indices.add(idx)
 
-    borrows = db.get_borrow_events_for_recommendation(conn, LIBRARY_ID)
+    borrows = db.get_borrow_events_for_recommendation(conn)
     has_profile = bool(borrows)
 
     if has_profile:

@@ -4,9 +4,6 @@ _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 SELECTED_LIBRARY = "sclibrary"
 
-HOME_BRANCH = "Central Park Library"
-HOME_BRANCH_CODE = "C"
-
 LIBRARIES = {
     "sclibrary": {
         "catalog_base": "https://sclibrary.bibliocommons.com",

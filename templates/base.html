@@ -3,13 +3,28 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{% block title %}Bibliorecs{% endblock %}</title>
+  <title>{% block title %}BibIREADS{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body>
+<body data-lib="{{ selected_library }}" data-branch="{{ selected_branch }}">
   <nav class="nav">
     <div class="nav-inner">
-      <a href="/" class="nav-brand">Bibliorecs</a>
+      <a href="/" class="nav-brand">BibIREADS</a>
+      <div class="nav-center">
+        <div class="selector-group">
+          <select id="sel-lib" class="sel-lib" onchange="onLibChange()">
+            {% for lid, lcfg in libraries.items() %}
+            <option value="{{ lid }}" {{ 'selected' if lid == selected_library else '' }}>{{ lcfg.catalog_base.replace('https://', '').replace('.bibliocommons.com', '') }}</option>
+            {% endfor %}
+          </select>
+          <select id="sel-branch" class="sel-branch">
+            {% for b in branches.get(selected_library, []) %}
+            <option value="{{ b.code }}" {{ 'selected' if b.code == selected_branch else '' }}>{{ b.name }}</option>
+            {% endfor %}
+          </select>
+          <button class="btn-sml" onclick="applySelection()">Apply</button>
+        </div>
+      </div>
       <div class="nav-links">
         <a href="/" class="nav-link">Home</a>
         <a href="/history" class="nav-link">History</a>
@@ -18,9 +33,96 @@
       </div>
     </div>
   </nav>
+
+  {% if not selected_branch %}
+  <div class="onboarding-overlay" id="onboarding">
+    <div class="onboarding-modal">
+      <h1>Welcome to BibIREADS</h1>
+      <p class="onboarding-sub">Select your library and pickup branch to get started.</p>
+
+      <div class="onboarding-step" id="step-lib">
+        <h2>Which library do you use?</h2>
+        <div class="lib-cards">
+          {% for lid, lcfg in libraries.items() %}
+          <div class="lib-card" data-lib="{{ lid }}" onclick="pickLib('{{ lid }}')">
+            <div class="lib-card-name">{{ lcfg.catalog_base.replace('https://', '').replace('.bibliocommons.com', '') }}</div>
+            <div class="lib-card-desc">{{ lcfg.catalog_base }}</div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="onboarding-step" id="step-branch" style="display:none">
+        <h2>Which branch do you pick up from?</h2>
+        <div class="branch-list" id="branch-list"></div>
+        <button class="btn" id="btn-confirm" onclick="confirmOnboarding()" disabled>Confirm</button>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
   <main class="container">
     {% block content %}{% endblock %}
   </main>
+
+  <script>
+  // ── onboarding ──
+  var _onboardingLib = null;
+  var _onboardingBranch = null;
+
+  function pickLib(lib) {
+    _onboardingLib = lib;
+    document.getElementById('step-lib').style.display = 'none';
+    document.getElementById('step-branch').style.display = 'block';
+    var list = document.getElementById('branch-list');
+    list.innerHTML = '';
+    fetch('/api/branches').then(function(r) { return r.json(); }).then(function(data) {
+      var branches = (data[lib] || {}).branches || [];
+      branches.forEach(function(b) {
+        var el = document.createElement('div');
+        el.className = 'branch-option';
+        el.textContent = b.name;
+        el.dataset.code = b.code;
+        el.onclick = function() {
+          document.querySelectorAll('.branch-option').forEach(function(x) { x.classList.remove('selected'); });
+          el.classList.add('selected');
+          _onboardingBranch = b.code;
+          document.getElementById('btn-confirm').disabled = false;
+        };
+        list.appendChild(el);
+      });
+    });
+  }
+
+  function confirmOnboarding() {
+    document.cookie = 'selected_library=' + _onboardingLib + '; path=/; max-age=31536000';
+    document.cookie = 'selected_branch=' + _onboardingBranch + '; path=/; max-age=31536000';
+    location.reload();
+  }
+
+  // ── nav selector ──
+  function onLibChange() {
+    var lib = document.getElementById('sel-lib').value;
+    var branchSel = document.getElementById('sel-branch');
+    branchSel.innerHTML = '<option value="">Loading...</option>';
+    fetch('/api/branches').then(function(r) { return r.json(); }).then(function(data) {
+      var branches = (data[lib] || {}).branches || [];
+      branchSel.innerHTML = branches.map(function(b) {
+        return '<option value="' + b.code + '">' + b.name + '</option>';
+      }).join('');
+    });
+  }
+
+  function applySelection() {
+    var lib = document.getElementById('sel-lib').value;
+    var branch = document.getElementById('sel-branch').value;
+    if (!branch) return;
+    document.cookie = 'selected_library=' + lib + '; path=/; max-age=31536000';
+    document.cookie = 'selected_branch=' + branch + '; path=/; max-age=31536000';
+    location.reload();
+  }
+  </script>
+
   <script>
   document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('.local-time').forEach(function(el) {

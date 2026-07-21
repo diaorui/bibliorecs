@@ -197,14 +197,23 @@ def get_borrow_event_ids(conn):
     return {r["library_entry_id"] for r in rows}
 
 
-def get_borrow_events_for_recommendation(conn, library_id):
-    rows = conn.execute("""
-        SELECT b.metadata_id, b.checkout_date, b.is_current
-        FROM borrow_events b
-        INNER JOIN books_in_library bk
-            ON bk.metadata_id = b.metadata_id AND bk.library_id = b.library_id
-        WHERE bk.active = 1 AND b.library_id = ?
-    """, (library_id,)).fetchall()
+def get_borrow_events_for_recommendation(conn, library_id=None):
+    if library_id:
+        rows = conn.execute("""
+            SELECT b.metadata_id, b.checkout_date, b.is_current
+            FROM borrow_events b
+            INNER JOIN books_in_library bk
+                ON bk.metadata_id = b.metadata_id AND bk.library_id = b.library_id
+            WHERE bk.active = 1 AND b.library_id = ?
+        """, (library_id,)).fetchall()
+    else:
+        rows = conn.execute("""
+            SELECT b.metadata_id, b.checkout_date, b.is_current
+            FROM borrow_events b
+            INNER JOIN books_in_library bk
+                ON bk.metadata_id = b.metadata_id AND bk.library_id = b.library_id
+            WHERE bk.active = 1
+        """).fetchall()
     return [dict(r) for r in rows]
 
 

@@ -2,6 +2,7 @@ import json
 import os
 import sys
 import re
+import time
 import urllib.error
 import urllib.request
 import urllib.parse
@@ -22,27 +23,35 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__)
 app.config["DEBUG_MODE"] = "--debug" in sys.argv or os.environ.get("BIBLIORECS_DEBUG") == "1"
 
-LIBRARY_ID = config.LIBRARY_ID
-
 OL_URL = "https://covers.openlibrary.org/b/isbn/{isbn}-{size}.jpg"
-SYN_URL = f"https://secure.syndetics.com/index.aspx?isbn={{isbn}}/{{size}}.GIF&client={config.SYNDETICS_CLIENT}&type=xw12&oclc="
 PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='180' viewBox='0 0 120 180'%3E%3Crect width='120' height='180' fill='%23e8e8ed' rx='4'/%3E%3Cpath d='M45 55v70l15-8 15 8V55z' fill='%2386868b' opacity='.4'/%3E%3Crect x='48' y='65' width='24' height='2' fill='%2386868b' opacity='.3'/%3E%3C/svg%3E"
 
 
-def _cover(isbn):
+def _lib_from_cookies():
+    lib = request.cookies.get("selected_library") or config.SELECTED_LIBRARY
+    branch = request.cookies.get("selected_branch") or ""
+    cfg = config.LIBRARIES[lib]
+    return lib, branch, cfg
+
+
+def _syn_url(isbn, size, syndetics_client):
+    return f"https://secure.syndetics.com/index.aspx?isbn={isbn}/{size}.GIF&client={syndetics_client}&type=xw12&oclc="
+
+
+def _cover(isbn, syndetics_client):
     if not isbn:
         return PLACEHOLDER, PLACEHOLDER
     return (
-        SYN_URL.format(isbn=isbn, size="LC"),
+        _syn_url(isbn, "LC", syndetics_client),
         OL_URL.format(isbn=isbn, size="L"),
     )
 
 
-def _cover_large(isbn):
+def _cover_large(isbn, syndetics_client):
     if not isbn:
         return PLACEHOLDER, PLACEHOLDER
     return (
-        SYN_URL.format(isbn=isbn, size="LC"),
+        _syn_url(isbn, "LC", syndetics_client),
         OL_URL.format(isbn=isbn, size="L"),
     )
 
@@ -54,20 +63,22 @@ def _prefer(a, b):
 @app.route("/")
 def index():
     conn = db.get_conn()
+    lib_id, branch_code, lib_cfg = _lib_from_cookies()
 
-    recs = recmod.get_recommendations(conn)
+    recs = recmod.get_recommendations(conn, lib_id)
     by_cat = recs["by_cat"]
     has_profile = recs["has_profile"]
 
     if not by_cat:
         conn.close()
-        return render_template("index.html", carousels=[])
+        return render_template("index.html", carousels=[],
+                               selected_library=lib_id, selected_branch=branch_code)
 
     for items in by_cat.values():
         for r in items:
-            _fmt_rec(r)
+            _fmt_rec(r, lib_cfg["syndetics_client"])
 
-    call_counts = db.get_category_order(conn, LIBRARY_ID)
+    call_counts = db.get_category_order(conn, lib_id)
     cat_counts = defaultdict(float)
     for row in call_counts:
         cat = recmod.book_category(row["call_number"])
@@ -113,29 +124,31 @@ def index():
         carousels.append(entry)
 
     conn.close()
-    return render_template("index.html", carousels=carousels)
+    return render_template("index.html", carousels=carousels,
+                           selected_library=lib_id, selected_branch=branch_code)
 
 
 @app.route("/book/<metadata_id>")
 def book_detail(metadata_id):
     conn = db.get_conn()
+    lib_id, branch_code, lib_cfg = _lib_from_cookies()
     row = conn.execute("""
         SELECT *
         FROM books_in_library
         WHERE metadata_id = ? AND library_id = ?
-    """, (metadata_id, LIBRARY_ID)).fetchone()
+    """, (metadata_id, lib_id)).fetchone()
     if not row:
         conn.close()
-        return redirect(f"{config.CATALOG_BASE}/v2/record/{metadata_id}")
+        return redirect(f"{lib_cfg['catalog_base']}/v2/record/{metadata_id}")
     book = dict(row)
 
     borrows = conn.execute("""
         SELECT * FROM borrow_events
         WHERE metadata_id = ? AND library_id = ?
         ORDER BY checkout_date DESC
-    """, (metadata_id, LIBRARY_ID)).fetchall()
+    """, (metadata_id, lib_id)).fetchall()
 
-    img, fallback = _cover_large(book.get("isbn"))
+    img, fallback = _cover_large(book.get("isbn"), lib_cfg["syndetics_client"])
     conn.close()
     return render_template(
         "book.html",
@@ -145,10 +158,29 @@ def book_detail(metadata_id):
         subjects=_json_list(book.get("subjects")),
         genres=_json_list(book.get("genres")),
         series=_json_list(book.get("series")),
-        catalog_url=f"{config.CATALOG_BASE}/v2/record/{metadata_id}",
+        catalog_url=f"{lib_cfg['catalog_base']}/v2/record/{metadata_id}",
         img_url=img,
         fallback_url=fallback,
+        selected_library=lib_id, selected_branch=branch_code,
     )
+
+
+# ── branches / library config ──
+
+@app.route("/api/branches")
+def api_branches():
+    result = {}
+    for lib_id, cfg in config.LIBRARIES.items():
+        try:
+            branches = api.fetch_branches(cfg["gateway_base"])
+        except Exception:
+            branches = []
+        result[lib_id] = {
+            "catalog_base": cfg["catalog_base"],
+            "syndetics_client": cfg["syndetics_client"],
+            "branches": branches,
+        }
+    return jsonify(result)
 
 
 # ── holds ──
@@ -156,6 +188,7 @@ def book_detail(metadata_id):
 @app.route("/api/holds")
 def api_holds():
     try:
+        lib_id, branch_code, lib_cfg = _lib_from_cookies()
         bc_token, session_id, account_id, _ = api._get_auth()
         data = api.fetch_holds(bc_token, session_id, account_id)
         holds_ents = data.get("entities", {}).get("holds", {})
@@ -167,7 +200,7 @@ def api_holds():
             if mid:
                 row = conn.execute(
                     "SELECT title, subtitle, author, isbn FROM books_in_library WHERE metadata_id = ? AND library_id = ?",
-                    (mid, LIBRARY_ID)
+                    (mid, lib_id)
                 ).fetchone()
             holds.append({
                 "hold_id": hid,
@@ -195,9 +228,10 @@ def api_hold_place():
     if not body or "metadata_id" not in body:
         return jsonify({"error": "metadata_id required"}), 400
     try:
+        _, branch_code, _ = _lib_from_cookies()
         bc_token, session_id, account_id, _ = api._get_auth()
         data = api.place_hold(bc_token, session_id, account_id,
-                              body["metadata_id"], config.HOME_BRANCH_CODE)
+                              body["metadata_id"], branch_code)
         holds = data.get("entities", {}).get("holds", {})
         if holds:
             hid = next(iter(holds))
@@ -296,6 +330,7 @@ def api_sync_history():
 @app.route("/api/history/data")
 def api_history_data():
     conn = db.get_conn()
+    lib_id, branch_code, lib_cfg = _lib_from_cookies()
     try:
         current = conn.execute("""
             SELECT b.*, bk.title, bk.subtitle, bk.author, bk.isbn, bk.metadata_id
@@ -304,7 +339,7 @@ def api_history_data():
                 ON bk.metadata_id = b.metadata_id AND bk.library_id = b.library_id
             WHERE b.is_current = 1 AND b.library_id = ?
             ORDER BY COALESCE(b.checkout_date, '9999-12-31') ASC
-        """, (LIBRARY_ID,)).fetchall()
+        """, (lib_id,)).fetchall()
 
         past = conn.execute("""
             SELECT b.*, bk.title, bk.subtitle, bk.author, bk.isbn, bk.metadata_id
@@ -313,12 +348,13 @@ def api_history_data():
                 ON bk.metadata_id = b.metadata_id AND bk.library_id = b.library_id
             WHERE b.source = 'history' AND b.library_id = ?
             ORDER BY b.checkout_date DESC
-        """, (LIBRARY_ID,)).fetchall()
+        """, (lib_id,)).fetchall()
 
+        syndetics = lib_cfg["syndetics_client"]
         current_list = []
         for c in current:
             c = dict(c)
-            img, fallback = _cover(c.get("isbn"))
+            img, fallback = _cover(c.get("isbn"), syndetics)
             c["img_url"] = img
             c["fallback_url"] = fallback
             c["due_label"] = due_info(c.get("checkout_date"), True)
@@ -329,7 +365,7 @@ def api_history_data():
         past_list = []
         for p in past:
             p = dict(p)
-            img, fallback = _cover(p.get("isbn"))
+            img, fallback = _cover(p.get("isbn"), syndetics)
             p["img_url"] = img
             p["fallback_url"] = fallback
             past_list.append(p)
@@ -344,6 +380,7 @@ def api_history_data():
 @app.route("/api/history/chart-data")
 def api_history_chart_data():
     conn = db.get_conn()
+    lib_id, _, _ = _lib_from_cookies()
     try:
         rows = conn.execute("""
             SELECT strftime('%Y-%m', checkout_date) AS month,
@@ -354,7 +391,7 @@ def api_history_chart_data():
               AND library_id = ?
             GROUP BY month
             ORDER BY month
-        """, (LIBRARY_ID,)).fetchall()
+        """, (lib_id,)).fetchall()
         cumulative = 0
         result = []
         for r in rows:
@@ -370,6 +407,7 @@ def api_history_chart_data():
 @app.route("/api/history/category-data")
 def api_history_category_data():
     conn = db.get_conn()
+    lib_id, _, _ = _lib_from_cookies()
     try:
         rows = conn.execute("""
             SELECT bk.call_number
@@ -379,7 +417,7 @@ def api_history_category_data():
             WHERE be.checkout_date IS NOT NULL
               AND be.source != 'checkout'
               AND be.library_id = ?
-        """, (LIBRARY_ID,)).fetchall()
+        """, (lib_id,)).fetchall()
         cat_counts = defaultdict(int)
         for r in rows:
             cat_counts[book_category(r["call_number"])] += 1
@@ -419,12 +457,16 @@ def api_ol_cover_search(isbn):
 
 @app.route("/holds")
 def holds_page():
-    return render_template("holds.html")
+    lib_id, branch_code, _ = _lib_from_cookies()
+    return render_template("holds.html",
+                           selected_library=lib_id, selected_branch=branch_code)
 
 
 @app.route("/history")
 def history():
     conn = db.get_conn()
+    lib_id, branch_code, lib_cfg = _lib_from_cookies()
+    syndetics = lib_cfg["syndetics_client"]
 
     current = conn.execute("""
         SELECT b.*, bk.title, bk.subtitle, bk.author, bk.isbn, bk.metadata_id
@@ -433,7 +475,7 @@ def history():
             ON bk.metadata_id = b.metadata_id AND bk.library_id = b.library_id
         WHERE b.is_current = 1 AND b.library_id = ?
         ORDER BY COALESCE(b.checkout_date, '9999-12-31') ASC
-    """, (LIBRARY_ID,)).fetchall()
+    """, (lib_id,)).fetchall()
 
     past = conn.execute("""
         SELECT b.*, bk.title, bk.subtitle, bk.author, bk.isbn, bk.metadata_id
@@ -442,12 +484,12 @@ def history():
             ON bk.metadata_id = b.metadata_id AND bk.library_id = b.library_id
         WHERE b.source = 'history' AND b.library_id = ?
         ORDER BY b.checkout_date DESC
-    """, (LIBRARY_ID,)).fetchall()
+    """, (lib_id,)).fetchall()
 
     current_list = []
     for c in current:
         c = dict(c)
-        img, fallback = _cover(c.get("isbn"))
+        img, fallback = _cover(c.get("isbn"), syndetics)
         c["img_url"] = img
         c["fallback_url"] = fallback
         current_list.append(c)
@@ -455,7 +497,7 @@ def history():
     past_list = []
     for p in past:
         p = dict(p)
-        img, fallback = _cover(p.get("isbn"))
+        img, fallback = _cover(p.get("isbn"), syndetics)
         p["img_url"] = img
         p["fallback_url"] = fallback
         past_list.append(p)
@@ -469,7 +511,7 @@ def history():
           AND library_id = ?
         GROUP BY month
         ORDER BY month
-    """, (LIBRARY_ID,)).fetchall()
+    """, (lib_id,)).fetchall()
 
     cumulative = 0
     chart_months = []
@@ -489,7 +531,7 @@ def history():
         WHERE be.checkout_date IS NOT NULL
           AND be.source != 'checkout'
           AND be.library_id = ?
-    """, (LIBRARY_ID,)).fetchall()
+    """, (lib_id,)).fetchall()
     cat_counts = defaultdict(int)
     for r in cat_rows:
         cat_counts[book_category(r["call_number"])] += 1
@@ -501,7 +543,8 @@ def history():
                            current=current_list,
                            past=past_list,
                            chart_data=chart_months,
-                           chart_cats=chart_cats)
+                           chart_cats=chart_cats,
+                           selected_library=lib_id, selected_branch=branch_code)
 
 
 # ── update ──
@@ -524,13 +567,14 @@ def trigger_stop_update():
 @app.route("/stats")
 def stats():
     conn = db.get_conn()
+    lib_id, branch_code, _ = _lib_from_cookies()
     s = db.get_stats(conn)
     formats = db.get_format_distribution(conn)
     languages = db.get_language_distribution(conn)
     years = db.get_year_distribution(conn)
     cat_rows = conn.execute("""
         SELECT call_number FROM books_in_library WHERE active = 1 AND library_id = ?
-    """, (LIBRARY_ID,)).fetchall()
+    """, (lib_id,)).fetchall()
     cat_counts = defaultdict(int)
     for r in cat_rows:
         cat_counts[book_category(r["call_number"])] += 1
@@ -557,7 +601,7 @@ def stats():
                            chart_langs=chart_langs,
                            chart_years=chart_years,
                            chart_cats=chart_cats,
-                           home_branch=config.HOME_BRANCH,
+                           selected_library=lib_id, selected_branch=branch_code,
                            update_status=updater.status(),
                            update_window_start=config.UPDATE_WINDOW_START,
                            update_window_end=config.UPDATE_WINDOW_END)
@@ -848,11 +892,11 @@ def _clean_genre(raw):
     return best[:25] if len(best) > 25 else best
 
 
-def _fmt_rec(r):
+def _fmt_rec(r, syndetics_client):
     desc = r.get("description") or ""
     if len(desc) > 200:
         r["description"] = desc[:200] + "\u2026"
-    img, fallback = _cover(r.get("isbn"))
+    img, fallback = _cover(r.get("isbn"), syndetics_client)
     r["img_url"] = img
     r["fallback_url"] = fallback
 
@@ -870,9 +914,36 @@ def _fmt_rec(r):
     return r
 
 
+_branches_cache = None
+_BRANCHES_CACHE_TTL = 3600
+
+
+def _get_all_branches():
+    global _branches_cache
+    now = time.time()
+    if _branches_cache and now - _branches_cache["ts"] < _BRANCHES_CACHE_TTL:
+        return _branches_cache["data"]
+    result = {}
+    for lid, cfg in config.LIBRARIES.items():
+        try:
+            result[lid] = api.fetch_branches(cfg["gateway_base"])
+        except Exception:
+            result[lid] = []
+    _branches_cache = {"data": result, "ts": now}
+    return result
+
+
 @app.context_processor
-def inject_debug():
-    return {"debug": app.config.get("DEBUG_MODE", False)}
+def inject_globals():
+    lib_id = request.cookies.get("selected_library") or config.SELECTED_LIBRARY
+    branch_code = request.cookies.get("selected_branch") or ""
+    return {
+        "debug": app.config.get("DEBUG_MODE", False),
+        "selected_library": lib_id,
+        "selected_branch": branch_code,
+        "libraries": config.LIBRARIES,
+        "branches": _get_all_branches(),
+    }
 
 
 if __name__ == "__main__":

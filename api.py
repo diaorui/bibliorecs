@@ -120,6 +120,19 @@ def extract_book_info(metadata_id, bib):
     }
 
 
+def fetch_branches(gateway_base):
+    req = urllib.request.Request(
+        f"{gateway_base}/branches",
+        headers={"Accept": "application/json"}
+    )
+    data = json.loads(urllib.request.urlopen(req, timeout=10).read().decode())
+    branches = data.get("entities", {}).get("branches", {})
+    return sorted(
+        ({"code": k, "name": v["name"]} for k, v in branches.items()),
+        key=lambda b: b["name"]
+    )
+
+
 def _parse_year(date_str):
     if not date_str:
         return None
