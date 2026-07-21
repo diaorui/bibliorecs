@@ -164,6 +164,7 @@ def _get_auth(library_id):
 
 
 def login(library_id):
+    cfg = config.LIBRARIES[library_id]
     catalog_base = cfg["catalog_base"]
 
     prefix = {"sclibrary": "SCL"}.get(library_id, library_id.upper())
