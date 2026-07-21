@@ -54,6 +54,7 @@ def run_sync(formats=None, max_pages=None, resume_from=None):
     conn = db.get_conn()
     failed_pages = []
     synced_mids = set()
+    total_record_errors = 0
 
     if resume_from:
         page = resume_from
@@ -65,7 +66,9 @@ def run_sync(formats=None, max_pages=None, resume_from=None):
         total_pages = pagination.get("pages", 1)
         if max_pages:
             total_pages = min(page + max_pages - 1, total_pages)
-        synced_mids.update(_process_page(conn, data))
+        mids, record_errors = _process_page(conn, data)
+        total_record_errors += record_errors
+        synced_mids.update(mids)
         db.update_sync_progress(conn, log_id, page)
         print(f"  Page {page}/{total_pages} done — {db.get_book_count(conn):,} books")
         page += 1
@@ -83,13 +86,13 @@ def run_sync(formats=None, max_pages=None, resume_from=None):
         log_id = db.start_sync_log(conn, LIBRARY_ID, "full",
                                    f"query={QUERY}&formats={fmt_list}",
                                    total_pages)
-        synced_mids.update(_process_page(conn, data))
+        mids, record_errors = _process_page(conn, data)
+        total_record_errors += record_errors
+        synced_mids.update(mids)
         db.update_sync_progress(conn, log_id, page)
         count = db.get_book_count(conn)
         print(f"  Page 1/{total_pages} done — {count:,} books so far")
         page = 2
-
-    total_record_errors = 0
     with ThreadPoolExecutor(max_workers=10) as pool:
         fut_map = {
             pool.submit(_fetch_page, p, fmt_list): p
