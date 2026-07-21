@@ -8,6 +8,7 @@ __pycache__/
 venv/
 .gstack/
 embeddings.npy
+embedding_ids.json
 embedding_mids.json
 embedding_wids.json
 ol_dump_*.txt.gz
