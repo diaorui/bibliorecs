@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{% block title %}BibIREADS{% endblock %}</title>
+  <title>{% block title %}Bibliorecs{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body data-lib="{{ selected_library }}" data-branch="{{ selected_branch }}">
   <nav class="nav">
     <div class="nav-inner">
-      <a href="/" class="nav-brand">BibIREADS</a>
+      <a href="/" class="nav-brand">Bibliorecs</a>
       <div class="nav-center">
         <div class="selector-group">
           <select id="sel-lib" class="sel-lib" onchange="onLibChange()">
@@ -37,7 +37,7 @@
   {% if not selected_branch %}
   <div class="onboarding-overlay" id="onboarding">
     <div class="onboarding-modal">
-      <h1>Welcome to BibIREADS</h1>
+      <h1>Welcome to Bibliorecs</h1>
       <p class="onboarding-sub">Select your library and pickup branch to get started.</p>
 
       <div class="onboarding-step" id="step-lib">
