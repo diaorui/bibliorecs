@@ -176,7 +176,7 @@ def _fetch_and_process_page(conn, page, formats, sort=None):
             print(f"  Page {page} FAILED after {MAX_PAGE_RETRIES} attempts: {e}")
             return False, set()
 
-        mids = _process_page(conn, data)
+        mids, _ = _process_page(conn, data)
         return True, mids
 
     return False, set()
