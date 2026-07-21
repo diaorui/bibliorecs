@@ -79,16 +79,6 @@ CREATE TABLE IF NOT EXISTS sync_log (
     completed_at TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS recommendation_cache (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    metadata_id TEXT NOT NULL,
-    score REAL,
-    category TEXT NOT NULL,
-    category_rank INTEGER NOT NULL,
-    synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX IF NOT EXISTS idx_rec_cat ON recommendation_cache(category);
 """
 
 
@@ -237,17 +227,6 @@ def get_borrow_events_for_recommendation(conn, library_id):
     return [dict(r) for r in rows]
 
 
-def clear_recommendation_cache(conn):
-    conn.execute("DELETE FROM recommendation_cache")
-
-
-def upsert_recommendation(conn, metadata_id, score, category, category_rank):
-    conn.execute("""
-        INSERT INTO recommendation_cache (metadata_id, score, category, category_rank)
-        VALUES (?, ?, ?, ?)
-    """, (metadata_id, score, category, category_rank))
-
-
 def get_category_order(conn, library_id):
     rows = conn.execute("""
         SELECT b.call_number, e.checkout_date, e.is_current
@@ -257,13 +236,6 @@ def get_category_order(conn, library_id):
         WHERE b.active = 1 AND e.checkout_date IS NOT NULL AND e.library_id = ?
     """, (library_id,)).fetchall()
     return [dict(r) for r in rows]
-
-
-def get_recommendation_sync_time(conn):
-    row = conn.execute("SELECT synced_at FROM recommendation_cache LIMIT 1").fetchone()
-    if row and row["synced_at"]:
-        return row["synced_at"] + "Z"
-    return None
 
 
 def get_work_ids_with_isbns(conn):

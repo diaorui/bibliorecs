@@ -10,7 +10,6 @@ import reset_db
 import sync
 import process_ol
 import generate_embeddings
-import recommend
 import api
 import patron
 
@@ -49,7 +48,7 @@ def _download_dump(url, dest):
 def main():
     t0 = time.time()
 
-    print("=== Step 1/9: Downloading fresh OL dumps ===")
+    print("=== Step 1/8: Downloading fresh OL dumps ===")
     if _needs_download(OL_EDITIONS_URL, config.OL_EDITIONS_DUMP):
         _download_dump(OL_EDITIONS_URL, config.OL_EDITIONS_DUMP)
     else:
@@ -59,10 +58,10 @@ def main():
     else:
         print("  Works dump unchanged, skipping")
 
-    print("\n=== Step 2/9: Resetting database to latest schema ===")
+    print("\n=== Step 2/8: Resetting database to latest schema ===")
     reset_db.reset()
 
-    print("\n=== Step 3/9: Full catalog sync ===")
+    print("\n=== Step 3/8: Full catalog sync ===")
     sync.run_sync()
 
     try:
@@ -72,12 +71,12 @@ def main():
         duckdb_ok = False
 
     if duckdb_ok:
-        print("\n=== Step 4/9: OpenLibrary data processing ===")
+        print("\n=== Step 4/8: OpenLibrary data processing ===")
         conn = db.get_conn()
         process_ol.run(conn)
         conn.close()
     else:
-        print("\n=== Step 4/9: OpenLibrary data processing ===")
+        print("\n=== Step 4/8: OpenLibrary data processing ===")
         print("  duckdb not installed — skipping OL processing")
         print("  Install: pip install duckdb")
 
@@ -92,27 +91,24 @@ def main():
 
     conn = db.get_conn()
 
-    print("\n=== Step 5/9: Syncing borrowing history ===")
+    print("\n=== Step 5/8: Syncing borrowing history ===")
     new_history, pages = patron.sync_history(conn, bc_token, session_id, account_id)
     print(f"  {pages} pages checked, {new_history} new entries")
 
-    print("\n=== Step 6/9: Syncing current checkouts ===")
+    print("\n=== Step 6/8: Syncing current checkouts ===")
     checkout_count = patron.sync_checkouts(conn, bc_token, session_id, account_id)
     print(f"  {checkout_count} current checkouts")
 
-    print("\n=== Step 7/9: Auto-renewing checkouts close to due ===")
+    print("\n=== Step 7/8: Auto-renewing checkouts close to due ===")
     renewed = patron.auto_renew_checkouts(conn, bc_token, session_id, account_id)
     print(f"  {renewed} checkouts renewed")
 
     if duckdb_ok:
-        print("\n=== Step 8/9: Regenerating embeddings ===")
+        print("\n=== Step 8/8: Regenerating embeddings ===")
         generate_embeddings.main()
-
-        print("\n=== Step 9/9: Computing recommendations ===")
-        recommend.compute(conn)
     else:
-        print("\n=== Step 8/9: Regenerating embeddings ===")
-        print("  duckdb not installed — skipping embeddings and recommendations")
+        print("\n=== Step 8/8: Regenerating embeddings ===")
+        print("  duckdb not installed — skipping embeddings")
 
     conn.close()
 

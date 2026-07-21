@@ -6,7 +6,7 @@ import urllib.error
 import urllib.request
 import urllib.parse
 from collections import defaultdict
-from datetime import date
+from datetime import date, datetime
 
 from flask import Flask, render_template, abort, jsonify, request, redirect
 import api
@@ -14,7 +14,8 @@ import config
 import db
 import patron
 import updater
-from recommend import book_category, _time_weight
+import recommend as recmod
+book_category = recmod.book_category
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -54,26 +55,23 @@ def _prefer(a, b):
 def index():
     conn = db.get_conn()
 
-    rows = conn.execute("""
-        SELECT r.category, r.category_rank, r.metadata_id, r.score,
-               b.title, b.subtitle, b.author, b.isbn, b.format,
-               b.content_type, b.subjects, b.genres, b.description, b.series,
-               b.call_number
-        FROM recommendation_cache r
-        INNER JOIN books_in_library b
-            ON b.metadata_id = r.metadata_id AND b.library_id = ?
-        ORDER BY r.category, r.category_rank
-    """, (LIBRARY_ID,)).fetchall()
+    recs = recmod.get_recommendations(conn)
+    by_cat = recs["by_cat"]
+    has_profile = recs["has_profile"]
 
-    by_cat = defaultdict(list)
-    for r in rows:
-        by_cat[r["category"]].append(_fmt_rec(dict(r)))
+    if not by_cat:
+        conn.close()
+        return render_template("index.html", carousels=[])
+
+    for items in by_cat.values():
+        for r in items:
+            _fmt_rec(r)
 
     call_counts = db.get_category_order(conn, LIBRARY_ID)
     cat_counts = defaultdict(float)
     for row in call_counts:
-        cat = book_category(row["call_number"])
-        cat_counts[cat] += _time_weight(row["checkout_date"], row["is_current"])
+        cat = recmod.book_category(row["call_number"])
+        cat_counts[cat] += recmod._time_weight(row["checkout_date"], row["is_current"])
 
     cat_order = sorted(
         (c for c in by_cat if c != "Other" and c != "Top Picks" and c != "New"),
@@ -114,9 +112,8 @@ def index():
             entry["description"] = ROW_DESCRIPTIONS[c]
         carousels.append(entry)
 
-    sync_time = db.get_recommendation_sync_time(conn)
     conn.close()
-    return render_template("index.html", carousels=carousels, sync_time=sync_time)
+    return render_template("index.html", carousels=carousels)
 
 
 @app.route("/book/<metadata_id>")
@@ -545,8 +542,6 @@ def stats():
     formats = db.get_format_distribution(conn)
     languages = db.get_language_distribution(conn)
     years = db.get_year_distribution(conn)
-    sync_time = db.get_recommendation_sync_time(conn)
-
     cat_rows = conn.execute("""
         SELECT call_number FROM books_in_library WHERE active = 1 AND library_id = ?
     """, (LIBRARY_ID,)).fetchall()
@@ -571,7 +566,7 @@ def stats():
 
     return render_template("stats.html", stats=s, formats=formats,
                            languages=languages,
-                           years=years, sync_time=sync_time,
+                           years=years,
                            chart_formats=chart_formats,
                            chart_langs=chart_langs,
                            chart_years=chart_years,

@@ -11,6 +11,10 @@ import db
 
 LIBRARY_ID = config.LIBRARY_ID
 
+_EMB_CACHE = None
+_EMB_WIDS_CACHE = None
+_EMB_MTIME = 0
+
 
 def book_category(call_number):
     if not call_number:
@@ -82,60 +86,56 @@ def _mmr(relevance, pairwise_sim, lambda_param, top_n):
 
 
 def _load_embeddings():
-    if not os.path.exists(config.EMBEDDING_PATH):
-        print(f"  Embeddings not found — generating with {config.EMBEDDING_MODEL}...")
-        import generate_embeddings
-        generate_embeddings.main()
-        if not os.path.exists(config.EMBEDDING_PATH):
-            raise RuntimeError(
-                "Embeddings could not be generated — works table may be empty."
-            )
-    emb = np.load(config.EMBEDDING_PATH)
-    with open(config.EMBEDDING_WIDS_PATH) as f:
-        wids = json.load(f)
-    return emb, wids
+    global _EMB_CACHE, _EMB_WIDS_CACHE, _EMB_MTIME
+    mtime = os.path.getmtime(config.EMBEDDING_PATH)
+    if _EMB_CACHE is None or mtime != _EMB_MTIME:
+        _EMB_CACHE = np.load(config.EMBEDDING_PATH)
+        with open(config.EMBEDDING_WIDS_PATH) as f:
+            _EMB_WIDS_CACHE = json.load(f)
+        _EMB_MTIME = mtime
+    return _EMB_CACHE, _EMB_WIDS_CACHE
 
 
-def compute(conn):
+def get_recommendations(conn):
     work_count = conn.execute("SELECT COUNT(*) FROM works").fetchone()[0]
     if work_count == 0:
-        print("  Works table is empty — skipping recommendations")
-        print("  (OL processing may not have run yet)")
-        return
+        return {"by_cat": {}, "has_profile": False}
 
-    print(f"  Loading embeddings ({config.EMBEDDING_PATH})...")
+    if not os.path.exists(config.EMBEDDING_PATH):
+        return {"by_cat": {}, "has_profile": False}
+
     emb, wid_list = _load_embeddings()
     emb_norm = normalize(emb, norm="l2", axis=1)
     wid_to_idx = {wid: i for i, wid in enumerate(wid_list)}
     idx_to_wid = {i: wid for i, wid in enumerate(wid_list)}
 
-    print(f"  Loaded {len(wid_list):,} work embeddings (dim={emb.shape[1]})")
-
-    # Build mapping: work_id → library metadata_ids + call_number
     books = conn.execute("""
-        SELECT b.metadata_id, b.call_number, b.publication_year, b.work_id
+        SELECT b.metadata_id, b.call_number, b.publication_year, b.work_id,
+               b.title, b.subtitle, b.author, b.isbn, b.format,
+               b.content_type, b.subjects, b.genres, b.description, b.series
         FROM books_in_library b
         WHERE b.active = 1 AND b.library_id = ? AND b.work_id IS NOT NULL
     """, (LIBRARY_ID,)).fetchall()
-    books = [dict(r) for r in books]
 
     min_year = date.today().year - config.NEW_BOOK_MAX_AGE_YEARS
     by_cat = defaultdict(list)
     new_wids = set()
     wid_to_meta = defaultdict(list)
+    meta_info = {}
 
     for b in books:
+        b = dict(b)
         wid = b["work_id"]
+        mid = b["metadata_id"]
         if wid not in wid_to_idx:
             continue
-        wid_to_meta[wid].append(b["metadata_id"])
+        wid_to_meta[wid].append(mid)
+        meta_info[mid] = b
         idx = wid_to_idx[wid]
         cat = book_category(b.get("call_number"))
         by_cat[cat].append(idx)
         if b["publication_year"] and b["publication_year"] >= min_year:
             new_wids.add(idx)
-
-    print(f"  {len(books):,} active books across {len(by_cat)} categories")
 
     borrows = db.get_borrow_events_for_recommendation(conn, LIBRARY_ID)
     has_profile = bool(borrows)
@@ -168,39 +168,30 @@ def compute(conn):
         for i in borrowed_work_indices:
             maxsim[i] = -1
     else:
-        print("  No borrow history — cold start")
         maxsim = np.ones(len(wid_list), dtype=float)
 
-    db.clear_recommendation_cache(conn)
+    result = {"by_cat": {}, "has_profile": has_profile}
 
     for cat_name, cat_indices_list in by_cat.items():
         cat_indices = np.array(cat_indices_list)
-        print(f"  [{cat_name}] {len(cat_indices):,} books...", end="")
-
-        cat_sims = maxsim[cat_indices]
         top_n = min(config.TOP_CANDIDATES, len(cat_indices))
 
         if has_profile:
+            cat_sims = maxsim[cat_indices]
             sorted_idx = np.argsort(cat_sims)[::-1][:config.MMR_TOP_K]
             sorted_idx = sorted_idx[sorted_idx < len(cat_sims)]
 
             subset = emb_norm[cat_indices[sorted_idx]]
             pairwise_sim = subset @ subset.T
 
-            mmr_selected = _mmr(
-                cat_sims[sorted_idx],
-                pairwise_sim,
-                config.MMR_LAMBDA,
-                top_n,
-            )
+            mmr_selected = _mmr(cat_sims[sorted_idx], pairwise_sim, config.MMR_LAMBDA, top_n)
             top_indices = cat_indices[sorted_idx[mmr_selected]].tolist()
         else:
-            print(" (no profile — random)", end="")
             rng = np.random.default_rng()
             top_indices = rng.choice(cat_indices, size=top_n, replace=False).tolist()
 
-        # For each selected work, pick the best metadata_id for this library
         seen_mids = set()
+        items = []
         rank = 1
         for i in top_indices:
             wid = idx_to_wid[i]
@@ -208,16 +199,17 @@ def compute(conn):
             for mid in mids:
                 if mid not in seen_mids:
                     seen_mids.add(mid)
-                    db.upsert_recommendation(conn, mid, float(maxsim[i]), cat_name, rank)
+                    info = dict(meta_info[mid])
+                    info["score"] = float(maxsim[i])
+                    info["category_rank"] = rank
+                    items.append(info)
                     rank += 1
                     break
             if rank > top_n:
                 break
 
-        print(f" {top_n} recommended")
+        result["by_cat"][cat_name] = items
 
-    # Global Top Picks
-    print(f"  [Top Picks] computing global mix...", end="")
     if has_profile:
         all_book_indices = np.concatenate(list(by_cat.values()))
         global_sims = maxsim[all_book_indices]
@@ -225,14 +217,11 @@ def compute(conn):
         sorted_idx = np.argsort(global_sims)[::-1][:top_k]
         subset = emb_norm[all_book_indices[sorted_idx]]
         pairwise_sim = subset @ subset.T
-        mmr_selected = _mmr(
-            global_sims[sorted_idx],
-            pairwise_sim,
-            config.MMR_LAMBDA,
-            config.TOP_CANDIDATES,
-        )
+        mmr_selected = _mmr(global_sims[sorted_idx], pairwise_sim, config.MMR_LAMBDA, config.TOP_CANDIDATES)
         top_indices = all_book_indices[sorted_idx[mmr_selected]].tolist()
+
         seen_mids = set()
+        items = []
         rank = 1
         for i in top_indices:
             wid = idx_to_wid[i]
@@ -240,15 +229,14 @@ def compute(conn):
             for mid in mids:
                 if mid not in seen_mids:
                     seen_mids.add(mid)
-                    db.upsert_recommendation(conn, mid, float(maxsim[i]), "Top Picks", rank)
+                    info = dict(meta_info[mid])
+                    info["score"] = float(maxsim[i])
+                    info["category_rank"] = rank
+                    items.append(info)
                     rank += 1
                     break
-        print(f" {len(top_indices)} recommended")
-    else:
-        print(" skipped (no profile)")
+        result["by_cat"]["Top Picks"] = items
 
-    # New books
-    print(f"  [New] computing new book picks...", end="")
     if new_wids:
         new_arr = np.array(list(new_wids), dtype=int)
         new_sims = maxsim[new_arr]
@@ -257,22 +245,16 @@ def compute(conn):
         if has_profile:
             sorted_idx = np.argsort(new_sims)[::-1][:config.MMR_TOP_K]
             sorted_idx = sorted_idx[sorted_idx < len(new_sims)]
-
             subset = emb_norm[new_arr[sorted_idx]]
             pairwise_sim = subset @ subset.T
-
-            mmr_selected = _mmr(
-                new_sims[sorted_idx],
-                pairwise_sim,
-                config.MMR_LAMBDA,
-                top_n,
-            )
+            mmr_selected = _mmr(new_sims[sorted_idx], pairwise_sim, config.MMR_LAMBDA, top_n)
             top_indices = new_arr[sorted_idx[mmr_selected]].tolist()
         else:
             rng = np.random.default_rng()
             top_indices = rng.choice(new_arr, size=top_n, replace=False).tolist()
 
         seen_mids = set()
+        items = []
         rank = 1
         for i in top_indices:
             wid = idx_to_wid[i]
@@ -280,14 +262,12 @@ def compute(conn):
             for mid in mids:
                 if mid not in seen_mids:
                     seen_mids.add(mid)
-                    db.upsert_recommendation(conn, mid, float(maxsim[i]), "New", rank)
+                    info = dict(meta_info[mid])
+                    info["score"] = float(maxsim[i])
+                    info["category_rank"] = rank
+                    items.append(info)
                     rank += 1
                     break
-        print(f" {len(top_indices)} recommended")
-    else:
-        print(" skipped (no new books)")
+        result["by_cat"]["New"] = items
 
-    conn.commit()
-
-    total = conn.execute("SELECT COUNT(*) FROM recommendation_cache").fetchone()[0]
-    print(f"  Cached {total} recommendations total")
+    return result
