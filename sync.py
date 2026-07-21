@@ -175,9 +175,10 @@ def _process_page(conn, data, library_id):
     mids = set()
     errors = 0
     for metadata_id, bib in entities.items():
-        mids.add(metadata_id)
-        if bib.get("availability", {}).get("status") == "ON_ORDER":
+        a = bib.get("availability", {})
+        if a.get("status") == "ON_ORDER" or a.get("circulationType") == "NON_CIRCULATING":
             continue
+        mids.add(metadata_id)
         try:
             book = api.extract_book_info(metadata_id, bib)
             db.upsert_book_in_library(
