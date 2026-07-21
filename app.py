@@ -83,12 +83,12 @@ def index():
 
     for items in by_cat.values():
         for r in items:
-            _fmt_rec(r, lib_cfg["syndetics_client"])
+            _fmt_rec(r, lib_cfg["syndetics_client"], lib_id)
 
     call_counts = db.get_category_order(conn, lib_id)
     cat_counts = defaultdict(float)
     for row in call_counts:
-        cat = recmod.book_category(row["call_number"])
+        cat = recmod.book_category(row["call_number"], lib_id)
         cat_counts[cat] += recmod._time_weight(row["checkout_date"], row["is_current"])
 
     cat_order = sorted(
@@ -459,7 +459,7 @@ def api_history_category_data():
         """, (lib_id,)).fetchall()
         cat_counts = defaultdict(int)
         for r in rows:
-            cat_counts[book_category(r["call_number"])] += 1
+            cat_counts[book_category(r["call_number"], lib_id)] += 1
         result = [{"label": k, "count": v}
                   for k, v in sorted(cat_counts.items(), key=lambda x: (x[0] == "Other", -x[1]))]
         return jsonify(result)
@@ -573,7 +573,7 @@ def history():
     """, (lib_id,)).fetchall()
     cat_counts = defaultdict(int)
     for r in cat_rows:
-        cat_counts[book_category(r["call_number"])] += 1
+        cat_counts[book_category(r["call_number"], lib_id)] += 1
     chart_cats = [{"label": k, "count": v}
                   for k, v in sorted(cat_counts.items(), key=lambda x: (x[0] == "Other", -x[1]))]
 
@@ -616,7 +616,7 @@ def stats():
     """, (lib_id,)).fetchall()
     cat_counts = defaultdict(int)
     for r in cat_rows:
-        cat_counts[book_category(r["call_number"])] += 1
+        cat_counts[book_category(r["call_number"], lib_id)] += 1
     chart_cats = [{"label": k, "count": v}
                   for k, v in sorted(cat_counts.items(), key=lambda x: (x[0] == "Other", -x[1]))]
 
@@ -931,7 +931,7 @@ def _clean_genre(raw):
     return best[:25] if len(best) > 25 else best
 
 
-def _fmt_rec(r, syndetics_client):
+def _fmt_rec(r, syndetics_client, library_id=None):
     desc = r.get("description") or ""
     if len(desc) > 200:
         r["description"] = desc[:200] + "\u2026"
@@ -948,7 +948,7 @@ def _fmt_rec(r, syndetics_client):
     series = _json_list(r.get("series"))
     r["series_name"] = series[0] if series else None
 
-    r["book_category"] = book_category(r.get("call_number"))
+    r["book_category"] = book_category(r.get("call_number"), library_id)
 
     return r
 

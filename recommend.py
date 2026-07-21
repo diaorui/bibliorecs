@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from datetime import datetime, date
 from collections import defaultdict
 
@@ -14,10 +15,7 @@ _EMB_IDS_CACHE = None
 _EMB_MTIME = 0
 
 
-def book_category(call_number):
-    if not call_number:
-        return "Other"
-    cn = call_number.strip()
+def _scl_category(cn):
     if cn.startswith("Juv Picture Book"):
         return "Picture Books"
     if cn.startswith("Juv Fiction"):
@@ -41,6 +39,48 @@ def book_category(call_number):
     if cn.startswith("Juv 3"):
         return "Social Sciences"
     return "Other"
+
+
+def _scc_category(cn):
+    if cn.startswith("JE"):
+        return "Easy Readers"
+    if cn.startswith("J/ GN") or cn.startswith("J GN") or cn.startswith("/ GN"):
+        return "Graphic Novels"
+    if any(cn.startswith(p) for p in [
+        "J/ FICTION", "J FICTION", "/ FICTION",
+        "J/ PB", "J PB", "J/ SF", "/ SF",
+        "SF", "FICTION", "ANR FICTION",
+        "J/ SS", "J SS", "J/ LT", "J LT",
+        "J/ CLASSIC", "/ CLASSIC",
+    ]):
+        return "Fiction"
+    if " TODDLER " in cn or cn.endswith(" TODDLER") or cn.startswith("TODDLER"):
+        return "Picture Books"
+    for p in cn.split():
+        m = re.match(r"^(\d{3})", p)
+        if m:
+            n = int(m.group(1))
+            if 300 <= n <= 399:
+                return "Social Sciences"
+            if 500 <= n <= 599:
+                return "Science"
+            if 600 <= n <= 699:
+                return "Technology"
+            if 700 <= n <= 799:
+                return "Arts & Recreation"
+            if 900 <= n <= 999:
+                return "History"
+            break
+    return "Other"
+
+
+def book_category(call_number, library_id=None):
+    if not call_number:
+        return "Other"
+    cn = call_number.strip()
+    if library_id == "sccl":
+        return _scc_category(cn)
+    return _scl_category(cn)
 
 
 def _time_weight(checkout_date, is_current=False):
@@ -126,7 +166,7 @@ def get_recommendations(conn, library_id):
             continue
         meta_info[mid] = b
         idx = mid_to_idx[mid]
-        cat = book_category(b.get("call_number"))
+        cat = book_category(b.get("call_number"), library_id)
         by_cat[cat].append(idx)
         if b["publication_year"] and b["publication_year"] >= min_year:
             new_indices.add(idx)
