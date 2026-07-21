@@ -28,10 +28,15 @@ PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' widt
 
 
 def _lib_from_cookies():
-    lib = request.cookies.get("selected_library") or config.SELECTED_LIBRARY
-    branch = request.cookies.get("selected_branch") or ""
-    cfg = config.LIBRARIES[lib]
-    return lib, branch, cfg
+    conn = db.get_conn()
+    try:
+        lib = request.cookies.get("selected_library")
+        branch = request.cookies.get("selected_branch") or ""
+        if lib not in config.LIBRARIES or not db.validate_branch(conn, lib, branch):
+            return None, None, None
+        return lib, branch, config.LIBRARIES[lib]
+    finally:
+        conn.close()
 
 
 def _syn_url(isbn, size, syndetics_client):
@@ -64,6 +69,9 @@ def _prefer(a, b):
 def index():
     conn = db.get_conn()
     lib_id, branch_code, lib_cfg = _lib_from_cookies()
+    if not lib_id:
+        conn.close()
+        return render_template("index.html", carousels=[])
 
     recs = recmod.get_recommendations(conn, lib_id)
     by_cat = recs["by_cat"]
@@ -71,8 +79,7 @@ def index():
 
     if not by_cat:
         conn.close()
-        return render_template("index.html", carousels=[],
-                               selected_library=lib_id, selected_branch=branch_code)
+        return render_template("index.html", carousels=[])
 
     for items in by_cat.values():
         for r in items:
@@ -132,6 +139,10 @@ def index():
 def book_detail(metadata_id):
     conn = db.get_conn()
     lib_id, branch_code, lib_cfg = _lib_from_cookies()
+    if not lib_id:
+        conn.close()
+        return redirect(f"https://sclibrary.bibliocommons.com/v2/record/{metadata_id}")
+
     row = conn.execute("""
         SELECT *
         FROM books_in_library
@@ -169,6 +180,21 @@ def book_detail(metadata_id):
 
 @app.route("/api/branches")
 def api_branches():
+    conn = db.get_conn()
+    try:
+        rows = conn.execute("SELECT * FROM branches ORDER BY branch_name").fetchall()
+        result = {lib_id: {"catalog_base": cfg["catalog_base"],
+                           "syndetics_client": cfg["syndetics_client"],
+                           "branches": []}
+                  for lib_id, cfg in config.LIBRARIES.items()}
+        if rows:
+            for r in rows:
+                result[r["library_id"]]["branches"].append({"code": r["branch_code"], "name": r["branch_name"]})
+            return jsonify(result)
+    finally:
+        conn.close()
+
+    # Fallback: fetch from BC API directly
     result = {}
     for lib_id, cfg in config.LIBRARIES.items():
         try:
@@ -189,8 +215,10 @@ def api_branches():
 def api_holds():
     try:
         lib_id, branch_code, lib_cfg = _lib_from_cookies()
-        bc_token, session_id, account_id, _ = api._get_auth()
-        data = api.fetch_holds(bc_token, session_id, account_id)
+        if not lib_id:
+            return jsonify({"holds": [], "quotas": []})
+        bc_token, session_id, account_id, _ = api._get_auth(lib_id)
+        data = api.fetch_holds(lib_id, bc_token, session_id, account_id)
         holds_ents = data.get("entities", {}).get("holds", {})
         conn = db.get_conn()
         holds = []
@@ -228,9 +256,11 @@ def api_hold_place():
     if not body or "metadata_id" not in body:
         return jsonify({"error": "metadata_id required"}), 400
     try:
-        _, branch_code, _ = _lib_from_cookies()
-        bc_token, session_id, account_id, _ = api._get_auth()
-        data = api.place_hold(bc_token, session_id, account_id,
+        lib_id, branch_code, _ = _lib_from_cookies()
+        if not lib_id or not branch_code:
+            return jsonify({"error": "no library/branch selected"}), 400
+        bc_token, session_id, account_id, _ = api._get_auth(lib_id)
+        data = api.place_hold(lib_id, bc_token, session_id, account_id,
                               body["metadata_id"], branch_code)
         holds = data.get("entities", {}).get("holds", {})
         if holds:
@@ -261,8 +291,11 @@ def api_hold_cancel():
     if not body or "hold_id" not in body or "metadata_id" not in body:
         return jsonify({"error": "hold_id and metadata_id required"}), 400
     try:
-        bc_token, session_id, account_id, _ = api._get_auth()
-        data = api.cancel_hold(bc_token, session_id, account_id,
+        lib_id, _, _ = _lib_from_cookies()
+        if not lib_id:
+            return jsonify({"error": "no library selected"}), 400
+        bc_token, session_id, account_id, _ = api._get_auth(lib_id)
+        data = api.cancel_hold(lib_id, bc_token, session_id, account_id,
                                 body["hold_id"], body["metadata_id"])
         failures = data.get("failures") or {}
         if body["hold_id"] in failures:
@@ -277,8 +310,11 @@ def api_hold_cancel():
 @app.route("/api/checkouts")
 def api_checkouts():
     try:
-        bc_token, session_id, account_id, _ = api._get_auth()
-        mids = list(api.fetch_current_checkouts_map(bc_token, session_id, account_id))
+        lib_id, _, _ = _lib_from_cookies()
+        if not lib_id:
+            return jsonify({"checked_out": [], "error": "no library selected"})
+        bc_token, session_id, account_id, _ = api._get_auth(lib_id)
+        mids = list(api.fetch_current_checkouts_map(lib_id, bc_token, session_id, account_id))
         return jsonify({"checked_out": mids})
     except Exception as e:
         return jsonify({"checked_out": [], "error": str(e)})
@@ -318,7 +354,9 @@ def api_restart():
 def api_sync_history():
     try:
         lib_id, _, _ = _lib_from_cookies()
-        bc_token, session_id, account_id, _ = api._get_auth()
+        if not lib_id:
+            return jsonify({"synced": False, "error": "no library selected"})
+        bc_token, session_id, account_id, _ = api._get_auth(lib_id)
         conn = db.get_conn()
         co = patron.sync_checkouts(conn, bc_token, session_id, account_id, lib_id)
         hi = patron.sync_history(conn, bc_token, session_id, account_id, lib_id)
@@ -915,35 +953,31 @@ def _fmt_rec(r, syndetics_client):
     return r
 
 
-_branches_cache = None
-_BRANCHES_CACHE_TTL = 3600
-
-
-def _get_all_branches():
-    global _branches_cache
-    now = time.time()
-    if _branches_cache and now - _branches_cache["ts"] < _BRANCHES_CACHE_TTL:
-        return _branches_cache["data"]
-    result = {}
-    for lid, cfg in config.LIBRARIES.items():
-        try:
-            result[lid] = api.fetch_branches(cfg["gateway_base"])
-        except Exception:
-            result[lid] = []
-    _branches_cache = {"data": result, "ts": now}
-    return result
-
-
 @app.context_processor
 def inject_globals():
-    lib_id = request.cookies.get("selected_library") or config.SELECTED_LIBRARY
+    lib_id = request.cookies.get("selected_library") or ""
     branch_code = request.cookies.get("selected_branch") or ""
+    conn = db.get_conn()
+    try:
+        rows = conn.execute("SELECT * FROM branches ORDER BY branch_name").fetchall()
+    finally:
+        conn.close()
+    branches = {lid: [] for lid in config.LIBRARIES}
+    if rows:
+        for r in rows:
+            branches[r["library_id"]].append({"code": r["branch_code"], "name": r["branch_name"]})
+    else:
+        for lid, cfg in config.LIBRARIES.items():
+            try:
+                branches[lid] = api.fetch_branches(cfg["gateway_base"])
+            except Exception:
+                branches[lid] = []
     return {
         "debug": app.config.get("DEBUG_MODE", False),
         "selected_library": lib_id,
         "selected_branch": branch_code,
         "libraries": config.LIBRARIES,
-        "branches": _get_all_branches(),
+        "branches": branches,
     }
 
 

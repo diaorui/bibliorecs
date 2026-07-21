@@ -25,6 +25,18 @@ def main():
     conn = db.get_conn()
 
     print("\n=== Step 3/4: Syncing borrowing history ===")
+
+    print("\n--- syncing branches ---")
+    for lib_id, lib_cfg in config.LIBRARIES.items():
+        try:
+            branches = api.fetch_branches(lib_cfg["gateway_base"])
+            if branches:
+                db.replace_branches(conn, lib_id, branches)
+                print(f"  {lib_id}: {len(branches)} branches synced")
+            else:
+                print(f"  {lib_id}: empty response, keeping existing branches")
+        except Exception as e:
+            print(f"  {lib_id}: fetch failed ({e}), keeping existing branches")
     for lib_id, lib_cfg in config.LIBRARIES.items():
         print(f"\n--- {lib_id} ---")
         try:

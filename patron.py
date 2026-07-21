@@ -10,7 +10,7 @@ def sync_history(conn, bc_token, session_id, account_id, library_id):
     page = 0
 
     while True:
-        data = api.fetch_borrowing_history(bc_token, session_id, account_id, page)
+        data = api.fetch_borrowing_history(library_id, bc_token, session_id, account_id, page)
         entities = data.get("entities", {})
         history = entities.get("borrowingHistory", {})
 
@@ -42,7 +42,7 @@ def sync_history(conn, bc_token, session_id, account_id, library_id):
 
 
 def sync_checkouts(conn, bc_token, session_id, account_id, library_id):
-    data = api.fetch_current_checkouts(bc_token, session_id, account_id)
+    data = api.fetch_current_checkouts(library_id, bc_token, session_id, account_id)
     checkouts = data.get("entities", {}).get("checkouts", {})
 
     db.clear_current_checkouts(conn)
@@ -62,7 +62,7 @@ def sync_checkouts(conn, bc_token, session_id, account_id, library_id):
 
 
 def auto_renew_checkouts(conn, bc_token, session_id, account_id, library_id):
-    data = api.fetch_current_checkouts(bc_token, session_id, account_id)
+    data = api.fetch_current_checkouts(library_id, bc_token, session_id, account_id)
     checkouts = data.get("entities", {}).get("checkouts", {})
 
     now = date.today()

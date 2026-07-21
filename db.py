@@ -59,6 +59,13 @@ CREATE INDEX IF NOT EXISTS idx_be_meta ON borrow_events(metadata_id);
 CREATE INDEX IF NOT EXISTS idx_be_source ON borrow_events(source);
 CREATE INDEX IF NOT EXISTS idx_be_library ON borrow_events(library_id);
 
+CREATE TABLE IF NOT EXISTS branches (
+    library_id TEXT NOT NULL,
+    branch_code TEXT NOT NULL,
+    branch_name TEXT NOT NULL,
+    PRIMARY KEY (library_id, branch_code)
+);
+
 CREATE TABLE IF NOT EXISTS sync_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     library_id TEXT NOT NULL,
@@ -324,3 +331,23 @@ def get_sample_books(conn, n=10):
 def get_book_count(conn):
     row = conn.execute("SELECT COUNT(*) as cnt FROM books_in_library").fetchone()
     return row['cnt']
+
+
+def replace_branches(conn, library_id, branches):
+    conn.execute("DELETE FROM branches WHERE library_id = ?", (library_id,))
+    for b in branches:
+        conn.execute(
+            "INSERT INTO branches (library_id, branch_code, branch_name) VALUES (?, ?, ?)",
+            (library_id, b["code"], b["name"])
+        )
+    conn.commit()
+
+
+def validate_branch(conn, library_id, branch_code):
+    if not library_id or not branch_code:
+        return False
+    row = conn.execute(
+        "SELECT 1 FROM branches WHERE library_id = ? AND branch_code = ?",
+        (library_id, branch_code)
+    ).fetchone()
+    return row is not None

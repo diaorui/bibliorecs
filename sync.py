@@ -16,9 +16,9 @@ COMMIT_INTERVAL = 50
 _t0 = 0
 
 
-def _discover_formats(gateway_base):
+def _discover_formats(library_id):
     print(f"  Discovering physical book formats...", end="", flush=True)
-    data = api.search_bibs_json(QUERY, gateway_base=gateway_base,
+    data = api.search_bibs_json(QUERY, library_id=library_id,
                                 f_circ="CIRC", page=1, limit=100)
     bibs = api.parse_bib_entities(data)
 
@@ -50,7 +50,7 @@ def run_sync(library_id, gateway_base, formats=None, max_pages=None, resume_from
     global _t0
     _t0 = time.time()
     if formats is None:
-        formats = _discover_formats(gateway_base)
+        formats = _discover_formats(library_id)
     fmt_list = formats
     fmt_label = ", ".join(fmt_list)
     print(f"Sync [{library_id}]: query='{QUERY}' | formats: [{fmt_label}]")
@@ -65,7 +65,7 @@ def run_sync(library_id, gateway_base, formats=None, max_pages=None, resume_from
     if resume_from:
         page = resume_from
         log_id = _get_latest_sync_log_id(conn)
-        data = api.search_bibs_json(QUERY, gateway_base=gateway_base,
+        data = api.search_bibs_json(QUERY, library_id=library_id,
                                     formats=fmt_list, f_circ="CIRC",
                                     page=page, sort=SORT, limit=100)
         pagination = api.parse_pagination(data)
@@ -80,7 +80,7 @@ def run_sync(library_id, gateway_base, formats=None, max_pages=None, resume_from
         page += 1
     else:
         page = 1
-        data = api.search_bibs_json(QUERY, gateway_base=gateway_base,
+        data = api.search_bibs_json(QUERY, library_id=library_id,
                                     formats=fmt_list, f_circ="CIRC",
                                     page=page, sort=SORT, limit=100)
         pagination = api.parse_pagination(data)
@@ -103,7 +103,7 @@ def run_sync(library_id, gateway_base, formats=None, max_pages=None, resume_from
     processed = 1
     with ThreadPoolExecutor(max_workers=10) as pool:
         fut_map = {
-            pool.submit(_fetch_page, p, fmt_list, gateway_base): p
+            pool.submit(_fetch_page, p, fmt_list, library_id): p
             for p in range(page, total_pages + 1)
         }
 
@@ -150,10 +150,10 @@ def run_sync(library_id, gateway_base, formats=None, max_pages=None, resume_from
     print(f"\nDONE! {total_books:,} books in database.")
 
 
-def _fetch_page(page, formats, gateway_base):
+def _fetch_page(page, formats, library_id):
     for attempt in range(MAX_PAGE_RETRIES):
         try:
-            return api.search_bibs_json(QUERY, gateway_base=gateway_base,
+            return api.search_bibs_json(QUERY, library_id=library_id,
                                         formats=formats, f_circ="CIRC",
                                         page=page, sort=SORT, limit=100)
         except Exception as e:
@@ -241,6 +241,17 @@ if __name__ == "__main__":
         print(__doc__)
         sys.exit(0)
 
+    if "--library" not in sys.argv:
+        print("Usage: python sync.py --library {lib_id} [--format ...] [--pages N] [--resume]")
+        print(f"Libraries: {', '.join(config.LIBRARIES)}")
+        sys.exit(1)
+
+    lib_idx = sys.argv.index("--library")
+    library_id = sys.argv[lib_idx + 1] if len(sys.argv) > lib_idx + 1 else ""
+    if library_id not in config.LIBRARIES:
+        print(f"Unknown library: {library_id}")
+        sys.exit(1)
+
     fmts = None
     if "--format" in sys.argv:
         fmts = []
@@ -253,11 +264,10 @@ if __name__ == "__main__":
         idx = sys.argv.index("--pages")
         max_pages = int(sys.argv[idx + 1])
 
+    gateway_base = config.LIBRARIES[library_id]["gateway_base"]
     if "--resume" in sys.argv:
         idx = sys.argv.index("--resume")
         resume_page = int(sys.argv[idx + 1]) if len(sys.argv) > idx + 1 else None
-        run_sync(config.SELECTED_LIBRARY, config.LIBRARIES[config.SELECTED_LIBRARY]["gateway_base"],
-                 formats=fmts, resume_from=resume_page)
+        run_sync(library_id, gateway_base, formats=fmts, resume_from=resume_page)
     else:
-        run_sync(config.SELECTED_LIBRARY, config.LIBRARIES[config.SELECTED_LIBRARY]["gateway_base"],
-                 formats=fmts, max_pages=max_pages)
+        run_sync(library_id, gateway_base, formats=fmts, max_pages=max_pages)

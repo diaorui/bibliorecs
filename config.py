@@ -2,8 +2,6 @@ import os
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-SELECTED_LIBRARY = "sclibrary"
-
 LIBRARIES = {
     "sclibrary": {
         "catalog_base": "https://sclibrary.bibliocommons.com",
