@@ -108,28 +108,36 @@ def _map_isbns_to_works(con, conn, editions_path, isbn_set):
     row_count = con.execute("SELECT COUNT(*) FROM raw_eds").fetchone()[0]
     print(f" {row_count:,} rows loaded")
 
-    isbn_list = sorted(isbn_set)
-    values = ", ".join(f"('{v}')" for v in isbn_list)
-    con.execute(f"CREATE TEMP TABLE lookup_isbns AS SELECT * FROM (VALUES {values}) AS t(isbn)")
+    con.execute("CREATE TEMP TABLE lookup_isbns AS SELECT unnest($1)::VARCHAR AS isbn", [list(isbn_set)])
 
-    result = con.execute("""
-        SELECT DISTINCT e.isbn13, e.isbn10, e.work_key
+    result13 = con.execute("""
+        SELECT DISTINCT e.isbn13, e.work_key
         FROM raw_eds e
-        INNER JOIN lookup_isbns l ON e.isbn13 = l.isbn OR e.isbn10 = l.isbn
+        WHERE e.isbn13 IN (SELECT isbn FROM lookup_isbns)
+    """).fetchall()
+
+    result10 = con.execute("""
+        SELECT DISTINCT e.isbn10, e.work_key
+        FROM raw_eds e
+        WHERE e.isbn10 IN (SELECT isbn FROM lookup_isbns)
     """).fetchall()
 
     con.execute("DROP TABLE lookup_isbns")
 
+    isbn_to_work_id = {}
+    for isbn, work_key in result13:
+        isbn_to_work_id[isbn] = work_key.replace("/works/", "")
+    for isbn, work_key in result10:
+        if isbn not in isbn_to_work_id:
+            isbn_to_work_id[isbn] = work_key.replace("/works/", "")
+
     matched = 0
-    for isbn13, isbn10, work_key in result:
-        work_id = work_key.replace("/works/", "")
-        isbn = isbn13 or isbn10
-        if isbn:
-            conn.execute(
-                "UPDATE books_in_library SET work_id = ? WHERE isbn = ? AND work_id IS NULL",
-                (work_id, isbn)
-            )
-            matched += 1
+    for isbn, work_id in isbn_to_work_id.items():
+        conn.execute(
+            "UPDATE books_in_library SET work_id = ? WHERE isbn = ? AND work_id IS NULL",
+            (work_id, isbn)
+        )
+        matched += 1
 
     con.execute("DROP TABLE raw_eds")
     conn.commit()
@@ -159,8 +167,7 @@ def _populate_works(con, conn, works_path):
     print(f" {row_count:,} rows loaded, fetching {len(work_ids):,} works...")
 
     work_key_list = [f"/works/{w}" for w in work_ids]
-    values = ", ".join(f"('{k}')" for k in work_key_list)
-    con.execute(f"CREATE TEMP TABLE lookup_work_keys AS SELECT * FROM (VALUES {values}) AS t(wk)")
+    con.execute("CREATE TEMP TABLE lookup_work_keys AS SELECT unnest($1)::VARCHAR AS wk", [work_key_list])
 
     rows = con.execute("""
         SELECT j FROM raw_works r
