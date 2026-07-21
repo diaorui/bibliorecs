@@ -93,7 +93,7 @@ def index():
 
     cat_order = sorted(
         (c for c in by_cat if c != "Other" and c != "Top Picks" and c != "New"),
-        key=lambda c: -cat_counts.get(c, 0),
+        key=lambda c: (-cat_counts.get(c, 0), -sum(r["score"] for r in by_cat[c]) / len(by_cat[c])),
     )
     if "Other" in by_cat:
         cat_order.append("Other")
