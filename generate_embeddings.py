@@ -61,18 +61,13 @@ def embed_text(w):
                 seen_g.add(g.lower())
                 cleaned_g.append(g)
         parts.append("genres: " + " ".join(cleaned_g))
-    if w.get("description"):
-        desc = w["description"]
-        if len(desc) > 200:
-            desc = desc[:200]  # longer desc hurts inference speed with little quality gain
-        parts.append("description: " + desc)
     return " | ".join(parts)
 
 
 def main():
     conn = db.get_conn()
     rows = conn.execute("""
-        SELECT metadata_id, title, author, subjects, series, genres, description
+        SELECT metadata_id, title, author, subjects, series, genres
         FROM books_in_library
         WHERE active = 1
           AND isbn IS NOT NULL AND isbn != ''
@@ -93,21 +88,13 @@ def main():
 
     texts = [embed_text(b) for b in books]
 
-    # sort by length to minimize batch padding waste on CPU
-    sort_idx = sorted(range(len(texts)), key=lambda i: len(texts[i]))
-    texts_sorted = [texts[i] for i in sort_idx]
-
     use_gpu = torch.cuda.is_available()
     if not use_gpu:
         torch.set_num_threads(os.cpu_count())
     batch_size = 256 if use_gpu else 64
 
     t0 = time.time()
-    embeddings_sorted = model.encode(texts_sorted, batch_size=batch_size, show_progress_bar=True)
-
-    embeddings = np.zeros_like(embeddings_sorted)
-    for orig_i, sorted_i in enumerate(sort_idx):
-        embeddings[orig_i] = embeddings_sorted[sorted_i]
+    embeddings = model.encode(texts, batch_size=batch_size, show_progress_bar=True)
     encode_t = time.time() - t0
     print(f"  Encoded {len(embeddings):,} vectors in {encode_t:.1f}s (dim={embeddings.shape[1]})")
 
