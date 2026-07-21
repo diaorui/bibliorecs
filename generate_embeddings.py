@@ -33,11 +33,14 @@ def embed_text(w):
         parts.append(f"author: {w['author']}.")
     series = json.loads(w["series"]) if w.get("series") else []
     seen_s = set()
+    deduped_series = []
     for s in series:
         k = s.lower().strip()
         if k not in seen_s:
             seen_s.add(k)
-            parts.append(f"series: {s}.")
+            deduped_series.append(s)
+    if deduped_series:
+        parts.append(f"series: {', '.join(deduped_series)}.")
     subjects = json.loads(w["subjects"]) if w.get("subjects") else []
     if subjects:
         cleaned = [_clean_subj(s) for s in subjects]
