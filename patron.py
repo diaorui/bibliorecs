@@ -4,10 +4,7 @@ import config
 import api
 import db
 
-LIBRARY_ID = config.LIBRARY_ID
-
-
-def sync_history(conn, bc_token, session_id, account_id):
+def sync_history(conn, bc_token, session_id, account_id, library_id):
     before = db.get_borrow_event_ids(conn)
     total_new = 0
     page = 0
@@ -33,7 +30,7 @@ def sync_history(conn, bc_token, session_id, account_id):
             if not mid:
                 continue
             db.upsert_borrow_event(
-                conn, LIBRARY_ID, mid, entry.get("checkedoutDate"),
+                conn, library_id, mid, entry.get("checkedoutDate"),
                 "history", eid, 0
             )
             total_new += 1
@@ -44,7 +41,7 @@ def sync_history(conn, bc_token, session_id, account_id):
     return total_new, page
 
 
-def sync_checkouts(conn, bc_token, session_id, account_id):
+def sync_checkouts(conn, bc_token, session_id, account_id, library_id):
     data = api.fetch_current_checkouts(bc_token, session_id, account_id)
     checkouts = data.get("entities", {}).get("checkouts", {})
 
@@ -55,7 +52,7 @@ def sync_checkouts(conn, bc_token, session_id, account_id):
         if not mid:
             continue
         db.upsert_borrow_event(
-            conn, LIBRARY_ID, mid, checkout.get("dueDate"),
+            conn, library_id, mid, checkout.get("dueDate"),
             "checkout", f"co_{cid}", 1
         )
         count += 1
@@ -64,7 +61,7 @@ def sync_checkouts(conn, bc_token, session_id, account_id):
     return count
 
 
-def auto_renew_checkouts(conn, bc_token, session_id, account_id):
+def auto_renew_checkouts(conn, bc_token, session_id, account_id, library_id):
     data = api.fetch_current_checkouts(bc_token, session_id, account_id)
     checkouts = data.get("entities", {}).get("checkouts", {})
 
@@ -127,8 +124,8 @@ def auto_renew_checkouts(conn, bc_token, session_id, account_id):
         mid = mid_by_cid.get(cid)
         if mid and new_due:
             conn.execute(
-                "UPDATE borrow_events SET checkout_date = ? WHERE metadata_id = ? AND is_current = 1",
-                (new_due, mid)
+                "UPDATE borrow_events SET checkout_date = ? WHERE metadata_id = ? AND library_id = ? AND is_current = 1",
+                (new_due, mid, library_id)
             )
             updated += 1
 

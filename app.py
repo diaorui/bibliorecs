@@ -317,10 +317,11 @@ def api_restart():
 @app.route("/api/sync-history", methods=["POST"])
 def api_sync_history():
     try:
+        lib_id, _, _ = _lib_from_cookies()
         bc_token, session_id, account_id, _ = api._get_auth()
         conn = db.get_conn()
-        co = patron.sync_checkouts(conn, bc_token, session_id, account_id)
-        hi = patron.sync_history(conn, bc_token, session_id, account_id)
+        co = patron.sync_checkouts(conn, bc_token, session_id, account_id, lib_id)
+        hi = patron.sync_history(conn, bc_token, session_id, account_id, lib_id)
         conn.close()
         return jsonify({"synced": True, "checkouts": co, "history_new": hi})
     except Exception as e:

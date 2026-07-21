@@ -22,20 +22,17 @@ def main():
         print(f"\n--- {lib_id} ---")
         sync.run_sync(lib_id, lib_cfg["gateway_base"])
 
-    print("\nLogging in...")
-    try:
-        bc_token, session_id, account_id, _ = api.login()
-    except Exception as e:
-        print(f"  Login failed: {e}")
-        return
-
-    print(f"  account_id={account_id}")
-
     conn = db.get_conn()
 
     print("\n=== Step 3/4: Syncing borrowing history ===")
-    new_history, pages = patron.sync_history(conn, bc_token, session_id, account_id)
-    print(f"  {pages} pages checked, {new_history} new entries")
+    for lib_id, lib_cfg in config.LIBRARIES.items():
+        print(f"\n--- {lib_id} ---")
+        try:
+            bc_token, session_id, account_id, _ = api.login(lib_id)
+            new_history, pages = patron.sync_history(conn, bc_token, session_id, account_id, lib_id)
+            print(f"  {pages} pages checked, {new_history} new entries")
+        except Exception as e:
+            print(f"  Skipped — {e}")
 
     print("\n=== Step 4/4: Regenerating embeddings ===")
     generate_embeddings.main()
