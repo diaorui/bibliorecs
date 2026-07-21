@@ -40,6 +40,14 @@ def _discover_formats():
     return sorted_fmts
 
 
+# sort stability across runs (tested 2026-07):
+#   title / author / published_date → 0.00% drift (fully stable)
+#   newly_acquired                  → 0.40% drift (books shift pages)
+#   relevancy                       → 1.04% drift (most unstable)
+#   call_number                     → HTTP 500    (not supported)
+SORT = "title"
+
+
 def run_sync(formats=None, max_pages=None, resume_from=None):
     global _t0
     _t0 = time.time()
@@ -61,7 +69,7 @@ def run_sync(formats=None, max_pages=None, resume_from=None):
         log_id = _get_latest_sync_log_id(conn)
         data = api.search_bibs_json(QUERY, gateway_base=config.GATEWAY_BASE,
                                     formats=fmt_list, f_circ="CIRC",
-                                    page=page, sort="newly_acquired", limit=100)
+                                    page=page, sort=SORT, limit=100)
         pagination = api.parse_pagination(data)
         total_pages = pagination.get("pages", 1)
         if max_pages:
@@ -76,7 +84,7 @@ def run_sync(formats=None, max_pages=None, resume_from=None):
         page = 1
         data = api.search_bibs_json(QUERY, gateway_base=config.GATEWAY_BASE,
                                     formats=fmt_list, f_circ="CIRC",
-                                    page=page, sort="newly_acquired", limit=100)
+                                    page=page, sort=SORT, limit=100)
         pagination = api.parse_pagination(data)
         total_pages = pagination.get("pages", 1)
         total_count = pagination.get("count", 0)
@@ -149,7 +157,7 @@ def _fetch_page(page, formats):
         try:
             return api.search_bibs_json(QUERY, gateway_base=config.GATEWAY_BASE,
                                         formats=formats, f_circ="CIRC",
-                                        page=page, sort="newly_acquired", limit=100)
+                                        page=page, sort=SORT, limit=100)
         except Exception as e:
             if attempt < MAX_PAGE_RETRIES - 1:
                 wait = 2 ** attempt
