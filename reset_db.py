@@ -6,6 +6,8 @@ def reset():
     conn = db.get_conn()
     if db.schema_matches(conn):
         print("  Schema up to date — preserving tables")
+        conn.executescript(db.SCHEMA_SQL)
+        conn.commit()
         conn.close()
         return
     rows = conn.execute(
