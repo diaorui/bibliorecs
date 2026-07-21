@@ -207,7 +207,7 @@ def get_borrow_event_ids(conn):
 def get_borrow_events_for_recommendation(conn, library_id=None):
     if library_id:
         rows = conn.execute("""
-            SELECT b.metadata_id, b.checkout_date, b.is_current
+            SELECT b.metadata_id, b.checkout_date, b.is_current, bk.group_key
             FROM borrow_events b
             INNER JOIN books_in_library bk
                 ON bk.metadata_id = b.metadata_id AND bk.library_id = b.library_id
@@ -215,7 +215,7 @@ def get_borrow_events_for_recommendation(conn, library_id=None):
         """, (library_id,)).fetchall()
     else:
         rows = conn.execute("""
-            SELECT b.metadata_id, b.checkout_date, b.is_current
+            SELECT b.metadata_id, b.checkout_date, b.is_current, bk.group_key
             FROM borrow_events b
             INNER JOIN books_in_library bk
                 ON bk.metadata_id = b.metadata_id AND bk.library_id = b.library_id

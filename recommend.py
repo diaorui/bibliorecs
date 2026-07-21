@@ -154,6 +154,24 @@ def get_recommendations(conn, library_id):
           AND primary_language = 'eng'
     """, (library_id,)).fetchall()
 
+    borrows = db.get_borrow_events_for_recommendation(conn)
+    has_profile = bool(borrows)
+
+    borrowed_mids = set()
+    borrowed_isbns = set()
+    if has_profile:
+        for b in borrows:
+            borrowed_mids.add(b["metadata_id"])
+        gk_list = [b["group_key"] for b in borrows if b.get("group_key")]
+        if gk_list:
+            placeholders = ",".join("?" * len(gk_list))
+            rows = conn.execute(f"""
+                SELECT DISTINCT isbn FROM books_in_library
+                WHERE group_key IN ({placeholders})
+                  AND isbn IS NOT NULL AND isbn != ''
+            """, gk_list)
+            borrowed_isbns = {r["isbn"] for r in rows}
+
     min_year = date.today().year - config.NEW_BOOK_MAX_AGE_YEARS
     by_cat = defaultdict(list)
     new_indices = set()
@@ -164,6 +182,8 @@ def get_recommendations(conn, library_id):
         mid = b["metadata_id"]
         if mid not in mid_to_idx:
             continue
+        if mid in borrowed_mids or (b.get("isbn") and b["isbn"] in borrowed_isbns):
+            continue
         meta_info[mid] = b
         idx = mid_to_idx[mid]
         cat = book_category(b.get("call_number"), library_id)
@@ -171,17 +191,12 @@ def get_recommendations(conn, library_id):
         if b["publication_year"] and b["publication_year"] >= min_year:
             new_indices.add(idx)
 
-    borrows = db.get_borrow_events_for_recommendation(conn)
-    has_profile = bool(borrows)
-
     if has_profile:
         valid = []
-        borrowed_indices = set()
         for b in borrows:
             mid = b["metadata_id"]
             if mid in mid_to_idx:
                 idx = mid_to_idx[mid]
-                borrowed_indices.add(idx)
                 valid.append((idx, _time_weight(b["checkout_date"], b["is_current"])))
 
         indices, weights = zip(*valid) if valid else ([], [])
@@ -191,9 +206,6 @@ def get_recommendations(conn, library_id):
         borrow_embs = emb_norm[indices]
         weighted_embs = borrow_embs * weights[:, np.newaxis]
         maxsim = np.max(weighted_embs @ emb_norm.T, axis=0)
-
-        for i in borrowed_indices:
-            maxsim[i] = -1
     else:
         maxsim = np.ones(len(mid_list), dtype=float)
 
