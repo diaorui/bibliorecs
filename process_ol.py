@@ -87,6 +87,8 @@ def run(conn):
 
 
 def _map_isbns_to_works(con, conn, editions_path, isbn_set):
+    t0 = time.time()
+
     print(f"    Loading editions dump and extracting ISBNs...", end="", flush=True)
     con.execute(f"""
         CREATE TEMP TABLE raw_eds AS
@@ -106,42 +108,38 @@ def _map_isbns_to_works(con, conn, editions_path, isbn_set):
         WHERE json_extract_string(j, '$.works[0].key') IS NOT NULL
     """)
     row_count = con.execute("SELECT COUNT(*) FROM raw_eds").fetchone()[0]
-    print(f" {row_count:,} rows loaded")
+    t1 = time.time()
+    print(f" raw_eds loaded: {row_count:,} rows ({t1-t0:.1f}s)")
 
-    con.execute("CREATE TEMP TABLE lookup_isbns AS SELECT unnest($1)::VARCHAR AS isbn", [list(isbn_set)])
-
-    result13 = con.execute("""
-        SELECT DISTINCT e.isbn13, e.work_key
-        FROM raw_eds e
-        WHERE e.isbn13 IN (SELECT isbn FROM lookup_isbns)
-    """).fetchall()
-
-    result10 = con.execute("""
-        SELECT DISTINCT e.isbn10, e.work_key
-        FROM raw_eds e
-        WHERE e.isbn10 IN (SELECT isbn FROM lookup_isbns)
-    """).fetchall()
-
-    con.execute("DROP TABLE lookup_isbns")
-
+    print(f"    Scanning raw_eds for ISBN matches...", end="", flush=True)
     isbn_to_work_id = {}
-    for isbn, work_key in result13:
-        isbn_to_work_id[isbn] = work_key.replace("/works/", "")
-    for isbn, work_key in result10:
-        if isbn not in isbn_to_work_id:
-            isbn_to_work_id[isbn] = work_key.replace("/works/", "")
+    total_rows = 0
+    result = con.execute("SELECT isbn13, isbn10, work_key FROM raw_eds")
+    while True:
+        chunk = result.fetchmany(500000)
+        if not chunk:
+            break
+        for isbn13, isbn10, work_key in chunk:
+            total_rows += 1
+            if isbn13 and isbn13 in isbn_set:
+                isbn_to_work_id[isbn13] = work_key.replace("/works/", "")
+            if isbn10 and isbn10 in isbn_set and isbn10 not in isbn_to_work_id:
+                isbn_to_work_id[isbn10] = work_key.replace("/works/", "")
+    t2 = time.time()
+    print(f" scanned {total_rows:,} rows, {len(isbn_to_work_id):,} matches ({t2-t1:.1f}s)")
 
-    matched = 0
-    for isbn, work_id in isbn_to_work_id.items():
-        conn.execute(
-            "UPDATE books_in_library SET work_id = ? WHERE isbn = ? AND work_id IS NULL",
-            (work_id, isbn)
-        )
-        matched += 1
+    print(f"    Updating books_in_library...", end="", flush=True)
+    conn.executemany(
+        "UPDATE books_in_library SET work_id = ? WHERE isbn = ? AND work_id IS NULL",
+        [(work_id, isbn) for isbn, work_id in isbn_to_work_id.items()]
+    )
+    t3 = time.time()
+    print(f" {len(isbn_to_work_id):,} rows updated ({t3-t2:.1f}s)")
 
     con.execute("DROP TABLE raw_eds")
     conn.commit()
-    print(f"    {matched:,} ISBN → work_id mappings found")
+    t4 = time.time()
+    print(f"    ISBN → work_id mapping done ({t4-t0:.1f}s)")
 
 
 def _populate_works(con, conn, works_path):
