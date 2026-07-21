@@ -89,7 +89,7 @@ def run_sync(formats=None, max_pages=None, resume_from=None):
         print(f"  Page 1/{total_pages} done — {count:,} books so far")
         page = 2
 
-    processed = 1
+    total_record_errors = 0
     with ThreadPoolExecutor(max_workers=10) as pool:
         fut_map = {
             pool.submit(_fetch_page, p, fmt_list): p
@@ -100,7 +100,8 @@ def run_sync(formats=None, max_pages=None, resume_from=None):
             p = fut_map[f]
             try:
                 data = f.result()
-                mids = _process_page(conn, data)
+                mids, page_errors = _process_page(conn, data)
+                total_record_errors += page_errors
                 synced_mids.update(mids)
                 processed += 1
                 db.update_sync_progress(conn, log_id, processed)
@@ -128,8 +129,13 @@ def run_sync(formats=None, max_pages=None, resume_from=None):
     db.complete_sync_log(conn, log_id, total_books, status)
     conn.close()
 
-    if failed_pages:
-        print(f"\nWARNING: {len(failed_pages)} page(s) failed: {failed_pages}")
+    if failed_pages or total_record_errors:
+        parts = []
+        if failed_pages:
+            parts.append(f"page errors: {len(failed_pages)} ({failed_pages})")
+        if total_record_errors:
+            parts.append(f"record errors: {total_record_errors}")
+        print(f"\nSync warnings: {'; '.join(parts)}")
     print(f"\nDONE! {total_books:,} books in database.")
 
 
@@ -174,31 +180,35 @@ def _fetch_and_process_page(conn, page, formats, sort=None):
 def _process_page(conn, data):
     entities = api.parse_bib_entities(data)
     mids = set()
+    errors = 0
     for metadata_id, bib in entities.items():
         mids.add(metadata_id)
-        book = api.extract_book_info(metadata_id, bib)
-        db.upsert_book_in_library(
-            conn,
-            library_id=LIBRARY_ID,
-            metadata_id=book["metadata_id"],
-            title=book["title"],
-            subtitle=book["subtitle"],
-            author=book["author"],
-            format=book["format"],
-            content_type=book["content_type"],
-            description=book["description"],
-            call_number=book["call_number"],
-            publication_year=book["publication_year"],
-            primary_language=book["primary_language"],
-            isbn=book["isbn"],
-            subjects=book["subjects"],
-            composite_subjects=book["composite_subjects"],
-            genres=book["genres"],
-            series=book["series"],
-            super_formats=book["super_formats"],
-            consumption_format=book["consumption_format"],
-        )
-    return mids
+        try:
+            book = api.extract_book_info(metadata_id, bib)
+            db.upsert_book_in_library(
+                conn,
+                library_id=LIBRARY_ID,
+                metadata_id=book["metadata_id"],
+                title=book["title"],
+                subtitle=book["subtitle"],
+                author=book["author"],
+                format=book["format"],
+                content_type=book["content_type"],
+                description=book["description"],
+                call_number=book["call_number"],
+                publication_year=book["publication_year"],
+                primary_language=book["primary_language"],
+                isbn=book["isbn"],
+                subjects=book["subjects"],
+                composite_subjects=book["composite_subjects"],
+                genres=book["genres"],
+                series=book["series"],
+                super_formats=book["super_formats"],
+                consumption_format=book["consumption_format"],
+            )
+        except Exception:
+            errors += 1
+    return mids, errors
 
 
 def _deactivate_stale_books(conn, active_mids):
