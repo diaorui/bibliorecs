@@ -16,23 +16,26 @@ COMMIT_INTERVAL = 50
 _t0 = 0
 
 
+_NON_PHYSICAL = {"EBOOK", "AUDIOBOOK", "MUSIC_CD", "PLAYAWAY_AUDIOBOOK",
+                 "BOOK_CD", "VIDEO_GAME", "DVD", "BLURAY", "BR", "KIT", "MAG"}
+
+
 def _discover_formats(library_id):
     print(f"  Discovering physical book formats...", end="", flush=True)
     data = api.search_bibs_json(QUERY, library_id=library_id,
-                                f_circ="CIRC", page=1, limit=100)
-    bibs = api.parse_bib_entities(data)
-
-    formats = set()
-    for metadata_id, bib in bibs.items():
-        info = bib.get("briefInfo", {})
-        if "BOOKS" in info.get("superFormats", []):
-            fmt = info.get("format", "")
-            if fmt:
-                formats.add(fmt)
-
+                                f_circ="CIRC", page=1, limit=1)
+    fields = api.parse_fields(data)
+    formats = []
+    for f in fields:
+        if f.get("id") == "FORMAT":
+            formats = [
+                ff["value"] for ff in f.get("fieldFilters", [])
+                if "BOOKS" in ff.get("groupIds", [])
+                and ff["value"] not in _NON_PHYSICAL
+            ]
+            break
     if not formats:
         raise RuntimeError("no physical book formats discovered from BC API")
-
     sorted_fmts = sorted(formats)
     print(f" {len(sorted_fmts)} found: {', '.join(sorted_fmts)}")
     return sorted_fmts
