@@ -93,6 +93,8 @@ def run_sync(formats=None, max_pages=None, resume_from=None):
         count = db.get_book_count(conn)
         print(f"  Page 1/{total_pages} done — {count:,} books so far")
         page = 2
+
+    processed = 1
     with ThreadPoolExecutor(max_workers=10) as pool:
         fut_map = {
             pool.submit(_fetch_page, p, fmt_list): p
