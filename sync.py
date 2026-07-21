@@ -8,8 +8,6 @@ import config
 import db
 import api
 
-LIBRARY_ID = config.LIBRARY_ID
-
 QUERY = 'audience:"children"'
 
 MAX_PAGE_RETRIES = 3
@@ -18,9 +16,9 @@ COMMIT_INTERVAL = 50
 _t0 = 0
 
 
-def _discover_formats():
+def _discover_formats(gateway_base):
     print(f"  Discovering physical book formats...", end="", flush=True)
-    data = api.search_bibs_json(QUERY, gateway_base=config.GATEWAY_BASE,
+    data = api.search_bibs_json(QUERY, gateway_base=gateway_base,
                                 f_circ="CIRC", page=1, limit=100)
     bibs = api.parse_bib_entities(data)
 
@@ -48,14 +46,14 @@ def _discover_formats():
 SORT = "title"
 
 
-def run_sync(formats=None, max_pages=None, resume_from=None):
+def run_sync(library_id, gateway_base, formats=None, max_pages=None, resume_from=None):
     global _t0
     _t0 = time.time()
     if formats is None:
-        formats = _discover_formats()
+        formats = _discover_formats(gateway_base)
     fmt_list = formats
     fmt_label = ", ".join(fmt_list)
-    print(f"Sync [{LIBRARY_ID}]: query='{QUERY}' | formats: [{fmt_label}]")
+    print(f"Sync [{library_id}]: query='{QUERY}' | formats: [{fmt_label}]")
     if max_pages:
         print(f"      max pages: {max_pages}")
 
@@ -67,14 +65,14 @@ def run_sync(formats=None, max_pages=None, resume_from=None):
     if resume_from:
         page = resume_from
         log_id = _get_latest_sync_log_id(conn)
-        data = api.search_bibs_json(QUERY, gateway_base=config.GATEWAY_BASE,
+        data = api.search_bibs_json(QUERY, gateway_base=gateway_base,
                                     formats=fmt_list, f_circ="CIRC",
                                     page=page, sort=SORT, limit=100)
         pagination = api.parse_pagination(data)
         total_pages = pagination.get("pages", 1)
         if max_pages:
             total_pages = min(page + max_pages - 1, total_pages)
-        mids, record_errors = _process_page(conn, data)
+        mids, record_errors = _process_page(conn, data, library_id)
         total_record_errors += record_errors
         synced_mids.update(mids)
         db.update_sync_progress(conn, log_id, page)
@@ -82,7 +80,7 @@ def run_sync(formats=None, max_pages=None, resume_from=None):
         page += 1
     else:
         page = 1
-        data = api.search_bibs_json(QUERY, gateway_base=config.GATEWAY_BASE,
+        data = api.search_bibs_json(QUERY, gateway_base=gateway_base,
                                     formats=fmt_list, f_circ="CIRC",
                                     page=page, sort=SORT, limit=100)
         pagination = api.parse_pagination(data)
@@ -91,10 +89,10 @@ def run_sync(formats=None, max_pages=None, resume_from=None):
         if max_pages:
             total_pages = min(max_pages, total_pages)
         print(f"      total: {total_count:,} books across {total_pages} pages")
-        log_id = db.start_sync_log(conn, LIBRARY_ID, "full",
-                                   f"query={QUERY}&formats={fmt_list}",
-                                   total_pages)
-        mids, record_errors = _process_page(conn, data)
+        log_id = db.start_sync_log(conn, library_id, "full",
+            f"query={QUERY}&formats={fmt_list}",
+            total_pages)
+        mids, record_errors = _process_page(conn, data, library_id)
         total_record_errors += record_errors
         synced_mids.update(mids)
         db.update_sync_progress(conn, log_id, page)
@@ -105,7 +103,7 @@ def run_sync(formats=None, max_pages=None, resume_from=None):
     processed = 1
     with ThreadPoolExecutor(max_workers=10) as pool:
         fut_map = {
-            pool.submit(_fetch_page, p, fmt_list): p
+            pool.submit(_fetch_page, p, fmt_list, gateway_base): p
             for p in range(page, total_pages + 1)
         }
 
@@ -113,7 +111,7 @@ def run_sync(formats=None, max_pages=None, resume_from=None):
             p = fut_map[f]
             try:
                 data = f.result()
-                mids, page_errors = _process_page(conn, data)
+                mids, page_errors = _process_page(conn, data, library_id)
                 total_record_errors += page_errors
                 synced_mids.update(mids)
                 processed += 1
@@ -134,7 +132,7 @@ def run_sync(formats=None, max_pages=None, resume_from=None):
         conn.commit()
 
     if not max_pages and not resume_from:
-        _deactivate_stale_books(conn, synced_mids)
+        _deactivate_stale_books(conn, synced_mids, library_id)
 
     conn.commit()
     total_books = db.get_book_count(conn)
@@ -152,10 +150,10 @@ def run_sync(formats=None, max_pages=None, resume_from=None):
     print(f"\nDONE! {total_books:,} books in database.")
 
 
-def _fetch_page(page, formats):
+def _fetch_page(page, formats, gateway_base):
     for attempt in range(MAX_PAGE_RETRIES):
         try:
-            return api.search_bibs_json(QUERY, gateway_base=config.GATEWAY_BASE,
+            return api.search_bibs_json(QUERY, gateway_base=gateway_base,
                                         formats=formats, f_circ="CIRC",
                                         page=page, sort=SORT, limit=100)
         except Exception as e:
@@ -169,7 +167,7 @@ def _fetch_page(page, formats):
     raise RuntimeError(f"Page {page} exhausted retries")
 
 
-def _process_page(conn, data):
+def _process_page(conn, data, library_id):
     entities = api.parse_bib_entities(data)
     mids = set()
     errors = 0
@@ -179,7 +177,7 @@ def _process_page(conn, data):
             book = api.extract_book_info(metadata_id, bib)
             db.upsert_book_in_library(
                 conn,
-                library_id=LIBRARY_ID,
+                library_id=library_id,
                 metadata_id=book["metadata_id"],
                 title=book["title"],
                 subtitle=book["subtitle"],
@@ -209,10 +207,10 @@ def _process_page(conn, data):
     return mids, errors
 
 
-def _deactivate_stale_books(conn, active_mids):
+def _deactivate_stale_books(conn, active_mids, library_id):
     total = conn.execute(
         "SELECT COUNT(*) as c FROM books_in_library WHERE active = 1 AND library_id = ?",
-        (LIBRARY_ID,)
+        (library_id,)
     ).fetchone()[0]
     mids_json = json.dumps(list(active_mids))
     conn.execute("""
@@ -220,10 +218,10 @@ def _deactivate_stale_books(conn, active_mids):
         WHERE active = 1 AND library_id = ? AND metadata_id NOT IN (
             SELECT value FROM json_each(?)
         )
-    """, (LIBRARY_ID, mids_json))
+    """, (library_id, mids_json))
     deactivated = total - conn.execute(
         "SELECT COUNT(*) as c FROM books_in_library WHERE active = 1 AND library_id = ?",
-        (LIBRARY_ID,)
+        (library_id,)
     ).fetchone()[0]
     if deactivated:
         print(f"  Deactivated {deactivated:,} books no longer in branch catalog")
@@ -258,6 +256,8 @@ if __name__ == "__main__":
     if "--resume" in sys.argv:
         idx = sys.argv.index("--resume")
         resume_page = int(sys.argv[idx + 1]) if len(sys.argv) > idx + 1 else None
-        run_sync(formats=fmts, resume_from=resume_page)
+        run_sync(config.LIBRARY_ID, config.GATEWAY_BASE,
+                 formats=fmts, resume_from=resume_page)
     else:
-        run_sync(formats=fmts, max_pages=max_pages)
+        run_sync(config.LIBRARY_ID, config.GATEWAY_BASE,
+                 formats=fmts, max_pages=max_pages)

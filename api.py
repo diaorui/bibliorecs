@@ -152,14 +152,23 @@ def _get_auth():
         return _AUTH_CACHE
 
 
-def login():
+def login(library_id=None):
+    if library_id is None:
+        library_id = config.LIBRARY_ID
+    cfg = config.LIBRARIES[library_id]
+    catalog_base = cfg["catalog_base"]
+
+    prefix = {"sclibrary": "SCL"}.get(library_id, library_id.upper())
+    user_var = f"{prefix}_USER"
+    pass_var = f"{prefix}_PASSWORD"
+
     jar = http.cookiejar.CookieJar()
     opener = urllib.request.build_opener(
         urllib.request.HTTPCookieProcessor(jar),
         urllib.request.HTTPRedirectHandler()
     )
 
-    login_url = f"{CATALOG_BASE}/user/login?destination=%2Fuser_dashboard"
+    login_url = f"{catalog_base}/user/login?destination=%2Fuser_dashboard"
     req = urllib.request.Request(login_url, headers={"User-Agent": "Mozilla/5.0"})
     html = opener.open(req).read().decode()
 
@@ -171,15 +180,15 @@ def login():
     data = urllib.parse.urlencode({
         "utf8": "\u2713",
         "authenticity_token": token,
-        "name": os.environ["SCL_USER"],
-        "user_pin": os.environ["SCL_PASSWORD"],
+        "name": os.environ[user_var],
+        "user_pin": os.environ[pass_var],
         "remember_me": "true",
         "local": "false",
         "commit": "Log In",
     }).encode()
 
     req = urllib.request.Request(
-        f"{CATALOG_BASE}/user/login", data=data,
+        f"{catalog_base}/user/login", data=data,
         headers={
             "User-Agent": "Mozilla/5.0",
             "Content-Type": "application/x-www-form-urlencoded",

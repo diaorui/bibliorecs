@@ -8,6 +8,8 @@ import generate_embeddings
 import api
 import patron
 
+import config
+
 
 def main():
     t0 = time.time()
@@ -16,7 +18,9 @@ def main():
     reset_db.reset()
 
     print("\n=== Step 2/4: Full catalog sync ===")
-    sync.run_sync()
+    for lib_id, lib_cfg in config.LIBRARIES.items():
+        print(f"\n--- {lib_id} ---")
+        sync.run_sync(lib_id, lib_cfg["gateway_base"])
 
     print("\nLogging in...")
     try:

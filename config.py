@@ -2,13 +2,28 @@ import os
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-LIBRARY_ID = "sclibrary"
+SELECTED_LIBRARY = "sclibrary"
 
 HOME_BRANCH = "Central Park Library"
 HOME_BRANCH_CODE = "C"
-CATALOG_BASE = "https://sclibrary.bibliocommons.com"
-GATEWAY_BASE = "https://gateway.bibliocommons.com/v2/libraries/sclibrary"
-SYNDETICS_CLIENT = "sepup"
+
+LIBRARIES = {
+    "sclibrary": {
+        "catalog_base": "https://sclibrary.bibliocommons.com",
+        "gateway_base": "https://gateway.bibliocommons.com/v2/libraries/sclibrary",
+        "syndetics_client": "sepup",
+    },
+    "sccl": {
+        "catalog_base": "https://sccl.bibliocommons.com",
+        "gateway_base": "https://gateway.bibliocommons.com/v2/libraries/sccl",
+        "syndetics_client": "santaclaracfl",
+    },
+}
+
+LIBRARY_ID = SELECTED_LIBRARY
+CATALOG_BASE = LIBRARIES[SELECTED_LIBRARY]["catalog_base"]
+GATEWAY_BASE = LIBRARIES[SELECTED_LIBRARY]["gateway_base"]
+SYNDETICS_CLIENT = LIBRARIES[SELECTED_LIBRARY]["syndetics_client"]
 
 EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
 EMBEDDING_PATH = os.path.join(_SCRIPT_DIR, "embeddings.npy")
