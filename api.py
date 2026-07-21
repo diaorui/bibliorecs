@@ -111,6 +111,7 @@ def extract_book_info(metadata_id, bib):
                              ensure_ascii=False),
         "super_formats": json.dumps(super_formats, ensure_ascii=False),
         "consumption_format": info.get("consumptionFormat"),
+        "group_key": info.get("groupKey"),
     }
 
 

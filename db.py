@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS books_in_library (
     series TEXT,
     super_formats TEXT,
     consumption_format TEXT,
+    group_key TEXT,
     active INTEGER DEFAULT 1,
     first_synced TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -122,16 +123,16 @@ def upsert_book_in_library(conn, library_id, metadata_id, title, subtitle=None,
                            isbn=None, subjects=None,
                            composite_subjects=None, genres=None, series=None,
                            super_formats=None, consumption_format=None,
-                           active=1):
+                           group_key=None, active=1):
     conn.execute("""
         INSERT INTO books_in_library (
             library_id, metadata_id, title, subtitle, author, format,
             content_type, description, call_number,
             publication_year, primary_language, isbn,
             subjects, composite_subjects, genres, series,
-            super_formats, consumption_format,
+            super_formats, consumption_format, group_key,
             active, last_updated
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(metadata_id, library_id) DO UPDATE SET
             title=excluded.title, subtitle=excluded.subtitle,
             author=excluded.author, format=excluded.format,
@@ -145,6 +146,7 @@ def upsert_book_in_library(conn, library_id, metadata_id, title, subtitle=None,
             genres=excluded.genres, series=excluded.series,
             super_formats=excluded.super_formats,
             consumption_format=excluded.consumption_format,
+            group_key=excluded.group_key,
             first_synced=COALESCE(first_synced, excluded.first_synced),
             last_updated=excluded.last_updated,
             active=excluded.active
@@ -153,7 +155,7 @@ def upsert_book_in_library(conn, library_id, metadata_id, title, subtitle=None,
         content_type, description, call_number,
         publication_year, primary_language, isbn,
         subjects, composite_subjects, genres, series,
-        super_formats, consumption_format,
+        super_formats, consumption_format, group_key,
         active, datetime.utcnow().isoformat()
     ))
 
