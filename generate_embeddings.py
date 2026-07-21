@@ -28,19 +28,16 @@ def _clean_subj(s):
 def embed_text(w):
     parts = []
     if w.get("title"):
-        parts.append(f"title: {w['title']}.")
+        parts.append("title: " + w["title"])
     if w.get("author"):
-        parts.append(f"author: {w['author']}.")
+        parts.append("author: " + w["author"])
     series = json.loads(w["series"]) if w.get("series") else []
     seen_s = set()
-    deduped_series = []
     for s in series:
         k = s.lower().strip()
         if k not in seen_s:
             seen_s.add(k)
-            deduped_series.append(s)
-    if deduped_series:
-        parts.append(f"series: {', '.join(deduped_series)}.")
+            parts.append("series: " + s)
     subjects = json.loads(w["subjects"]) if w.get("subjects") else []
     if subjects:
         cleaned = [_clean_subj(s) for s in subjects]
@@ -53,13 +50,13 @@ def embed_text(w):
                 seen.add(k)
                 deduped.append(s)
         if deduped:
-            parts.append(f"subjects: {', '.join(deduped)}.")
+            parts.append("subjects: " + " ".join(deduped))
     if w.get("description"):
         desc = w["description"]
         if len(desc) > 1000:
             desc = desc[:1000]
-        parts.append(f"description: {desc}.")
-    return " ".join(parts)
+        parts.append("description: " + desc)
+    return " | ".join(parts)
 
 
 def main():
