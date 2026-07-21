@@ -12,7 +12,7 @@ import db
 LIBRARY_ID = config.LIBRARY_ID
 
 _EMB_CACHE = None
-_EMB_WIDS_CACHE = None
+_EMB_IDS_CACHE = None
 _EMB_MTIME = 0
 
 
@@ -86,75 +86,63 @@ def _mmr(relevance, pairwise_sim, lambda_param, top_n):
 
 
 def _load_embeddings():
-    global _EMB_CACHE, _EMB_WIDS_CACHE, _EMB_MTIME
+    global _EMB_CACHE, _EMB_IDS_CACHE, _EMB_MTIME
     mtime = os.path.getmtime(config.EMBEDDING_PATH)
     if _EMB_CACHE is None or mtime != _EMB_MTIME:
         _EMB_CACHE = np.load(config.EMBEDDING_PATH)
-        with open(config.EMBEDDING_WIDS_PATH) as f:
-            _EMB_WIDS_CACHE = json.load(f)
+        with open(config.EMBEDDING_IDS_PATH) as f:
+            _EMB_IDS_CACHE = json.load(f)
         _EMB_MTIME = mtime
-    return _EMB_CACHE, _EMB_WIDS_CACHE
+    return _EMB_CACHE, _EMB_IDS_CACHE
 
 
 def get_recommendations(conn):
-    work_count = conn.execute("SELECT COUNT(*) FROM works").fetchone()[0]
-    if work_count == 0:
-        return {"by_cat": {}, "has_profile": False}
-
     if not os.path.exists(config.EMBEDDING_PATH):
         return {"by_cat": {}, "has_profile": False}
 
-    emb, wid_list = _load_embeddings()
+    emb, mid_list = _load_embeddings()
+    if len(mid_list) == 0:
+        return {"by_cat": {}, "has_profile": False}
+
     emb_norm = normalize(emb, norm="l2", axis=1)
-    wid_to_idx = {wid: i for i, wid in enumerate(wid_list)}
-    idx_to_wid = {i: wid for i, wid in enumerate(wid_list)}
+    mid_to_idx = {mid: i for i, mid in enumerate(mid_list)}
 
     books = conn.execute("""
-        SELECT b.metadata_id, b.call_number, b.publication_year, b.work_id,
-               b.title, b.subtitle, b.author, b.isbn, b.format,
-               b.content_type, b.subjects, b.genres, b.description, b.series
-        FROM books_in_library b
-        WHERE b.active = 1 AND b.library_id = ? AND b.work_id IS NOT NULL
+        SELECT metadata_id, call_number, publication_year,
+               title, subtitle, author, isbn, format,
+               content_type, subjects, genres, description, series
+        FROM books_in_library
+        WHERE active = 1 AND library_id = ?
     """, (LIBRARY_ID,)).fetchall()
 
     min_year = date.today().year - config.NEW_BOOK_MAX_AGE_YEARS
     by_cat = defaultdict(list)
-    new_wids = set()
-    wid_to_meta = defaultdict(list)
+    new_indices = set()
     meta_info = {}
 
     for b in books:
         b = dict(b)
-        wid = b["work_id"]
         mid = b["metadata_id"]
-        if wid not in wid_to_idx:
+        if mid not in mid_to_idx:
             continue
-        wid_to_meta[wid].append(mid)
         meta_info[mid] = b
-        idx = wid_to_idx[wid]
+        idx = mid_to_idx[mid]
         cat = book_category(b.get("call_number"))
         by_cat[cat].append(idx)
         if b["publication_year"] and b["publication_year"] >= min_year:
-            new_wids.add(idx)
+            new_indices.add(idx)
 
     borrows = db.get_borrow_events_for_recommendation(conn, LIBRARY_ID)
     has_profile = bool(borrows)
 
     if has_profile:
         valid = []
-        borrowed_work_indices = set()
+        borrowed_indices = set()
         for b in borrows:
             mid = b["metadata_id"]
-            row = conn.execute(
-                "SELECT work_id FROM books_in_library WHERE metadata_id = ? AND library_id = ?",
-                (mid, LIBRARY_ID)
-            ).fetchone()
-            if not row:
-                continue
-            wid = row["work_id"]
-            if wid and wid in wid_to_idx:
-                idx = wid_to_idx[wid]
-                borrowed_work_indices.add(idx)
+            if mid in mid_to_idx:
+                idx = mid_to_idx[mid]
+                borrowed_indices.add(idx)
                 valid.append((idx, _time_weight(b["checkout_date"], b["is_current"])))
 
         indices, weights = zip(*valid) if valid else ([], [])
@@ -165,10 +153,10 @@ def get_recommendations(conn):
         weighted_embs = borrow_embs * weights[:, np.newaxis]
         maxsim = np.max(weighted_embs @ emb_norm.T, axis=0)
 
-        for i in borrowed_work_indices:
+        for i in borrowed_indices:
             maxsim[i] = -1
     else:
-        maxsim = np.ones(len(wid_list), dtype=float)
+        maxsim = np.ones(len(mid_list), dtype=float)
 
     result = {"by_cat": {}, "has_profile": has_profile}
 
@@ -190,23 +178,15 @@ def get_recommendations(conn):
             rng = np.random.default_rng()
             top_indices = rng.choice(cat_indices, size=top_n, replace=False).tolist()
 
-        seen_mids = set()
         items = []
         rank = 1
         for i in top_indices:
-            wid = idx_to_wid[i]
-            mids = wid_to_meta.get(wid, [])
-            for mid in mids:
-                if mid not in seen_mids:
-                    seen_mids.add(mid)
-                    info = dict(meta_info[mid])
-                    info["score"] = float(maxsim[i])
-                    info["category_rank"] = rank
-                    items.append(info)
-                    rank += 1
-                    break
-            if rank > top_n:
-                break
+            mid = mid_list[i]
+            info = dict(meta_info[mid])
+            info["score"] = float(maxsim[i])
+            info["category_rank"] = rank
+            items.append(info)
+            rank += 1
 
         result["by_cat"][cat_name] = items
 
@@ -220,25 +200,19 @@ def get_recommendations(conn):
         mmr_selected = _mmr(global_sims[sorted_idx], pairwise_sim, config.MMR_LAMBDA, config.TOP_CANDIDATES)
         top_indices = all_book_indices[sorted_idx[mmr_selected]].tolist()
 
-        seen_mids = set()
         items = []
         rank = 1
         for i in top_indices:
-            wid = idx_to_wid[i]
-            mids = wid_to_meta.get(wid, [])
-            for mid in mids:
-                if mid not in seen_mids:
-                    seen_mids.add(mid)
-                    info = dict(meta_info[mid])
-                    info["score"] = float(maxsim[i])
-                    info["category_rank"] = rank
-                    items.append(info)
-                    rank += 1
-                    break
+            mid = mid_list[i]
+            info = dict(meta_info[mid])
+            info["score"] = float(maxsim[i])
+            info["category_rank"] = rank
+            items.append(info)
+            rank += 1
         result["by_cat"]["Top Picks"] = items
 
-    if new_wids:
-        new_arr = np.array(list(new_wids), dtype=int)
+    if new_indices:
+        new_arr = np.array(list(new_indices), dtype=int)
         new_sims = maxsim[new_arr]
         top_n = min(config.TOP_CANDIDATES, len(new_arr))
 
@@ -253,21 +227,15 @@ def get_recommendations(conn):
             rng = np.random.default_rng()
             top_indices = rng.choice(new_arr, size=top_n, replace=False).tolist()
 
-        seen_mids = set()
         items = []
         rank = 1
         for i in top_indices:
-            wid = idx_to_wid[i]
-            mids = wid_to_meta.get(wid, [])
-            for mid in mids:
-                if mid not in seen_mids:
-                    seen_mids.add(mid)
-                    info = dict(meta_info[mid])
-                    info["score"] = float(maxsim[i])
-                    info["category_rank"] = rank
-                    items.append(info)
-                    rank += 1
-                    break
+            mid = mid_list[i]
+            info = dict(meta_info[mid])
+            info["score"] = float(maxsim[i])
+            info["category_rank"] = rank
+            items.append(info)
+            rank += 1
         result["by_cat"]["New"] = items
 
     return result

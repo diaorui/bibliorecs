@@ -62,24 +62,25 @@ def embed_text(w):
 def main():
     conn = db.get_conn()
     rows = conn.execute("""
-        SELECT work_id, title, author, subjects, series, description
-        FROM works
+        SELECT metadata_id, title, author, subjects, series, description
+        FROM books_in_library
+        WHERE active = 1
     """).fetchall()
-    works = [dict(r) for r in rows]
-    wids = [w["work_id"] for w in works]
+    books = [dict(r) for r in rows]
+    mids = [b["metadata_id"] for b in books]
     conn.close()
 
-    if not wids:
-        print("No works to embed.")
+    if not mids:
+        print("No books to embed.")
         return
 
-    print(f"Generating embeddings for {len(works):,} works...")
+    print(f"Generating embeddings for {len(books):,} books...")
     t0 = time.time()
     model = SentenceTransformer(config.EMBEDDING_MODEL)
     load_t = time.time() - t0
     print(f"  Model loaded in {load_t:.1f}s ({config.EMBEDDING_MODEL})")
 
-    texts = [embed_text(w) for w in works]
+    texts = [embed_text(b) for b in books]
 
     use_gpu = torch.cuda.is_available()
     if not use_gpu:
@@ -91,13 +92,13 @@ def main():
     encode_t = time.time() - t0
     print(f"  Encoded {len(embeddings):,} vectors in {encode_t:.1f}s (dim={embeddings.shape[1]})")
 
-    with open(config.EMBEDDING_WIDS_PATH, "w") as f:
-        json.dump(wids, f)
+    with open(config.EMBEDDING_IDS_PATH, "w") as f:
+        json.dump(mids, f)
     np.save(config.EMBEDDING_PATH, embeddings)
 
     file_size = os.path.getsize(config.EMBEDDING_PATH)
     print(f"  Saved: {config.EMBEDDING_PATH} ({file_size / 1024 / 1024:.1f} MB)")
-    print(f"  Saved: {config.EMBEDDING_WIDS_PATH} ({len(wids):,} work_ids)")
+    print(f"  Saved: {config.EMBEDDING_IDS_PATH} ({len(mids):,} metadata_ids)")
     print("Done.")
 
 

@@ -95,10 +95,9 @@ def export_csv():
 def show_book(metadata_id):
     conn = db.get_conn()
     row = conn.execute("""
-        SELECT b.*, w.work_id
-        FROM books_in_library b
-        LEFT JOIN works w ON w.work_id = b.work_id
-        WHERE b.metadata_id = ?
+        SELECT *
+        FROM books_in_library
+        WHERE metadata_id = ?
         LIMIT 1
     """, (metadata_id,)).fetchone()
     if not row:

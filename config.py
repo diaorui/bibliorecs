@@ -12,10 +12,7 @@ SYNDETICS_CLIENT = "sepup"
 
 EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
 EMBEDDING_PATH = os.path.join(_SCRIPT_DIR, "embeddings.npy")
-EMBEDDING_WIDS_PATH = os.path.join(_SCRIPT_DIR, "embedding_wids.json")
-
-OL_EDITIONS_DUMP = os.path.join(_SCRIPT_DIR, "ol_dump_editions_latest.txt.gz")
-OL_WORKS_DUMP = os.path.join(_SCRIPT_DIR, "ol_dump_works_latest.txt.gz")
+EMBEDDING_IDS_PATH = os.path.join(_SCRIPT_DIR, "embedding_ids.json")
 
 TIME_DECAY_HALF_LIFE_DAYS = 90
 TOP_CANDIDATES = 15

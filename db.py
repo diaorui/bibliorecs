@@ -5,21 +5,9 @@ from datetime import datetime
 DB_PATH = os.path.join(os.path.dirname(__file__), "books.db")
 
 SCHEMA_SQL = """
-CREATE TABLE IF NOT EXISTS works (
-    work_id TEXT PRIMARY KEY,
-    title TEXT NOT NULL,
-    author TEXT,
-    description TEXT,
-    subjects TEXT,
-    series TEXT,
-    first_publish_year INTEGER,
-    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
 CREATE TABLE IF NOT EXISTS books_in_library (
     metadata_id TEXT NOT NULL,
     library_id TEXT NOT NULL,
-    work_id TEXT REFERENCES works(work_id),
     title TEXT NOT NULL,
     subtitle TEXT,
     author TEXT,
@@ -42,7 +30,6 @@ CREATE TABLE IF NOT EXISTS books_in_library (
     PRIMARY KEY (metadata_id, library_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_bil_work ON books_in_library(work_id);
 CREATE INDEX IF NOT EXISTS idx_bil_library ON books_in_library(library_id);
 CREATE INDEX IF NOT EXISTS idx_bil_format ON books_in_library(format);
 CREATE INDEX IF NOT EXISTS idx_bil_author ON books_in_library(author);
@@ -171,32 +158,6 @@ def upsert_book_in_library(conn, library_id, metadata_id, title, subtitle=None,
     ))
 
 
-def update_work_id(conn, library_id, metadata_id, work_id):
-    conn.execute(
-        "UPDATE books_in_library SET work_id = ? WHERE metadata_id = ? AND library_id = ?",
-        (work_id, metadata_id, library_id)
-    )
-
-
-def upsert_work(conn, work_id, title, author=None, description=None,
-                subjects=None, series=None, first_publish_year=None):
-    conn.execute("""
-        INSERT INTO works (work_id, title, author, description, subjects,
-                           series, first_publish_year, last_updated)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(work_id) DO UPDATE SET
-            title=excluded.title, author=excluded.author,
-            description=excluded.description, subjects=excluded.subjects,
-            series=excluded.series,
-            first_publish_year=excluded.first_publish_year,
-            last_updated=excluded.last_updated
-    """, (
-        work_id, title, author, description, subjects,
-        series, first_publish_year,
-        datetime.utcnow().isoformat()
-    ))
-
-
 def upsert_borrow_event(conn, library_id, metadata_id, checkout_date, source,
                         library_entry_id, is_current=0):
     conn.execute("""
@@ -238,28 +199,11 @@ def get_category_order(conn, library_id):
     return [dict(r) for r in rows]
 
 
-def get_work_ids_with_isbns(conn):
-    rows = conn.execute("""
-        SELECT DISTINCT work_id FROM books_in_library
-        WHERE work_id IS NOT NULL
-    """).fetchall()
-    return [r["work_id"] for r in rows]
-
-
-def get_isbns_without_work(conn):
-    rows = conn.execute("""
-        SELECT DISTINCT isbn FROM books_in_library
-        WHERE isbn IS NOT NULL AND isbn != '' AND work_id IS NULL
-    """).fetchall()
-    return [r["isbn"] for r in rows]
-
-
 def get_active_books(conn, library_id):
     rows = conn.execute("""
-        SELECT b.metadata_id, b.call_number, b.publication_year, w.work_id
-        FROM books_in_library b
-        LEFT JOIN works w ON w.work_id = b.work_id
-        WHERE b.active = 1 AND b.library_id = ?
+        SELECT metadata_id, call_number, publication_year
+        FROM books_in_library
+        WHERE active = 1 AND library_id = ?
     """, (library_id,)).fetchall()
     return [dict(r) for r in rows]
 

@@ -120,28 +120,14 @@ def index():
 def book_detail(metadata_id):
     conn = db.get_conn()
     row = conn.execute("""
-        SELECT b.*, w.description AS ol_description, w.subjects AS ol_subjects,
-               w.series AS ol_series, w.author AS ol_author, w.title AS ol_title
-        FROM books_in_library b
-        LEFT JOIN works w ON w.work_id = b.work_id
-        WHERE b.metadata_id = ? AND b.library_id = ?
+        SELECT *
+        FROM books_in_library
+        WHERE metadata_id = ? AND library_id = ?
     """, (metadata_id, LIBRARY_ID)).fetchone()
     if not row:
         conn.close()
         return redirect(f"{config.CATALOG_BASE}/v2/record/{metadata_id}")
     book = dict(row)
-
-    # Prefer OL data for library-independent fields, fall back to BC
-    if book.get("ol_title"):
-        book["title"] = book["ol_title"]
-    if book.get("ol_author"):
-        book["author"] = book["ol_author"]
-    if book.get("ol_description"):
-        book["description"] = book["ol_description"]
-    if book.get("ol_subjects"):
-        book["subjects"] = book["ol_subjects"]
-    if book.get("ol_series"):
-        book["series"] = book["ol_series"]
 
     borrows = conn.execute("""
         SELECT * FROM borrow_events
