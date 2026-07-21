@@ -113,6 +113,7 @@ def get_recommendations(conn):
                content_type, subjects, genres, description, series
         FROM books_in_library
         WHERE active = 1 AND library_id = ?
+          AND primary_language = 'eng'
     """, (LIBRARY_ID,)).fetchall()
 
     min_year = date.today().year - config.NEW_BOOK_MAX_AGE_YEARS
