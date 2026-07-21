@@ -15,8 +15,6 @@ _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 SCRIPTS = {
     "daily": "daily.py",
-    "weekly": "weekly.py",
-    "monthly": "monthly.py",
 }
 
 
@@ -47,19 +45,11 @@ def _loop():
 def _run_due_tasks():
     s = read_status() or {}
     today = time.strftime("%Y-%m-%d")
-    this_week = time.strftime("%G-W%V")
-    this_month = time.strftime("%Y-%m")
 
     daily_last = s.get("daily", {}).get("last_run_date", "")
-    weekly_last = s.get("weekly", {}).get("last_run_week", "")
-    monthly_last = s.get("monthly", {}).get("last_run_month", "")
 
     if daily_last != today:
         _run("daily", "daily.py")
-    elif weekly_last != this_week:
-        _run("weekly", "weekly.py")
-    elif monthly_last != this_month:
-        _run("monthly", "monthly.py")
 
 
 def _run(task_name, script):
@@ -84,8 +74,6 @@ def _run(task_name, script):
         elapsed = round(time.monotonic() - t0)
         ok = result.returncode == 0
         info = {"last_run": ts_start, "last_run_date": time.strftime("%Y-%m-%d"),
-                "last_run_week": time.strftime("%G-W%V"),
-                "last_run_month": time.strftime("%Y-%m"),
                 "duration_sec": elapsed, "state": "ok" if ok else "failed"}
         if ok:
             info["last_ok"] = time.strftime("%Y-%m-%dT%H:%M:%S")
@@ -172,20 +160,7 @@ def run_manual():
     return True
 
 
-def run_weekly_manual():
-    if not _acquire_lock():
-        return False
-    _release_lock()
-    Thread(target=_run, args=("weekly", "weekly.py"), daemon=True).start()
-    return True
 
-
-def run_monthly_manual():
-    if not _acquire_lock():
-        return False
-    _release_lock()
-    Thread(target=_run, args=("monthly", "monthly.py"), daemon=True).start()
-    return True
 
 
 def _read_nested(s, path):

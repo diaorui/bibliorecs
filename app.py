@@ -529,16 +529,7 @@ def trigger_update():
     return jsonify({"success": ok})
 
 
-@app.route("/api/update-weekly", methods=["POST"])
-def trigger_weekly():
-    ok = updater.run_weekly_manual()
-    return jsonify({"success": ok})
 
-
-@app.route("/api/update-monthly", methods=["POST"])
-def trigger_monthly():
-    ok = updater.run_monthly_manual()
-    return jsonify({"success": ok})
 
 
 @app.route("/api/stop-update", methods=["POST"])
