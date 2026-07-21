@@ -36,8 +36,6 @@
     <tbody>
       {% for task, label, schedule, api in [
         ('daily', 'Daily', 'every day', '/api/update'),
-        ('weekly', 'Weekly', 'every week', '/api/update-weekly'),
-        ('monthly', 'Monthly', 'every month', '/api/update-monthly'),
       ] %}
       {% set t = update_status.get(task, {}) %}
       <tr>
