@@ -51,6 +51,16 @@ def embed_text(w):
                 deduped.append(s)
         if deduped:
             parts.append("subjects: " + " ".join(deduped))
+    genres = json.loads(w["genres"]) if w.get("genres") else []
+    if genres:
+        cleaned_g = []
+        seen_g = set()
+        for g in genres:
+            g = g.replace("<delimit>", " ").replace("|", " ").strip()
+            if g and g.lower() not in seen_g:
+                seen_g.add(g.lower())
+                cleaned_g.append(g)
+        parts.append("genres: " + " ".join(cleaned_g))
     if w.get("description"):
         desc = w["description"]
         if len(desc) > 1000:
@@ -62,9 +72,10 @@ def embed_text(w):
 def main():
     conn = db.get_conn()
     rows = conn.execute("""
-        SELECT metadata_id, title, author, subjects, series, description
+        SELECT metadata_id, title, author, subjects, series, genres, description
         FROM books_in_library
         WHERE active = 1
+          AND isbn IS NOT NULL AND isbn != ''
     """).fetchall()
     books = [dict(r) for r in rows]
     mids = [b["metadata_id"] for b in books]
