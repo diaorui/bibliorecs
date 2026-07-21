@@ -42,6 +42,8 @@ def _scl_category(cn):
 
 
 def _scc_category(cn):
+    if cn.startswith("JP"):
+        return "Picture Books"
     if cn.startswith("JE"):
         return "Easy Readers"
     if cn.startswith("J/ GN") or cn.startswith("J GN") or cn.startswith("/ GN"):
