@@ -7,11 +7,13 @@ LIBRARIES = {
         "catalog_base": "https://sclibrary.bibliocommons.com",
         "gateway_base": "https://gateway.bibliocommons.com/v2/libraries/sclibrary",
         "syndetics_client": "sepup",
+        "env_prefix": "SCL",
     },
     "sccl": {
         "catalog_base": "https://sccl.bibliocommons.com",
         "gateway_base": "https://gateway.bibliocommons.com/v2/libraries/sccl",
         "syndetics_client": "santaclaracfl",
+        "env_prefix": "SCCL",
     },
 }
 

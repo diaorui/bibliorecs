@@ -141,7 +141,7 @@ def book_detail(metadata_id):
     lib_id, branch_code, lib_cfg = _lib_from_cookies()
     if not lib_id:
         conn.close()
-        return redirect(f"https://sclibrary.bibliocommons.com/v2/record/{metadata_id}")
+        return render_template("not_found.html", metadata_id=metadata_id), 404
 
     row = conn.execute("""
         SELECT *
@@ -150,7 +150,8 @@ def book_detail(metadata_id):
     """, (metadata_id, lib_id)).fetchone()
     if not row:
         conn.close()
-        return redirect(f"{lib_cfg['catalog_base']}/v2/record/{metadata_id}")
+        return render_template("not_found.html", metadata_id=metadata_id,
+                               selected_library=lib_id, selected_branch=branch_code), 404
     book = dict(row)
 
     borrows = conn.execute("""
