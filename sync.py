@@ -256,8 +256,8 @@ if __name__ == "__main__":
     if "--resume" in sys.argv:
         idx = sys.argv.index("--resume")
         resume_page = int(sys.argv[idx + 1]) if len(sys.argv) > idx + 1 else None
-        run_sync(config.LIBRARY_ID, config.GATEWAY_BASE,
+        run_sync(config.SELECTED_LIBRARY, config.LIBRARIES[config.SELECTED_LIBRARY]["gateway_base"],
                  formats=fmts, resume_from=resume_page)
     else:
-        run_sync(config.LIBRARY_ID, config.GATEWAY_BASE,
+        run_sync(config.SELECTED_LIBRARY, config.LIBRARIES[config.SELECTED_LIBRARY]["gateway_base"],
                  formats=fmts, max_pages=max_pages)

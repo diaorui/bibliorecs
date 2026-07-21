@@ -17,11 +17,6 @@ LIBRARIES = {
     },
 }
 
-LIBRARY_ID = SELECTED_LIBRARY
-CATALOG_BASE = LIBRARIES[SELECTED_LIBRARY]["catalog_base"]
-GATEWAY_BASE = LIBRARIES[SELECTED_LIBRARY]["gateway_base"]
-SYNDETICS_CLIENT = LIBRARIES[SELECTED_LIBRARY]["syndetics_client"]
-
 EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
 EMBEDDING_PATH = os.path.join(_SCRIPT_DIR, "embeddings.npy")
 EMBEDDING_IDS_PATH = os.path.join(_SCRIPT_DIR, "embedding_ids.json")

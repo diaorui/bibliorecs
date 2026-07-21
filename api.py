@@ -10,8 +10,9 @@ import re
 import config
 
 
-CATALOG_BASE = config.CATALOG_BASE
-GATEWAY_BASE = config.GATEWAY_BASE
+_SELECTED_CFG = config.LIBRARIES[config.SELECTED_LIBRARY]
+CATALOG_BASE = _SELECTED_CFG["catalog_base"]
+GATEWAY_BASE = _SELECTED_CFG["gateway_base"]
 PUBLIC_HEADERS = {
     "Accept": "application/json",
     "Origin": CATALOG_BASE,
@@ -167,7 +168,7 @@ def _get_auth():
 
 def login(library_id=None):
     if library_id is None:
-        library_id = config.LIBRARY_ID
+        library_id = config.SELECTED_LIBRARY
     cfg = config.LIBRARIES[library_id]
     catalog_base = cfg["catalog_base"]
 
