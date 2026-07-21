@@ -161,27 +161,6 @@ def _fetch_page(page, formats):
     raise RuntimeError(f"Page {page} exhausted retries")
 
 
-def _fetch_and_process_page(conn, page, formats, sort=None):
-    for attempt in range(MAX_PAGE_RETRIES):
-        try:
-            data = api.search_bibs_json(QUERY, gateway_base=config.GATEWAY_BASE,
-                                        formats=formats, f_circ="CIRC",
-                                        page=page, sort=sort, limit=100)
-        except Exception as e:
-            if attempt < MAX_PAGE_RETRIES - 1:
-                wait = 2 ** attempt
-                print(f"  Page {page} error (attempt {attempt + 1}): {e}"
-                      f" — retrying in {wait}s")
-                continue
-            print(f"  Page {page} FAILED after {MAX_PAGE_RETRIES} attempts: {e}")
-            return False, set()
-
-        mids, _ = _process_page(conn, data)
-        return True, mids
-
-    return False, set()
-
-
 def _process_page(conn, data):
     entities = api.parse_bib_entities(data)
     mids = set()
@@ -243,51 +222,6 @@ def _get_latest_sync_log_id(conn):
     return row["id"] if row else None
 
 
-def run_incremental(formats=None):
-    if formats is None:
-        formats = _discover_formats()
-    fmt_list = formats
-    print(f"Fetching recently added children's paper books...")
-
-    conn = db.get_conn()
-
-    data = api.search_bibs_json(QUERY, gateway_base=config.GATEWAY_BASE,
-                                formats=fmt_list, f_circ="CIRC",
-                                page=1, sort="newly_acquired", limit=100)
-    pagination = api.parse_pagination(data)
-    total_pages = pagination.get("pages", 1)
-    print(f"  Recent: {pagination.get('count', 0):,} books, {total_pages} pages")
-
-    log_id = db.start_sync_log(conn, LIBRARY_ID, "incremental",
-                               f"query={QUERY}&formatcode=({', '.join(fmt_list)})",
-                               total_pages)
-
-    failed_pages = []
-    for page in range(1, min(total_pages + 1, 10)):
-        if page > 1:
-            ok = _fetch_and_process_page(conn, page, fmt_list, sort="newly_acquired")
-            if not ok:
-                failed_pages.append(page)
-                continue
-        else:
-            _process_page(conn, data)
-
-        db.update_sync_progress(conn, log_id, page)
-        if page % 5 == 0:
-            conn.commit()
-        print(f"  Page {page}/{total_pages} done")
-
-    conn.commit()
-    total_books = db.get_book_count(conn)
-    status = "completed" if not failed_pages else "completed_with_errors"
-    db.complete_sync_log(conn, log_id, total_books, status)
-    conn.close()
-
-    if failed_pages:
-        print(f"  WARNING: {len(failed_pages)} page(s) failed: {failed_pages}")
-    print(f"Incremental done. Total in DB: {total_books:,}")
-
-
 if __name__ == "__main__":
     _t0 = time.time()
 
@@ -307,9 +241,7 @@ if __name__ == "__main__":
         idx = sys.argv.index("--pages")
         max_pages = int(sys.argv[idx + 1])
 
-    if "--incremental" in sys.argv:
-        run_incremental(formats=fmts)
-    elif "--resume" in sys.argv:
+    if "--resume" in sys.argv:
         idx = sys.argv.index("--resume")
         resume_page = int(sys.argv[idx + 1]) if len(sys.argv) > idx + 1 else None
         run_sync(formats=fmts, resume_from=resume_page)
