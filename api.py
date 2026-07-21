@@ -112,6 +112,11 @@ def extract_book_info(metadata_id, bib):
         "super_formats": json.dumps(super_formats, ensure_ascii=False),
         "consumption_format": info.get("consumptionFormat"),
         "group_key": info.get("groupKey"),
+        "edition": info.get("edition"),
+        "multiscript_title": info.get("multiscriptTitle"),
+        "multiscript_author": info.get("multiscriptAuthor"),
+        "rating_avg": info.get("rating", {}).get("averageRating"),
+        "rating_count": info.get("rating", {}).get("totalCount"),
     }
 
 

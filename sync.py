@@ -198,6 +198,11 @@ def _process_page(conn, data):
                 super_formats=book["super_formats"],
                 consumption_format=book["consumption_format"],
                 group_key=book["group_key"],
+                edition=book["edition"],
+                multiscript_title=book["multiscript_title"],
+                multiscript_author=book["multiscript_author"],
+                rating_avg=book["rating_avg"],
+                rating_count=book["rating_count"],
             )
         except Exception:
             errors += 1
