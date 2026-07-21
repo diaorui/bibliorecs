@@ -76,7 +76,7 @@ def run_sync(library_id, gateway_base, formats=None, max_pages=None, resume_from
         total_record_errors += record_errors
         synced_mids.update(mids)
         db.update_sync_progress(conn, log_id, page)
-        print(f"  Page {page}/{total_pages} done — {db.get_book_count(conn):,} books")
+        print(f"  Page {page}/{total_pages} done — {db.get_book_count(conn, library_id):,} books")
         page += 1
     else:
         page = 1
@@ -96,7 +96,7 @@ def run_sync(library_id, gateway_base, formats=None, max_pages=None, resume_from
         total_record_errors += record_errors
         synced_mids.update(mids)
         db.update_sync_progress(conn, log_id, page)
-        count = db.get_book_count(conn)
+        count = db.get_book_count(conn, library_id)
         print(f"  Page 1/{total_pages} done — {count:,} books so far")
         page = 2
 
@@ -123,7 +123,7 @@ def run_sync(library_id, gateway_base, formats=None, max_pages=None, resume_from
                     rate = processed / elapsed * 60
                     eta_min = (total_pages - processed) / rate if rate > 0 else 0
                     print(f"  Page {p}/{total_pages} ({processed} done)"
-                          f" — {db.get_book_count(conn):,} books"
+                          f" — {db.get_book_count(conn, library_id):,} books"
                           f" — {rate:.0f} pg/min — ETA {eta_min:.0f} min")
             except Exception as e:
                 failed_pages.append(p)
@@ -135,7 +135,7 @@ def run_sync(library_id, gateway_base, formats=None, max_pages=None, resume_from
         _deactivate_stale_books(conn, synced_mids, library_id)
 
     conn.commit()
-    total_books = db.get_book_count(conn)
+    total_books = db.get_book_count(conn, library_id)
     status = "completed" if not failed_pages else "completed_with_errors"
     db.complete_sync_log(conn, log_id, total_books, status)
     conn.close()

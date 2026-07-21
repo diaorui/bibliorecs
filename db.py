@@ -328,8 +328,11 @@ def get_sample_books(conn, n=10):
     return [dict(r) for r in rows]
 
 
-def get_book_count(conn):
-    row = conn.execute("SELECT COUNT(*) as cnt FROM books_in_library").fetchone()
+def get_book_count(conn, library_id=None):
+    if library_id:
+        row = conn.execute("SELECT COUNT(*) as cnt FROM books_in_library WHERE library_id = ?", (library_id,)).fetchone()
+    else:
+        row = conn.execute("SELECT COUNT(*) as cnt FROM books_in_library").fetchone()
     return row['cnt']
 
 
