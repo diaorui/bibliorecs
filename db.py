@@ -270,8 +270,13 @@ def complete_sync_log(conn, log_id, books_total, status='completed'):
     conn.commit()
 
 
-def get_stats(conn):
-    row = conn.execute("""
+def get_stats(conn, library_id=None):
+    where = "WHERE active = 1"
+    params = []
+    if library_id:
+        where += " AND library_id = ?"
+        params.append(library_id)
+    row = conn.execute(f"""
         SELECT
             COUNT(*) as total,
             SUM(CASE WHEN author IS NOT NULL AND author != '' THEN 1 ELSE 0 END) as with_author,
@@ -279,16 +284,21 @@ def get_stats(conn):
             SUM(CASE WHEN description IS NOT NULL AND description != '' THEN 1 ELSE 0 END) as with_description,
             SUM(CASE WHEN content_type IS NOT NULL THEN 1 ELSE 0 END) as with_content_type,
             SUM(CASE WHEN series IS NOT NULL AND series != '[]' THEN 1 ELSE 0 END) as with_series
-        FROM books_in_library WHERE active = 1
-    """).fetchone()
+        FROM books_in_library {where}
+    """, params).fetchone()
     return dict(row)
 
 
-def get_format_distribution(conn):
-    rows = conn.execute("""
+def get_format_distribution(conn, library_id=None):
+    where = "WHERE active = 1"
+    params = []
+    if library_id:
+        where += " AND library_id = ?"
+        params.append(library_id)
+    rows = conn.execute(f"""
         SELECT format, COUNT(*) as count
-        FROM books_in_library WHERE active = 1 GROUP BY format ORDER BY count DESC
-    """).fetchall()
+        FROM books_in_library {where} GROUP BY format ORDER BY count DESC
+    """, params).fetchall()
     return [dict(r) for r in rows]
 
 
@@ -300,21 +310,31 @@ def get_content_type_distribution(conn):
     return [dict(r) for r in rows]
 
 
-def get_language_distribution(conn):
-    rows = conn.execute("""
+def get_language_distribution(conn, library_id=None):
+    where = "WHERE active = 1"
+    params = []
+    if library_id:
+        where += " AND library_id = ?"
+        params.append(library_id)
+    rows = conn.execute(f"""
         SELECT primary_language, COUNT(*) as count
-        FROM books_in_library WHERE active = 1 GROUP BY primary_language
+        FROM books_in_library {where} GROUP BY primary_language
         ORDER BY count DESC LIMIT 20
-    """).fetchall()
+    """, params).fetchall()
     return [dict(r) for r in rows]
 
 
-def get_year_distribution(conn):
-    rows = conn.execute("""
+def get_year_distribution(conn, library_id=None):
+    where = "WHERE active = 1 AND publication_year IS NOT NULL"
+    params = []
+    if library_id:
+        where += " AND library_id = ?"
+        params.append(library_id)
+    rows = conn.execute(f"""
         SELECT publication_year, COUNT(*) as count
-        FROM books_in_library WHERE active = 1 AND publication_year IS NOT NULL
+        FROM books_in_library {where}
         GROUP BY publication_year ORDER BY publication_year DESC LIMIT 30
-    """).fetchall()
+    """, params).fetchall()
     return [dict(r) for r in rows]
 
 

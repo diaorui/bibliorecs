@@ -607,10 +607,10 @@ def trigger_stop_update():
 def stats():
     conn = db.get_conn()
     lib_id, branch_code, _ = _lib_from_cookies()
-    s = db.get_stats(conn)
-    formats = db.get_format_distribution(conn)
-    languages = db.get_language_distribution(conn)
-    years = db.get_year_distribution(conn)
+    s = db.get_stats(conn, lib_id)
+    formats = db.get_format_distribution(conn, lib_id)
+    languages = db.get_language_distribution(conn, lib_id)
+    years = db.get_year_distribution(conn, lib_id)
     cat_rows = conn.execute("""
         SELECT call_number FROM books_in_library WHERE active = 1 AND library_id = ?
     """, (lib_id,)).fetchall()
