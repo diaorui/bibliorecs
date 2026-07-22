@@ -88,6 +88,8 @@ def get_conn():
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=OFF")
+    import auth_store
+    auth_store.check_clear_on_restart(conn)
     return conn
 
 

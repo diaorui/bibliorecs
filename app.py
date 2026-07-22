@@ -454,6 +454,10 @@ def api_creds_remove(library_id):
     import auth_store
     auth_store.remove(library_id)
     api._invalidate_auth(library_id)
+    conn = db.get_conn()
+    conn.execute("DELETE FROM borrow_events WHERE library_id = ?", (library_id,))
+    conn.commit()
+    conn.close()
     return jsonify({"success": True})
 
 

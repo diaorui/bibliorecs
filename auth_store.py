@@ -1,4 +1,5 @@
 _creds = {}
+_initialized = False
 
 
 def set(lib_id, user, password):
@@ -19,3 +20,12 @@ def has(lib_id):
 
 def list_connected():
     return {k for k in _creds}
+
+
+def check_clear_on_restart(conn):
+    global _initialized
+    if not _initialized:
+        _initialized = True
+        if not _creds:
+            conn.execute("DELETE FROM borrow_events")
+            conn.commit()
