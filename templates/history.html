@@ -78,7 +78,8 @@ var __catData = {{ chart_cats | tojson }};
   {% if not current and not past %}
   <div class="empty-state" id="history-empty">
     <h2>No borrowing history</h2>
-    <p>Connect your library card in Settings to sync your borrowing history.</p>
+    <p>Connect your library card to sync your borrowing history.</p>
+    <a href="/settings" class="btn btn-primary" style="margin-top:12px;display:inline-block;text-decoration:none">Go to Settings</a>
   </div>
   {% endif %}
 </div>
