@@ -4,14 +4,14 @@ _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 LIBRARIES = {
     "sclibrary": {
-        "name": "Santa Clara County Library",
+        "name": "Santa Clara City Library",
         "catalog_base": "https://sclibrary.bibliocommons.com",
         "gateway_base": "https://gateway.bibliocommons.com/v2/libraries/sclibrary",
         "syndetics_client": "sepup",
         "env_prefix": "SCL",
     },
     "sccl": {
-        "name": "Santa Clara City Library",
+        "name": "Santa Clara County Library",
         "catalog_base": "https://sccl.bibliocommons.com",
         "gateway_base": "https://gateway.bibliocommons.com/v2/libraries/sccl",
         "syndetics_client": "santaclaracfl",
