@@ -64,7 +64,7 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 200px;
+  max-width: 240px;
 }
 
 /* ── layout ── */
@@ -1347,8 +1347,6 @@ th {
   .quota-bar { flex-direction: column; gap: 4px; font-size: 0.82rem; }
 
   .history-item { flex-wrap: wrap; }
-
-  .nav-location-name { max-width: 100px; }
 }
 
 /* ── settings ── */
