@@ -10,26 +10,18 @@
   <nav class="nav">
     <div class="nav-inner">
       <a href="/" class="nav-brand">Bibliorecs</a>
-      <div class="nav-center">
-        <div class="selector-group">
-          <select id="sel-lib" class="sel-lib" onchange="onLibChange()">
-            {% for lid, lcfg in libraries.items() %}
-            <option value="{{ lid }}" {{ 'selected' if lid == selected_library else '' }}>{{ lcfg.catalog_base.replace('https://', '').replace('.bibliocommons.com', '') }}</option>
-            {% endfor %}
-          </select>
-          <select id="sel-branch" class="sel-branch">
-            {% for b in branches.get(selected_library, []) %}
-            <option value="{{ b.code }}" {{ 'selected' if b.code == selected_branch else '' }}>{{ b.name }}</option>
-            {% endfor %}
-          </select>
-          <button class="btn-sml" onclick="applySelection()">Apply</button>
-        </div>
+      {% if selected_branch_name %}
+      <div class="nav-location" title="{{ selected_library_name }}">
+        <span class="nav-location-icon">📍</span>
+        <span class="nav-location-name">{{ selected_branch_name }}</span>
       </div>
+      {% endif %}
       <div class="nav-links">
         <a href="/" class="nav-link">Home</a>
         <a href="/history" class="nav-link">History</a>
         <a href="/holds" class="nav-link">Holds</a>
         <a href="/stats" class="nav-link">Stats</a>
+        <a href="/settings" class="nav-link">Settings</a>
       </div>
     </div>
   </nav>
@@ -45,8 +37,7 @@
         <div class="lib-cards">
           {% for lid, lcfg in libraries.items() %}
           <div class="lib-card" data-lib="{{ lid }}" onclick="pickLib('{{ lid }}')">
-            <div class="lib-card-name">{{ lcfg.catalog_base.replace('https://', '').replace('.bibliocommons.com', '') }}</div>
-            <div class="lib-card-desc">{{ lcfg.catalog_base }}</div>
+            <div class="lib-card-name">{{ lcfg.name }}</div>
           </div>
           {% endfor %}
         </div>
@@ -100,27 +91,6 @@
     location.reload();
   }
 
-  // ── nav selector ──
-  function onLibChange() {
-    var lib = document.getElementById('sel-lib').value;
-    var branchSel = document.getElementById('sel-branch');
-    branchSel.innerHTML = '<option value="">Loading...</option>';
-    fetch('/api/branches').then(function(r) { return r.json(); }).then(function(data) {
-      var branches = (data[lib] || {}).branches || [];
-      branchSel.innerHTML = branches.map(function(b) {
-        return '<option value="' + b.code + '">' + b.name + '</option>';
-      }).join('');
-    });
-  }
-
-  function applySelection() {
-    var lib = document.getElementById('sel-lib').value;
-    var branch = document.getElementById('sel-branch').value;
-    if (!branch) return;
-    document.cookie = 'selected_library=' + lib + '; path=/; max-age=31536000';
-    document.cookie = 'selected_branch=' + branch + '; path=/; max-age=31536000';
-    location.reload();
-  }
   </script>
 
   <script>

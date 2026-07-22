@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Settings – Bibliorecs{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Settings</h1>
+
+<div class="section">
+  <h2 class="section-title">Library & Branch</h2>
+  <p class="section-desc">Choose your library system and pickup branch.</p>
+
+  <div class="settings-field">
+    <label>Library</label>
+    <select id="sel-lib" class="sel-lib" onchange="onLibChange()">
+      {% for lid, lcfg in libraries.items() %}
+      <option value="{{ lid }}" {{ 'selected' if lid == selected_library else '' }}>{{ lcfg.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="settings-field">
+    <label>Pickup Branch</label>
+    <select id="sel-branch" class="sel-branch">
+      {% for b in branches.get(selected_library, []) %}
+      <option value="{{ b.code }}" {{ 'selected' if b.code == selected_branch else '' }}>{{ b.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <button class="btn" onclick="applySelection()">Apply</button>
+</div>
+
+<div class="section" style="margin-top:2rem">
+  <h2 class="section-title section-title-danger">Danger Zone</h2>
+
+  <button class="btn btn-danger" onclick="resetOnboarding()">Reset Onboarding</button>
+  <p class="section-desc" style="margin-top:4px">Clears your library and branch selection, then restarts the setup process.</p>
+</div>
+
+<script>
+function onLibChange() {
+  var lib = document.getElementById('sel-lib').value;
+  var branchSel = document.getElementById('sel-branch');
+  branchSel.innerHTML = '<option value="">Loading...</option>';
+  fetch('/api/branches').then(function(r) { return r.json(); }).then(function(data) {
+    var branches = (data[lib] || {}).branches || [];
+    branchSel.innerHTML = branches.map(function(b) {
+      return '<option value="' + b.code + '">' + b.name + '</option>';
+    }).join('');
+  });
+}
+
+function applySelection() {
+  var lib = document.getElementById('sel-lib').value;
+  var branch = document.getElementById('sel-branch').value;
+  if (!branch) return;
+  document.cookie = 'selected_library=' + lib + '; path=/; max-age=31536000';
+  document.cookie = 'selected_branch=' + branch + '; path=/; max-age=31536000';
+  location.reload();
+}
+
+function resetOnboarding() {
+  if (!confirm('Reset your library and branch selection? You will need to set them again.')) return;
+  fetch('/api/reset-onboarding', { method: 'POST' })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.success) location.href = '/';
+    });
+}
+</script>
+{% endblock %}

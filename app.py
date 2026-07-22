@@ -364,7 +364,21 @@ def api_restart():
 
 # ── sync history ──
 
-@app.route("/api/sync-history", methods=["POST"])
+@app.route("/settings")
+def settings():
+    lib_id, branch_code, lib_cfg = _lib_from_cookies()
+    if not lib_id:
+        lib_id = ""
+    return render_template("settings.html",
+                           selected_library=lib_id, selected_branch=branch_code)
+
+
+@app.route("/api/reset-onboarding", methods=["POST"])
+def api_reset_onboarding():
+    resp = jsonify({"success": True})
+    resp.set_cookie("selected_library", "", expires=0, path="/")
+    resp.set_cookie("selected_branch", "", expires=0, path="/")
+    return resp
 def api_sync_history():
     try:
         lib_id, _, _ = _lib_from_cookies()
@@ -1005,19 +1019,25 @@ def inject_globals():
     finally:
         conn.close()
     branches = {lid: [] for lid in config.LIBRARIES}
+    branch_name = ""
     if rows:
         for r in rows:
             branches[r["library_id"]].append({"code": r["branch_code"], "name": r["branch_name"]})
+            if r["library_id"] == lib_id and r["branch_code"] == branch_code:
+                branch_name = r["branch_name"]
     else:
         for lid, cfg in config.LIBRARIES.items():
             try:
                 branches[lid] = api.fetch_branches(cfg["gateway_base"])
             except Exception:
                 branches[lid] = []
+    lib_name = config.LIBRARIES[lib_id]["name"] if lib_id in config.LIBRARIES else ""
     return {
         "debug": app.config.get("DEBUG_MODE", False),
         "selected_library": lib_id,
         "selected_branch": branch_code,
+        "selected_library_name": lib_name,
+        "selected_branch_name": branch_name,
         "libraries": config.LIBRARIES,
         "branches": branches,
     }
