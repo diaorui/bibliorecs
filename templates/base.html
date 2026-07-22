@@ -112,21 +112,6 @@
     document.querySelectorAll('img.cover-img').forEach(function(img) {
       initCoverFallback(img);
     });
-        if (done) return;
-        tryFallback();
-      }
-
-      function showPlaceholder() {
-        if (done) return;
-        done = true;
-        img.style.display = 'none';
-        var ph = img.parentNode.querySelector('.cover-placeholder');
-        if (ph) ph.style.display = 'flex';
-      }
-
-      img.addEventListener('load', handleLoad);
-      img.addEventListener('error', handleError);
-    });
   });
   </script>
   <script>

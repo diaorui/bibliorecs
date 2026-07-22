@@ -203,26 +203,32 @@ function selectBranch(libId, branchCode) {
       .then(function(r) { return r.json(); })
       .then(function(data) {
         renderCarousels(data.carousels || []);
-        return Promise.all([
+
+        Promise.all([
           fetch('/api/holds').then(function(r) { return r.json(); }),
           fetch('/api/checkouts').then(function(r) { return r.json(); })
-        ]);
-      })
-      .then(function(results) {
-        var holdsData = results[0];
-        var checkoutsData = results[1];
-        if (holdsData.holds) {
-          holdsData.holds.forEach(function(h) {
-            if (h.metadata_id) __holdsByMid[h.metadata_id] = h;
+        ]).then(function(results) {
+          var holdsData = results[0];
+          var checkoutsData = results[1];
+          if (holdsData.holds) {
+            holdsData.holds.forEach(function(h) {
+              if (h.metadata_id) __holdsByMid[h.metadata_id] = h;
+            });
+          }
+          if (checkoutsData.checked_out) {
+            checkoutsData.checked_out.forEach(function(mid) { __checkedOutByMe.add(mid); });
+          }
+          applyButtonStates();
+          revealButtons();
+          document.querySelectorAll('img.cover-img').forEach(function(img) {
+            initCoverFallback(img);
           });
-        }
-        if (checkoutsData.checked_out) {
-          checkoutsData.checked_out.forEach(function(mid) { __checkedOutByMe.add(mid); });
-        }
-        applyButtonStates();
-        revealButtons();
-        document.querySelectorAll('img.cover-img').forEach(function(img) {
-          initCoverFallback(img);
+        }).catch(function() {
+          // holds/checkouts failed — still show recommendations
+          revealButtons();
+          document.querySelectorAll('img.cover-img').forEach(function(img) {
+            initCoverFallback(img);
+          });
         });
       })
       .catch(function() {
