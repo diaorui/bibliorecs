@@ -430,10 +430,20 @@ def api_creds_set():
     lib_id = body["library_id"]
     if lib_id not in config.LIBRARIES:
         return jsonify({"error": "unknown library"}), 400
-    auth_store.set(lib_id, body["user"], body["password"])
-    # Trigger sync
+    # First try login — only save creds if successful
+    api._invalidate_auth(lib_id)
     try:
         bc_token, session_id, account_id, _ = api._get_auth(lib_id)
+    except Exception as e:
+        msg = str(e)
+        if "login failed" in msg or "401" in msg or "no auth tokens" in msg:
+            msg = "Card number or PIN is incorrect. Please try again."
+        elif "timeout" in msg.lower():
+            msg = "Connection timed out. Please check your network and try again."
+        return jsonify({"success": False, "error": msg})
+    auth_store.set(lib_id, body["user"], body["password"])
+    # Sync
+    try:
         conn = db.get_conn()
         co = patron.sync_checkouts(conn, bc_token, session_id, account_id, lib_id)
         hi = patron.sync_history(conn, bc_token, session_id, account_id, lib_id)
