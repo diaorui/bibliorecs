@@ -98,7 +98,9 @@ def index():
     call_counts = db.get_category_order(conn, lib_id)
     cat_counts = defaultdict(float)
     for row in call_counts:
-        cat = recmod.book_category(row["call_number"], lib_id)
+        cat = recmod.book_category(row["call_number"], lib_id,
+                                      books_format=row.get("format"),
+                                      content_type=row.get("content_type"))
         cat_counts[cat] += recmod._time_weight(row["checkout_date"], row["is_current"])
 
     cat_order = sorted(
@@ -466,7 +468,7 @@ def api_history_category_data():
     lib_id, _, _ = _lib_from_cookies()
     try:
         rows = conn.execute("""
-            SELECT bk.call_number
+            SELECT bk.call_number, bk.format, bk.content_type
             FROM borrow_events be
             LEFT JOIN books_in_library bk
                 ON bk.metadata_id = be.metadata_id AND bk.library_id = be.library_id
@@ -476,7 +478,9 @@ def api_history_category_data():
         """, (lib_id,)).fetchall()
         cat_counts = defaultdict(int)
         for r in rows:
-            cat_counts[book_category(r["call_number"], lib_id)] += 1
+            cat_counts[book_category(r["call_number"], lib_id,
+                                      books_format=r.get("format"),
+                                      content_type=r.get("content_type"))] += 1
         result = [{"label": k, "count": v}
                   for k, v in sorted(cat_counts.items(), key=lambda x: (x[0] == "Other", -x[1]))]
         return jsonify(result)
@@ -584,7 +588,7 @@ def history():
         })
 
     cat_rows = conn.execute("""
-        SELECT bk.call_number
+        SELECT bk.call_number, bk.format, bk.content_type
         FROM borrow_events be
         LEFT JOIN books_in_library bk
             ON bk.metadata_id = be.metadata_id AND bk.library_id = be.library_id
@@ -594,7 +598,9 @@ def history():
     """, (lib_id,)).fetchall()
     cat_counts = defaultdict(int)
     for r in cat_rows:
-        cat_counts[book_category(r["call_number"], lib_id)] += 1
+        cat_counts[book_category(r["call_number"], lib_id,
+                                  books_format=r.get("format"),
+                                  content_type=r.get("content_type"))] += 1
     chart_cats = [{"label": k, "count": v}
                   for k, v in sorted(cat_counts.items(), key=lambda x: (x[0] == "Other", -x[1]))]
 
@@ -633,11 +639,13 @@ def stats():
     languages = db.get_language_distribution(conn, lib_id)
     years = db.get_year_distribution(conn, lib_id)
     cat_rows = conn.execute("""
-        SELECT call_number FROM books_in_library WHERE active = 1 AND library_id = ?
+        SELECT call_number, format, content_type FROM books_in_library WHERE active = 1 AND library_id = ?
     """, (lib_id,)).fetchall()
     cat_counts = defaultdict(int)
     for r in cat_rows:
-        cat_counts[book_category(r["call_number"], lib_id)] += 1
+        cat_counts[book_category(r["call_number"], lib_id,
+                                  books_format=r["format"],
+                                  content_type=r["content_type"])] += 1
     chart_cats = [{"label": k, "count": v}
                   for k, v in sorted(cat_counts.items(), key=lambda x: (x[0] == "Other", -x[1]))]
 
@@ -978,7 +986,9 @@ def _fmt_rec(r, syndetics_client, library_id=None):
     else:
         r["series_name"] = None
 
-    r["book_category"] = book_category(r.get("call_number"), library_id, genres)
+    r["book_category"] = book_category(r.get("call_number"), library_id, genres,
+                                         books_format=r.get("format"),
+                                         content_type=r.get("content_type"))
 
     return r
 

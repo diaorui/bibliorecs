@@ -224,7 +224,7 @@ def get_borrow_events_for_recommendation(conn, library_id=None):
 
 def get_category_order(conn, library_id):
     rows = conn.execute("""
-        SELECT b.call_number, e.checkout_date, e.is_current
+        SELECT b.call_number, b.format, b.content_type, e.checkout_date, e.is_current
         FROM borrow_events e
         INNER JOIN books_in_library b
             ON b.metadata_id = e.metadata_id AND b.library_id = e.library_id

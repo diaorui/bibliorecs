@@ -15,180 +15,60 @@ _EMB_IDS_CACHE = None
 _EMB_MTIME = 0
 
 
-def _scl_category(cn):
-    if cn.startswith("Juv Picture Book"):
-        return "Picture Books"
-    if cn.startswith("Juv Fiction"):
-        return "Fiction"
-    if cn.startswith("Juv Easy"):
-        return "Easy Readers"
-    if cn.startswith("Juv Graphic"):
-        return "Graphic Novels"
-    if cn.startswith("Juv Board"):
-        return "Board Books"
-    if cn.startswith("Juv 92"):
-        return "Biography"
-    if cn.startswith("Juv 5"):
-        return "Science"
-    if cn.startswith("Juv 9"):
-        return "History"
-    if cn.startswith("Juv 7"):
-        return "Arts & Recreation"
-    if cn.startswith("Juv 6"):
-        return "Technology"
-    if cn.startswith("Juv 3"):
-        return "Social Sciences"
-    return "Other"
-
-
-def _scc_category(cn):
-    if cn.startswith("JP"):
-        return "Picture Books"
-    if cn.startswith("JE"):
-        return "Easy Readers"
-    if cn.startswith("J/ GN") or cn.startswith("J GN") or cn.startswith("/ GN"):
-        return "Graphic Novels"
-    if any(cn.startswith(p) for p in [
-        "J/ FICTION", "J FICTION", "/ FICTION",
-        "J/ PB", "J PB", "J/ SF", "/ SF",
-        "SF", "FICTION", "ANR FICTION",
-        "J/ SS", "J SS", "J/ LT", "J LT",
-        "J/ CLASSIC", "/ CLASSIC",
-    ]):
-        return "Fiction"
-    if " TODDLER " in cn or cn.endswith(" TODDLER") or cn.startswith("TODDLER"):
-        return "Picture Books"
+def _extract_ddc(cn):
     for p in cn.split():
         m = re.match(r"^(\d{3})", p)
         if m:
-            n = int(m.group(1))
-            if 300 <= n <= 399:
-                return "Social Sciences"
-            if 500 <= n <= 599:
-                return "Science"
-            if 600 <= n <= 699:
-                return "Technology"
-            if 700 <= n <= 799:
-                return "Arts & Recreation"
-            if 900 <= n <= 999:
-                return "History"
-            break
-    return "Other"
+            return int(m.group(1))
+    return None
 
 
-def _sjpl_category(cn):
-    if cn.startswith("J PICTURE") or cn.startswith("J HARDPAGE"):
-        return "Picture Books"
-    if cn.startswith("J FICTION") or cn.startswith("J PB") or cn.startswith("FICTION"):
-        return "Fiction"
-    if cn.startswith("J EASY") or cn.startswith("J READ"):
-        return "Easy Readers"
-    if not cn.startswith("J"):
-        return "Other"
-    for p in cn.split():
-        m = re.match(r"^(\d{3})", p)
-        if m:
-            n = int(m.group(1))
-            if 300 <= n <= 399:
-                return "Social Sciences"
-            if 500 <= n <= 599:
-                return "Science"
-            if 600 <= n <= 699:
-                return "Technology"
-            if 700 <= n <= 799:
-                return "Arts & Recreation"
-            if 900 <= n <= 999:
-                return "History"
-            break
-    rest = cn[2:].strip()
-    if rest and rest[0].isdigit():
-        return "Other"
-    return "Fiction"
-
-
-def _sunnyvale_category(cn):
-    if cn.startswith("BB "):
-        return "Board Books"
-    if cn.startswith("ER ") or cn.startswith("ER-"):
-        return "Easy Readers"
-    if cn.startswith("E ") or cn.startswith("E-"):
-        return "Picture Books"
-    if cn.startswith("JGN") or cn.startswith("J/ GN"):
-        return "Graphic Novels"
-    if cn.startswith("JP"):
-        return "Fiction"
-    if not cn.startswith("J"):
-        return "Other"
-    for p in cn.split():
-        m = re.match(r"^(\d{3})", p)
-        if m:
-            n = int(m.group(1))
-            if 300 <= n <= 399: return "Social Sciences"
-            if 500 <= n <= 599: return "Science"
-            if 600 <= n <= 699: return "Technology"
-            if 700 <= n <= 799: return "Arts & Recreation"
-            if 900 <= n <= 999: return "History"
-            break
-    rest = cn[2:].strip()
-    if rest and rest[0].isdigit():
-        return "Other"
-    return "Fiction"
-
-
-def _paloalto_category(cn):
-    if cn.startswith("J BOARD"):
-        return "Board Books"
-    if cn.startswith("J READER"):
-        return "Easy Readers"
-    if cn.startswith("J GN") or cn.startswith("J GN-"):
-        return "Graphic Novels"
-    if cn.startswith("J PICTURE") or cn.startswith("J Picture"):
-        return "Picture Books"
-    if cn.startswith("J BIOG.") or cn.startswith("J Biog."):
-        return "Biography"
-    if cn.startswith("J FICTION") or cn.startswith("J Fiction") or \
-       cn.startswith("J SERIES") or cn.startswith("J Series") or \
-       cn.startswith("J MYSTERY") or cn.startswith("J Mystery") or \
-       cn.startswith("J SCIENCE"):
-        return "Fiction"
-    if not cn.startswith("J"):
-        return "Other"
-    for p in cn.split():
-        m = re.match(r"^(\d{3})", p)
-        if m:
-            n = int(m.group(1))
-            if 300 <= n <= 399: return "Social Sciences"
-            if 500 <= n <= 599: return "Science"
-            if 600 <= n <= 699: return "Technology"
-            if 700 <= n <= 799: return "Arts & Recreation"
-            if 900 <= n <= 999: return "History"
-            break
-    rest = cn[2:].strip()
-    if rest and rest[0].isdigit():
-        return "Other"
-    return "Fiction"
-
-
-def book_category(call_number, library_id=None, genres=None):
+def book_category(call_number, library_id=None, genres=None,
+                  books_format=None, content_type=None):
     if not call_number:
         return "Other"
-    cn = call_number.strip()
-    if library_id == "sccl":
-        cat = _scc_category(cn)
-    elif library_id == "sjpl":
-        cat = _sjpl_category(cn)
-    elif library_id == "sunnyvale":
-        cat = _sunnyvale_category(cn)
-    elif library_id == "paloalto":
-        cat = _paloalto_category(cn)
-    else:
-        cat = _scl_category(cn)
+    cn = call_number.upper().strip()
 
+    # 1. Format-based (universal) — physical format trumps topic
+    if books_format == "BOARD_BK": return "Board Books"
+    if books_format == "PICTURE_BOOK": return "Picture Books"
+    if books_format == "EASY_READER": return "Easy Readers"
+    if books_format == "GRAPHIC_NOVEL": return "Graphic Novels"
+
+    # 2. Format-related keywords — reading level/format prefix trumps topic
+    if "BOARD" in cn: return "Board Books"
+    if "TODDLER" in cn: return "Picture Books"
+    if "PICTURE" in cn: return "Picture Books"
+    if "GRAPHIC" in cn or " GN " in f" {cn} ": return "Graphic Novels"
+    if cn.startswith("JE "): return "Easy Readers"
+    if "EASY" in cn: return "Easy Readers"
+    if "READER" in cn: return "Easy Readers"
+
+    # 3. DDC-based (universal) — topic categories
+    ddc = _extract_ddc(cn)
+    if ddc is not None:
+        if 500 <= ddc <= 599: return "Science"
+        if 600 <= ddc <= 699: return "Technology"
+        if 700 <= ddc <= 799: return "Arts & Recreation"
+        if 300 <= ddc <= 399: return "Social Sciences"
+        if 900 <= ddc <= 999: return "History"
+
+    # 4. Other keywords
+    if " 92 " in f" {cn} " or cn.startswith("92 "): return "Biography"
+    if "BIOG" in cn or "BIOGRAPHY" in cn: return "Biography"
+    if "FICTION" in cn or "SF " in cn or cn.startswith("SF"): return "Fiction"
+    if "SERIES" in cn: return "Fiction"
+    if "MYSTERY" in cn: return "Fiction"
+
+    # 5. BK + content_type=FICTION → Fiction
+    if content_type == "FICTION":
+        return "Fiction"
+
+    # 6. Genre override (Graphic Novels)
     if genres and any(g.lower() in ("graphic novels", "comic books, strips, etc", "comics (graphic works)") for g in genres):
-        if cat in ("Fiction", "Easy Readers", "Other"):
-            return "Graphic Novels"
+        return "Graphic Novels"
 
-    return cat
+    return "Other"
 
 
 def _time_weight(checkout_date, is_current=False):
@@ -291,7 +171,9 @@ def get_recommendations(conn, library_id):
         meta_info[mid] = b
         idx = mid_to_idx[mid]
         cat = book_category(b.get("call_number"), library_id,
-                             json.loads(b.get("genres") or "[]"))
+                             json.loads(b.get("genres") or "[]"),
+                             books_format=b.get("format"),
+                             content_type=b.get("content_type"))
         by_cat[cat].append(idx)
         if b["publication_year"] and b["publication_year"] >= min_year:
             new_indices.add(idx)
