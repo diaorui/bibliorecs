@@ -117,13 +117,12 @@ def index():
         "Picture Books": "Stories told with full-page art",
         "Easy Readers": "Beginning and early chapter books",
         "Fiction": "Chapter books and novels",
-        "Board Books": "Sturdy books for the youngest readers",
         "Science": "Animals, space, earth & experiments",
         "History": "Countries, places & the past",
         "Technology": "Vehicles, pets, cooking & the human body",
         "Arts & Recreation": "Sports, drawing, crafts, games & music",
         "Social Sciences": "Folktales, holidays & how we live together",
-        "Other": "Poetry, myths, coding & more",
+        "Other": "Poetry, languages, coding & more",
     }
 
     new_year_cutoff = date.today().year - config.NEW_BOOK_MAX_AGE_YEARS
