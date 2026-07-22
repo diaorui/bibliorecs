@@ -92,7 +92,8 @@ def main():
 
     if not use_gpu:
         torch.set_num_threads(os.cpu_count())
-    batch_size = 256 if use_gpu else 128
+        model[0].auto_model = torch.compile(model[0].auto_model, dynamic=True)
+    batch_size = 256 if use_gpu else 64
 
     t0 = time.time()
     embeddings = model.encode(texts, batch_size=batch_size, show_progress_bar=True)
