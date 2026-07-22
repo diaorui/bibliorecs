@@ -1140,6 +1140,76 @@ th {
 
 .btn-sml:hover { background: #1d4ed8; }
 
+.btn-ghost {
+  background: transparent;
+  border: none;
+  color: #86868b;
+  cursor: pointer;
+  padding: 4px 8px;
+  font-size: 0.82rem;
+}
+
+.btn-ghost:hover { color: #515154; }
+
+/* ── creds banner ── */
+
+.creds-banner {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 20px;
+}
+
+.creds-banner-inner { max-width: 600px; }
+
+.creds-banner-text { font-size: 0.9rem; color: #1e40af; margin-bottom: 10px; }
+
+.creds-banner-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+.creds-input {
+  padding: 8px 10px;
+  font-size: 0.9rem;
+  border: 1px solid #d2d2d7;
+  border-radius: 6px;
+  outline: none;
+  background: #fff;
+  flex: 1;
+  min-width: 120px;
+}
+
+.creds-input:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.15); }
+
+/* ── creds list (settings) ── */
+
+.creds-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid #e8e8ed;
+  border-radius: 6px;
+  margin-bottom: 6px;
+  background: #fff;
+}
+
+.creds-row-name { flex: 1; font-size: 0.9rem; font-weight: 500; }
+
+.creds-row-status { font-size: 0.82rem; display: flex; align-items: center; gap: 4px; }
+
+.creds-row-actions { flex-shrink: 0; }
+
+.creds-status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.creds-status-on { background: #16a34a; }
+.creds-status-off { background: #d2d2d7; }
+.creds-status-unknown { background: #f59e0b; }
+
 /* ── onboarding ── */
 
 .onboarding-overlay {

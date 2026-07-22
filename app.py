@@ -389,6 +389,9 @@ def api_reset_onboarding():
     resp.set_cookie("selected_library", "", expires=0, path="/")
     resp.set_cookie("selected_branch", "", expires=0, path="/")
     return resp
+
+
+@app.route("/api/sync-history", methods=["POST"])
 def api_sync_history():
     try:
         lib_id, _, _ = _lib_from_cookies()
@@ -402,6 +405,41 @@ def api_sync_history():
         return jsonify({"synced": True, "checkouts": co, "history_new": hi})
     except Exception as e:
         return jsonify({"synced": False, "error": str(e)})
+
+
+@app.route("/api/creds", methods=["GET"])
+def api_creds_list():
+    import auth_store
+    return jsonify({"connected": list(auth_store.list_connected())})
+
+
+@app.route("/api/creds", methods=["POST"])
+def api_creds_set():
+    import auth_store
+    body = request.get_json()
+    if not body or "library_id" not in body or "user" not in body or "password" not in body:
+        return jsonify({"error": "library_id, user, password required"}), 400
+    lib_id = body["library_id"]
+    if lib_id not in config.LIBRARIES:
+        return jsonify({"error": "unknown library"}), 400
+    auth_store.set(lib_id, body["user"], body["password"])
+    # Trigger sync
+    try:
+        bc_token, session_id, account_id, _ = api._get_auth(lib_id)
+        conn = db.get_conn()
+        co = patron.sync_checkouts(conn, bc_token, session_id, account_id, lib_id)
+        hi = patron.sync_history(conn, bc_token, session_id, account_id, lib_id)
+        conn.close()
+        return jsonify({"success": True, "checkouts": co, "history_new": hi})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+
+@app.route("/api/creds/<library_id>", methods=["DELETE"])
+def api_creds_remove(library_id):
+    import auth_store
+    auth_store.remove(library_id)
+    return jsonify({"success": True})
 
 
 @app.route("/api/history/data")

@@ -24,9 +24,7 @@ def main():
 
     conn = db.get_conn()
 
-    print("\n=== Step 3/4: Syncing borrowing history ===")
-
-    print("\n--- syncing branches ---")
+    print("\n=== Step 3/4: Syncing branches ===")
     for lib_id, lib_cfg in config.LIBRARIES.items():
         try:
             branches = api.fetch_branches(lib_cfg["gateway_base"])
@@ -37,16 +35,6 @@ def main():
                 print(f"  {lib_id}: empty response, keeping existing branches")
         except Exception as e:
             print(f"  {lib_id}: fetch failed ({e}), keeping existing branches")
-    for lib_id, lib_cfg in config.LIBRARIES.items():
-        print(f"\n--- {lib_id} ---")
-        try:
-            bc_token, session_id, account_id, _ = api.login(lib_id)
-            new_history, pages = patron.sync_history(conn, bc_token, session_id, account_id, lib_id)
-            print(f"  {pages} pages checked, {new_history} new entries")
-            n_checkouts = patron.sync_checkouts(conn, bc_token, session_id, account_id, lib_id)
-            print(f"  {n_checkouts} current checkouts synced")
-        except Exception as e:
-            print(f"  Skipped — {e}")
 
     print("\n=== Step 4/4: Regenerating embeddings ===")
     generate_embeddings.main()

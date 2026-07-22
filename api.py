@@ -168,9 +168,12 @@ def login(library_id):
     cfg = config.LIBRARIES[library_id]
     catalog_base = cfg["catalog_base"]
 
-    prefix = cfg["env_prefix"]
-    user_var = f"{prefix}_USER"
-    pass_var = f"{prefix}_PASSWORD"
+    import auth_store
+    creds = auth_store.get(library_id)
+    if not creds:
+        raise RuntimeError(f"no credentials for {library_id}")
+    username = creds["user"]
+    password = creds["password"]
 
     jar = http.cookiejar.CookieJar()
     opener = urllib.request.build_opener(
@@ -190,8 +193,8 @@ def login(library_id):
     data = urllib.parse.urlencode({
         "utf8": "\u2713",
         "authenticity_token": token,
-        "name": os.environ[user_var],
-        "user_pin": os.environ[pass_var],
+        "name": username,
+        "user_pin": password,
         "remember_me": "true",
         "local": "false",
         "commit": "Log In",
