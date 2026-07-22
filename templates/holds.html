@@ -40,6 +40,10 @@
       ? '<span class="hold-expiry"><span class="due-relative">' + daysLeft + '</span></span>'
       : '';
 
+    var branchHtml = h.pickup_branch
+      ? '<span class="hold-branch">📍 ' + h.pickup_branch + '</span>'
+      : '';
+
     return '<a href="/book/' + h.metadata_id + '" class="history-item">'
       + '<div class="history-cover-wrap">'
       + '<img class="history-cover cover-img" src="' + syndetics + '" alt="" loading="lazy" data-fallback="' + openlibrary + '"' + dataIsbn + '>'
@@ -53,6 +57,7 @@
       + '<div class="hold-status-wrap">'
       + badge
       + expiry
+      + branchHtml
       + '<button class="btn-cancel" data-hold-id="' + h.hold_id + '" data-mid="' + h.metadata_id + '">Cancel</button>'
       + '</div>'
       + '</a>';

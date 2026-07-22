@@ -950,9 +950,15 @@ th {
 }
 
 .hold-expiry {
-  font-size: 0.8rem;
-  color: #92400e;
-  margin-top: 4px;
+  font-size: 0.8125rem;
+  color: #86868b;
+  margin-top: 2px;
+}
+
+.hold-branch {
+  font-size: 0.8125rem;
+  color: #515154;
+  margin-top: 2px;
 }
 
 /* ── preview modal ── */
@@ -1211,6 +1217,7 @@ th {
 
   .hold-status-wrap { margin-top: 4px; }
   .hold-badge { font-size: 0.75rem; padding: 3px 8px; }
+  .hold-branch { font-size: 0.75rem; }
 
   .quota-bar { flex-direction: column; gap: 4px; font-size: 0.82rem; }
 
