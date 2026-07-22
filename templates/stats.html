@@ -28,38 +28,7 @@
   Books deaccessioned or no longer matching these criteria are excluded.
 </p>
 
-{% if update_status %}
-<div class="section">
-  <h2 class="section-title">Auto-Update</h2>
-  <table>
-    <thead><tr><th>Task</th><th>Schedule</th><th>Last Run</th><th>Duration</th><th>State</th><th></th></tr></thead>
-    <tbody>
-      {% for task, label, schedule, api in [
-        ('daily', 'Daily', 'every day', '/api/update'),
-      ] %}
-      {% set t = update_status.get(task, {}) %}
-      <tr>
-        <td><strong>{{ label }}</strong></td>
-        <td style="font-size:0.82rem;color:#86868b">{{ schedule }}</td>
-        <td>{% set ts = t.get('last_ok') or t.get('last_run') %}{% if ts %}<time class="local-time" datetime="{{ ts }}">{{ ts }}</time>{% else %}never{% endif %}</td>
-        <td>{{ t.get('duration_sec') | duration_format }}</td>
-        <td>{{ t.get('state', '—') }}{% if t.get('error') %} — {{ t.error }}{% endif %}</td>
-        <td><button onclick="triggerNamed(this, '{{ api }}')" style="padding:2px 8px;font-size:0.75rem;border-radius:5px;border:1px solid #2563eb;background:#fff;color:#2563eb;cursor:pointer;font-weight:500">Run</button></td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  <p style="font-size:0.82rem;color:#86868b;margin-top:8px">
-    {% if update_status.now == 'idle' %}
-      Idle. Next window: {{ update_window_start }}:00–{{ update_window_end }}:00
-    {% else %}
-      <strong style="color:#2563eb">{{ update_status.now }}</strong>
-      <button onclick="triggerStop(this)"
-        style="margin-left:10px;padding:4px 10px;font-size:0.78rem;border-radius:6px;border:1px solid #dc2626;background:#fff;color:#dc2626;cursor:pointer;font-weight:500;vertical-align:middle">Stop</button>
-    {% endif %}
-  </p>
-</div>
-{% endif %}
+
 
 {% if chart_formats %}
 <div class="section chart-section">
@@ -88,10 +57,6 @@
   <canvas class="stats-chart" data-chart="cat"></canvas>
 </div>
 {% endif %}
-
-<div class="section">
-  <button onclick="restartServer()" class="btn-restart">Restart Server</button>
-</div>
 
 <script>
 var __formatData = {{ chart_formats | tojson }};
@@ -273,71 +238,5 @@ window.addEventListener('resize', function() {
   clearTimeout(statsResizeTimer);
   statsResizeTimer = setTimeout(drawAllCharts, 200);
 });
-
-function triggerUpdate(btn) {
-  btn.disabled = true;
-  btn.textContent = 'Starting...';
-  fetch('/api/update', { method: 'POST' })
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-      if (data.success) {
-        btn.textContent = 'Running...';
-        setTimeout(function() { location.reload(); }, 3000);
-      } else {
-        btn.textContent = 'Already running';
-        setTimeout(function() { btn.disabled = false; btn.textContent = 'Run Now'; }, 3000);
-      }
-    })
-    .catch(function() {
-      btn.textContent = 'Failed';
-      setTimeout(function() { btn.disabled = false; btn.textContent = 'Run Now'; }, 3000);
-    });
-}
-
-function triggerNamed(btn, url) {
-  btn.disabled = true;
-  btn.textContent = '...';
-  fetch(url, { method: 'POST' })
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-      btn.textContent = data.success ? 'Started' : 'Busy';
-      setTimeout(function() { location.reload(); }, 3000);
-    })
-    .catch(function() {
-      btn.textContent = 'Error';
-      setTimeout(function() { location.reload(); }, 3000);
-    });
-}
-
-function triggerStop(btn) {
-  btn.disabled = true;
-  btn.textContent = 'Stopping...';
-  fetch('/api/stop-update', { method: 'POST' })
-    .then(function(r) { return r.json(); })
-    .then(function() {
-      btn.textContent = 'Stopped';
-      setTimeout(function() { location.reload(); }, 2000);
-    })
-    .catch(function() {
-      btn.textContent = 'Failed';
-      setTimeout(function() { location.reload(); }, 2000);
-    });
-}
-
-function restartServer() {
-  if (!confirm('Restart the server now?')) return;
-  var btns = document.querySelectorAll('.btn-restart');
-  btns.forEach(function(b){ b.disabled = true; b.textContent = 'Restarting...'; });
-  fetch('/api/restart', { method: 'POST' })
-    .then(function(r){ return r.json(); })
-    .then(function(){
-      showToast('Server restarting...', 4000);
-      setTimeout(function(){ window.location.reload(); }, 2500);
-    })
-    .catch(function(){
-      showToast('Restart request failed', 5000);
-      btns.forEach(function(b){ b.disabled = false; b.textContent = 'Restart Server'; });
-    });
-}
 </script>
 {% endblock %}

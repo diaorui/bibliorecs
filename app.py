@@ -370,7 +370,10 @@ def settings():
     if not lib_id:
         lib_id = ""
     return render_template("settings.html",
-                           selected_library=lib_id, selected_branch=branch_code)
+                           selected_library=lib_id, selected_branch=branch_code,
+                           update_status=updater.status(),
+                           update_window_start=config.UPDATE_WINDOW_START,
+                           update_window_end=config.UPDATE_WINDOW_END)
 
 
 @app.route("/api/reset-onboarding", methods=["POST"])
@@ -685,10 +688,7 @@ def stats():
                            chart_langs=chart_langs,
                            chart_years=chart_years,
                            chart_cats=chart_cats,
-                           selected_library=lib_id, selected_branch=branch_code,
-                           update_status=updater.status(),
-                           update_window_start=config.UPDATE_WINDOW_START,
-                           update_window_end=config.UPDATE_WINDOW_END)
+                           selected_library=lib_id, selected_branch=branch_code)
 
 
 # ── template filters ──
