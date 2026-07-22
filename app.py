@@ -117,7 +117,6 @@ def index():
         "Easy Readers": "Beginning and early chapter books",
         "Fiction": "Chapter books and novels",
         "Board Books": "Sturdy books for the youngest readers",
-        "Biography": "Real people and their stories",
         "Science": "Animals, space, earth & experiments",
         "History": "Countries, places & the past",
         "Technology": "Vehicles, pets, cooking & the human body",

@@ -23,19 +23,37 @@ def _extract_ddc(cn):
     return None
 
 
+_GN_RE = re.compile(r'graphic\s*(novel|work|fiction)s?', re.IGNORECASE)
+
+
 def book_category(call_number, library_id=None, genres=None,
                   books_format=None, content_type=None):
     if not call_number:
         return "Other"
     cn = call_number.upper().strip()
 
-    # 1. Format-based (universal) — physical format trumps topic
+    # 1. Format field (universal, ~100% precision)
     if books_format == "BOARD_BK": return "Picture Books"
     if books_format == "PICTURE_BOOK": return "Picture Books"
     if books_format == "EASY_READER": return "Easy Readers"
     if books_format == "GRAPHIC_NOVEL": return "Graphic Novels"
 
-    # 2. Format-related keywords — reading level/format prefix trumps topic
+    # 2. DDC (universal, ~100% precision)
+    ddc = _extract_ddc(cn)
+    cat = None
+    if ddc is not None:
+        if 300 <= ddc <= 399: cat = "Social Sciences"
+        elif 500 <= ddc <= 599: cat = "Science"
+        elif 600 <= ddc <= 699: cat = "Technology"
+        elif 700 <= ddc <= 799: cat = "Arts & Recreation"
+        elif 900 <= ddc <= 999: cat = "History"
+        else: return "Other"
+
+    # 3. Genre regex (Graphic Novels) — overrides topic
+    if genres and any(_GN_RE.search(g) for g in genres):
+        return "Graphic Novels"
+
+    # 4. Format keywords — overrides topic (reading level > subject)
     if "BOARD" in cn or "HARDPAGE" in cn: return "Picture Books"
     if "TODDLER" in cn: return "Picture Books"
     if "PICTURE" in cn: return "Picture Books"
@@ -44,27 +62,11 @@ def book_category(call_number, library_id=None, genres=None,
     if "EASY" in cn: return "Easy Readers"
     if "READER" in cn: return "Easy Readers"
 
-    # 3. DDC-based (universal) — topic categories
-    ddc = _extract_ddc(cn)
-    if ddc is not None:
-        if 500 <= ddc <= 599: return "Science"
-        if 600 <= ddc <= 699: return "Technology"
-        if 700 <= ddc <= 799: return "Arts & Recreation"
-        if 300 <= ddc <= 399: return "Social Sciences"
-        if 900 <= ddc <= 999: return "History"
+    # 5. DDC topic (if set and not overridden)
+    if cat is not None:
+        return cat
 
-    # 4. Genre override (Graphic Novels) — before "FICTION" keyword + content_type
-    if genres and any(g.lower() in ("graphic novels", "comic books, strips, etc", "comics (graphic works)") for g in genres):
-        return "Graphic Novels"
-
-    # 5. Other keywords
-    if " 92 " in f" {cn} " or cn.startswith("92 "): return "Biography"
-    if "BIOG" in cn or "BIOGRAPHY" in cn: return "Biography"
-    if "FICTION" in cn or "SF " in cn or cn.startswith("SF"): return "Fiction"
-    if "SERIES" in cn: return "Fiction"
-    if "MYSTERY" in cn: return "Fiction"
-
-    # 6. BK + content_type=FICTION → Fiction
+    # 6. content_type == "FICTION"
     if content_type == "FICTION":
         return "Fiction"
 
