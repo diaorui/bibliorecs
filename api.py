@@ -90,13 +90,11 @@ def extract_book_info(metadata_id, bib):
     super_formats = info.get("superFormats", [])
 
     authors = info.get("authors", [])
-    author_str = ", ".join(authors) if authors else ""
 
     return {
         "metadata_id": metadata_id,
         "title": info.get("title", ""),
         "subtitle": info.get("subtitle"),
-        "author": author_str,
         "authors": json.dumps(authors, ensure_ascii=False),
         "format": info.get("format", ""),
         "content_type": info.get("contentType"),

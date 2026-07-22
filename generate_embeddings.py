@@ -28,8 +28,9 @@ def embed_text(w):
     parts = []
     if w.get("title"):
         parts.append("title: " + w["title"])
-    if w.get("author"):
-        parts.append("author: " + w["author"])
+    authors = json.loads(w.get("authors") or "[]")
+    if authors:
+        parts.append("author: " + ", ".join(authors))
     series = json.loads(w["series"]) if w.get("series") else []
     seen_s = set()
     for s in series:
@@ -66,7 +67,7 @@ def embed_text(w):
 def main():
     conn = db.get_conn()
     rows = conn.execute("""
-        SELECT metadata_id, title, author, subjects, series, genres
+        SELECT metadata_id, title, authors, subjects, series, genres
         FROM books_in_library
         WHERE active = 1
           AND isbns IS NOT NULL AND isbns != '[]'

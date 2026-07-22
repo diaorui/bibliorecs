@@ -54,7 +54,7 @@ def print_samples(n=10):
         genres = json.loads(b["genres"]) if b["genres"] else []
         desc = (b["description"] or "")[:120]
         print(f"\n  [{i}] {b['title']}")
-        print(f"      Author:    {b['author'] or 'N/A'}")
+        print(f"      Author:    {', '.join(json.loads(b['authors'])) if b['authors'] else 'N/A'}")
         print(f"      Format:    {b['format']} | Year: {b['publication_year'] or 'N/A'}")
         print(f"      Subjects:  {', '.join(subjects[:4])}")
         print(f"      Genres:    {', '.join(genres[:3])}")
@@ -90,9 +90,9 @@ def search_books(term):
     conn = db.get_conn()
     pattern = f"%{term}%"
     rows = conn.execute("""
-        SELECT metadata_id, library_id, title, author, format, publication_year
+        SELECT metadata_id, library_id, title, authors, format, publication_year
         FROM books_in_library
-        WHERE title LIKE ? OR author LIKE ?
+        WHERE title LIKE ? OR authors LIKE ?
         ORDER BY title
         LIMIT 30
     """, (pattern, pattern)).fetchall()
@@ -104,7 +104,8 @@ def search_books(term):
 
     print(f"Found {len(rows)} books matching '{term}':")
     for r in rows:
-        print(f"  {r['metadata_id']:25s} | {r['title'][:50]:50s} | {r['author'][:25]:25s} | {r['format']}")
+        author = ", ".join(json.loads(r["authors"])) if r["authors"] else ""
+        print(f"  {r['metadata_id']:25s} | {r['title'][:50]:50s} | {author[:25]:25s} | {r['format']}")
     conn.close()
 
 

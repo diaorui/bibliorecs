@@ -255,7 +255,7 @@ def get_recommendations(conn, library_id):
 
     books = conn.execute("""
         SELECT metadata_id, call_number, publication_year,
-               title, subtitle, author, isbn, isbns, format,
+               title, subtitle, authors, isbns, format,
                content_type, subjects, genres, description, series
         FROM books_in_library
         WHERE active = 1 AND library_id = ?

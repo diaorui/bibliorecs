@@ -10,7 +10,6 @@ CREATE TABLE IF NOT EXISTS books_in_library (
     library_id TEXT NOT NULL,
     title TEXT NOT NULL,
     subtitle TEXT,
-    author TEXT,
     authors TEXT,
     format TEXT,
     content_type TEXT,
@@ -39,7 +38,6 @@ CREATE TABLE IF NOT EXISTS books_in_library (
 
 CREATE INDEX IF NOT EXISTS idx_bil_library ON books_in_library(library_id);
 CREATE INDEX IF NOT EXISTS idx_bil_format ON books_in_library(format);
-CREATE INDEX IF NOT EXISTS idx_bil_author ON books_in_library(author);
 CREATE INDEX IF NOT EXISTS idx_bil_year ON books_in_library(publication_year);
 CREATE INDEX IF NOT EXISTS idx_bil_lang ON books_in_library(primary_language);
 CREATE INDEX IF NOT EXISTS idx_bil_content ON books_in_library(content_type);
@@ -129,7 +127,7 @@ def schema_matches(conn):
 
 
 def upsert_book_in_library(conn, library_id, metadata_id, title, subtitle=None,
-                           author=None, authors=None, format=None, content_type=None,
+                           authors=None, format=None, content_type=None,
                            description=None, call_number=None,
                            publication_year=None, primary_language=None,
                            isbns=None, subjects=None,
@@ -141,7 +139,7 @@ def upsert_book_in_library(conn, library_id, metadata_id, title, subtitle=None,
                            rating_count=None, active=1):
     conn.execute("""
         INSERT INTO books_in_library (
-            library_id, metadata_id, title, subtitle, author, authors, format,
+            library_id, metadata_id, title, subtitle, authors, format,
             content_type, description, call_number,
             publication_year, primary_language, isbns,
             subjects, composite_subjects, genres, series,
@@ -149,11 +147,11 @@ def upsert_book_in_library(conn, library_id, metadata_id, title, subtitle=None,
             edition, multiscript_title, multiscript_author,
             rating_avg, rating_count,
             active, last_updated
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                  ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(metadata_id, library_id) DO UPDATE SET
             title=excluded.title, subtitle=excluded.subtitle,
-            author=excluded.author, authors=excluded.authors, format=excluded.format,
+            authors=excluded.authors, format=excluded.format,
             content_type=excluded.content_type,
             description=excluded.description,
             call_number=excluded.call_number,
@@ -174,7 +172,7 @@ def upsert_book_in_library(conn, library_id, metadata_id, title, subtitle=None,
             last_updated=excluded.last_updated,
             active=excluded.active
     """, (
-        library_id, metadata_id, title, subtitle, author, authors, format,
+        library_id, metadata_id, title, subtitle, authors, format,
         content_type, description, call_number,
         publication_year, primary_language, isbns,
         subjects, composite_subjects, genres, series,
@@ -279,7 +277,7 @@ def get_stats(conn, library_id=None):
     row = conn.execute(f"""
         SELECT
             COUNT(*) as total,
-            SUM(CASE WHEN author IS NOT NULL AND author != '' THEN 1 ELSE 0 END) as with_author,
+            SUM(CASE WHEN authors IS NOT NULL AND authors != '[]' THEN 1 ELSE 0 END) as with_author,
             SUM(CASE WHEN subjects IS NOT NULL AND subjects != '[]' THEN 1 ELSE 0 END) as with_subjects,
             SUM(CASE WHEN description IS NOT NULL AND description != '' THEN 1 ELSE 0 END) as with_description,
             SUM(CASE WHEN content_type IS NOT NULL THEN 1 ELSE 0 END) as with_content_type,
@@ -340,7 +338,7 @@ def get_year_distribution(conn, library_id=None):
 
 def get_sample_books(conn, n=10):
     rows = conn.execute("""
-        SELECT metadata_id, library_id, title, subtitle, author, format,
+        SELECT metadata_id, library_id, title, subtitle, authors, format,
                content_type, publication_year,
                subjects, genres, description
         FROM books_in_library ORDER BY RANDOM() LIMIT ?

@@ -164,7 +164,7 @@ def book_detail(metadata_id):
                                selected_library=lib_id, selected_branch=branch_code), 404
     book = dict(row)
     book["isbn"] = _first_isbn(book.get("isbns"))
-    book["author"] = ", ".join(json.loads(book.get("authors") or "[]")) or book.get("author", "")
+    book["author"] = ", ".join(json.loads(book.get("authors") or "[]"))
 
     borrows = conn.execute("""
         SELECT * FROM borrow_events

@@ -187,7 +187,6 @@ def _process_page(conn, data, library_id):
                 metadata_id=book["metadata_id"],
                 title=book["title"],
                 subtitle=book["subtitle"],
-                author=book["author"],
                 authors=book["authors"],
                 format=book["format"],
                 content_type=book["content_type"],
