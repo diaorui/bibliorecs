@@ -182,7 +182,7 @@ def _process_page(conn, data, library_id):
         try:
             book = api.extract_book_info(metadata_id, bib)
             if book["total_copies"] == 0:
-                print(f"  ⚠️ total=0 | {library_id} | {book['call_number'][:30]:<30} | {book['title'][:50]}")
+                print(f"  ⚠️ total=0 mid={metadata_id} | {library_id} | {book['title'][:50]}")
             db.upsert_book_in_library(
                 conn,
                 library_id=library_id,
