@@ -134,18 +134,28 @@
     });
   }
 
-  fetch('/api/holds')
+  fetch('/api/creds')
     .then(function(r) { return r.json(); })
-    .then(function(data) {
-      if (data.holds) {
-        renderHolds(data.holds);
-      } else {
-        renderError(data.error);
+    .then(function(credsData) {
+      var libId = document.body.getAttribute('data-lib');
+      if ((credsData.connected || []).indexOf(libId) === -1) {
+        renderMessage('Connect your library card in Settings to view and manage holds.');
+        return;
       }
+      fetch('/api/holds')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.holds) {
+            renderHolds(data.holds);
+          } else {
+            renderError(data.error);
+          }
+        })
+        .catch(function() {
+          renderError('Network error');
+        });
     })
-    .catch(function() {
-      renderError('Network error');
-    });
+    .catch(function() {});
 })();
 </script>
 {% endblock %}

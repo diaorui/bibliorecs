@@ -401,7 +401,13 @@ var __catData = {{ chart_cats | tojson }};
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(onResize, 200);
   });
-  doSync();
-})();
-</script>
-{% endblock %}
+
+  // Check if we have credentials before syncing
+  fetch('/api/creds').then(function(r) { return r.json(); }).then(function(credsData) {
+    var libId = document.body.getAttribute('data-lib');
+    if ((credsData.connected || []).indexOf(libId) !== -1) {
+      doSync();
+    }
+  }).catch(function() {});
+  </script>
+  {% endblock %}

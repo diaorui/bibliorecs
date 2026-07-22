@@ -156,6 +156,7 @@ function selectBranch(libId, branchCode) {
   var skeleton = document.getElementById('rec-skeleton');
   var __holdsByMid = {};
   var __checkedOutByMe = new Set();
+  var __hasCreds = false;
 
   function renderCarousels(carousels) {
     skeleton.style.display = 'none';
@@ -216,7 +217,10 @@ function selectBranch(libId, branchCode) {
       .then(function(r) { return r.json(); })
       .then(function(data) {
         var libId = document.body.getAttribute('data-lib');
-        if (data.connected && data.connected.indexOf(libId) !== -1) return;
+        if (data.connected && data.connected.indexOf(libId) !== -1) {
+          __hasCreds = true;
+          return;
+        }
         if (localStorage.getItem('bibliorecs_skip_creds')) return;
         showCredsBanner();
       })
@@ -351,6 +355,10 @@ function selectBranch(libId, branchCode) {
     var btn = e.target.closest('.btn-card:not(:disabled)');
     if (!btn) return;
     e.preventDefault();
+    if (!__hasCreds) {
+      showToast('Connect your library card to place holds', 4000);
+      return;
+    }
     var mid = btn.getAttribute('data-mid');
     var orig = btn.textContent;
     btn.textContent = 'Placing...';

@@ -228,31 +228,57 @@ function handlePlaceHold(e) {
   });
 }
 
+function showNoCreds() {
+  holdContent.innerHTML = '<div class="hold-status"><span class="hold-status-label">Connect your library card in Settings to place holds.</span></div>';
+  holdSection.style.display = '';
+}
+
 showLoading();
 
-Promise.all([
-  fetch('/api/holds').then(function(r) { return r.json(); }),
-  fetch('/api/checkouts').then(function(r) { return r.json(); })
-]).then(function(results) {
-  var holds = results[0], checkouts = results[1];
-
-  if (checkouts.checked_out && checkouts.checked_out.indexOf(mid) !== -1)
-    { showCheckedOut(); return; }
-
-  if (holds.holds) {
-    var myHold = null;
-    holds.holds.forEach(function(h) { if (h.metadata_id === mid) myHold = h; });
-    if (myHold) {
-      if (myHold.status === 'READY_FOR_PICKUP')
-        { showReady(myHold); return; }
-      showOnHold(myHold);
-      return;
-    }
+fetch('/api/creds').then(function(r) { return r.json(); }).then(function(credsData) {
+  var libId = document.body.getAttribute('data-lib');
+  var connected = credsData.connected || [];
+  if (connected.indexOf(libId) === -1) {
+    showNoCreds();
+    return;
   }
 
-  showPlaceHold();
+  Promise.all([
+    fetch('/api/holds').then(function(r) { return r.json(); }),
+    fetch('/api/checkouts').then(function(r) { return r.json(); })
+  ]).then(function(results) {
+    var holds = results[0], checkouts = results[1];
+
+    if (checkouts.checked_out && checkouts.checked_out.indexOf(mid) !== -1)
+      { showCheckedOut(); return; }
+
+    if (holds.holds) {
+      var myHold = null;
+      holds.holds.forEach(function(h) { if (h.metadata_id === mid) myHold = h; });
+      if (myHold) {
+        if (myHold.status === 'READY_FOR_PICKUP')
+          { showReady(myHold); return; }
+        showOnHold(myHold);
+        return;
+      }
+    }
+
+    showPlaceHold();
+  });
 });
 
-document.addEventListener('click', handlePlaceHold);
+document.addEventListener('click', function(e) {
+  var btn = e.target.closest('.btn-hold-main');
+  if (!btn) return;
+  e.preventDefault();
+  fetch('/api/creds').then(function(r) { return r.json(); }).then(function(credsData) {
+    var libId = document.body.getAttribute('data-lib');
+    if ((credsData.connected || []).indexOf(libId) === -1) {
+      showToast('Connect your library card to place holds', 4000);
+      return;
+    }
+    handlePlaceHold(e);
+  }).catch(function() { handlePlaceHold(e); });
+});
 </script>
 {% endblock %}
