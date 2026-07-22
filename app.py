@@ -949,7 +949,7 @@ def _fmt_rec(r, syndetics_client, library_id=None):
     series = _json_list(r.get("series"))
     r["series_name"] = series[0] if series else None
 
-    r["book_category"] = book_category(r.get("call_number"), library_id)
+    r["book_category"] = book_category(r.get("call_number"), library_id, genres)
 
     return r
 

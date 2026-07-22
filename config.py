@@ -15,6 +15,12 @@ LIBRARIES = {
         "syndetics_client": "santaclaracfl",
         "env_prefix": "SCCL",
     },
+    "sjpl": {
+        "catalog_base": "https://sjpl.bibliocommons.com",
+        "gateway_base": "https://gateway.bibliocommons.com/v2/libraries/sjpl",
+        "syndetics_client": "sanjosepl",
+        "env_prefix": "SJPL",
+    },
 }
 
 EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"

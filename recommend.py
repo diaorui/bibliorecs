@@ -76,13 +76,52 @@ def _scc_category(cn):
     return "Other"
 
 
-def book_category(call_number, library_id=None):
+def _sjpl_category(cn):
+    if cn.startswith("J PICTURE") or cn.startswith("J HARDPAGE"):
+        return "Picture Books"
+    if cn.startswith("J FICTION") or cn.startswith("J PB") or cn.startswith("FICTION"):
+        return "Fiction"
+    if cn.startswith("J EASY") or cn.startswith("J READ"):
+        return "Easy Readers"
+    if not cn.startswith("J"):
+        return "Other"
+    for p in cn.split():
+        m = re.match(r"^(\d{3})", p)
+        if m:
+            n = int(m.group(1))
+            if 300 <= n <= 399:
+                return "Social Sciences"
+            if 500 <= n <= 599:
+                return "Science"
+            if 600 <= n <= 699:
+                return "Technology"
+            if 700 <= n <= 799:
+                return "Arts & Recreation"
+            if 900 <= n <= 999:
+                return "History"
+            break
+    rest = cn[2:].strip()
+    if rest and rest[0].isdigit():
+        return "Other"
+    return "Fiction"
+
+
+def book_category(call_number, library_id=None, genres=None):
     if not call_number:
         return "Other"
     cn = call_number.strip()
     if library_id == "sccl":
-        return _scc_category(cn)
-    return _scl_category(cn)
+        cat = _scc_category(cn)
+    elif library_id == "sjpl":
+        cat = _sjpl_category(cn)
+    else:
+        cat = _scl_category(cn)
+
+    if genres and any(g.lower() in ("graphic novels", "comic books, strips, etc", "comics (graphic works)") for g in genres):
+        if cat in ("Fiction", "Easy Readers", "Other"):
+            return "Graphic Novels"
+
+    return cat
 
 
 def _time_weight(checkout_date, is_current=False):
@@ -188,7 +227,8 @@ def get_recommendations(conn, library_id):
             continue
         meta_info[mid] = b
         idx = mid_to_idx[mid]
-        cat = book_category(b.get("call_number"), library_id)
+        cat = book_category(b.get("call_number"), library_id,
+                             json.loads(b.get("genres") or "[]"))
         by_cat[cat].append(idx)
         if b["publication_year"] and b["publication_year"] >= min_year:
             new_indices.add(idx)
