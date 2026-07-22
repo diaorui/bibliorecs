@@ -325,7 +325,7 @@ var __catData = {{ chart_cats | tojson }};
       }
       html += '<a href="/book/' + item.metadata_id + '" class="history-item">'
         + '<div class="history-cover-wrap">'
-        + '<img class="history-cover cover-img" src="' + item.img_url + '" alt="" loading="lazy" data-fallback="' + item.fallback_url + '" data-isbn="' + (item.isbn || '') + '">'
+        + '<img class="history-cover cover-img" src="' + item.img_url + '" alt="" loading="lazy" data-fallback="' + item.fallback_url.replace(/"/g, '&quot;') + '" data-isbn="' + (item.isbn || '') + '">'
         + '<div class="cover-placeholder cover-placeholder-sm">📖</div>'
         + '</div>'
         + '<div class="history-body">'

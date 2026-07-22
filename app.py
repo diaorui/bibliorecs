@@ -46,19 +46,19 @@ def _syn_url(isbn, size, syndetics_client):
 def _cover(isbn, syndetics_client):
     if not isbn:
         return PLACEHOLDER, PLACEHOLDER
-    return (
-        _syn_url(isbn, "LC", syndetics_client),
-        OL_URL.format(isbn=isbn, size="L"),
-    )
+    google = f"https://books.google.com/books/content?vid=ISBN{isbn}&printsec=frontcover&img=1&zoom=0"
+    ol = OL_URL.format(isbn=isbn, size="L")
+    syn = _syn_url(isbn, "LC", syndetics_client)
+    return google, json.dumps([ol, syn])
 
 
 def _cover_large(isbn, syndetics_client):
     if not isbn:
         return PLACEHOLDER, PLACEHOLDER
-    return (
-        _syn_url(isbn, "LC", syndetics_client),
-        OL_URL.format(isbn=isbn, size="L"),
-    )
+    google = f"https://books.google.com/books/content?vid=ISBN{isbn}&printsec=frontcover&img=1&zoom=1"
+    ol = OL_URL.format(isbn=isbn, size="L")
+    syn = _syn_url(isbn, "LC", syndetics_client)
+    return google, json.dumps([ol, syn])
 
 
 def _prefer(a, b):

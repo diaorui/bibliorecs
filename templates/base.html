@@ -134,7 +134,13 @@
     document.querySelectorAll('img.cover-img').forEach(function(img) {
       var fallbacks = [];
       var fb = img.getAttribute('data-fallback');
-      if (fb) fallbacks.push(fb);
+      if (fb) {
+        try {
+          JSON.parse(fb).forEach(function(u) { fallbacks.push(u); });
+        } catch(e) {
+          fallbacks.push(fb);
+        }
+      }
       var fbIdx = 0;
       var done = false;
       var olSearched = false;
