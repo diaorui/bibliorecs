@@ -5,7 +5,6 @@ import time
 
 import numpy as np
 import torch
-from sentence_transformers import SentenceTransformer
 
 import config
 import db
@@ -81,20 +80,50 @@ def main():
         return
 
     print(f"Generating embeddings for {len(books):,} books...")
-    t0 = time.time()
-    model = SentenceTransformer(config.EMBEDDING_MODEL)
-    load_t = time.time() - t0
-    print(f"  Model loaded in {load_t:.1f}s ({config.EMBEDDING_MODEL})")
 
     texts = [embed_text(b) for b in books]
 
     use_gpu = torch.cuda.is_available()
-    if not use_gpu:
-        torch.set_num_threads(os.cpu_count())
-    batch_size = 256 if use_gpu else 64
-
     t0 = time.time()
-    embeddings = model.encode(texts, batch_size=batch_size, show_progress_bar=True)
+
+    if use_gpu:
+        from sentence_transformers import SentenceTransformer
+        model = SentenceTransformer(config.EMBEDDING_MODEL)
+        load_t = time.time() - t0
+        print(f"  Model loaded in {load_t:.1f}s ({config.EMBEDDING_MODEL} — CUDA)")
+
+        t0 = time.time()
+        embeddings = model.encode(texts, batch_size=256, show_progress_bar=True)
+    else:
+        print(f"  Loading OpenVINO int8 model ({config.EMBEDDING_MODEL})...")
+        from optimum.intel import OVModelForFeatureExtraction
+        from transformers import AutoTokenizer
+
+        tokenizer = AutoTokenizer.from_pretrained(config.EMBEDDING_MODEL)
+        ov_model = OVModelForFeatureExtraction.from_pretrained(
+            config.EMBEDDING_MODEL, export=True, load_in_8bit=True,
+        )
+        load_t = time.time() - t0
+        print(f"  Model loaded in {load_t:.1f}s (OpenVINO int8 — CPU)")
+
+        os.environ.pop("OPENVINO_LOG_LEVEL", None)
+        batch_size = 64
+        t0 = time.time()
+        rows = []
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i:i+batch_size]
+            inputs = tokenizer(batch, padding=True, truncation=True,
+                               max_length=512, return_tensors="pt")
+            out = ov_model(**inputs)
+            mask = inputs["attention_mask"].unsqueeze(-1).expand(out.last_hidden_state.size())
+            emb = (out.last_hidden_state * mask).sum(1) / mask.sum(1).clamp(min=1e-9)
+            rows.append(torch.nn.functional.normalize(emb).detach().numpy())
+            if (i // batch_size + 1) % 100 == 0:
+                elapsed = time.time() - t0
+                rate = (i + batch_size) / elapsed
+                remaining = (len(texts) - i - batch_size) / rate if rate > 0 else 0
+                print(f"  {i + batch_size}/{len(texts):,} — {rate:.0f} docs/s — ETA {remaining:.0f}s")
+        embeddings = np.concatenate(rows)
     encode_t = time.time() - t0
     print(f"  Encoded {len(embeddings):,} vectors in {encode_t:.1f}s (dim={embeddings.shape[1]})")
 
