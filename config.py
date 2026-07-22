@@ -21,6 +21,18 @@ LIBRARIES = {
         "syndetics_client": "sanjosepl",
         "env_prefix": "SJPL",
     },
+    "sunnyvale": {
+        "catalog_base": "https://sunnyvale.bibliocommons.com",
+        "gateway_base": "https://gateway.bibliocommons.com/v2/libraries/sunnyvale",
+        "syndetics_client": "sunnyvaleca",
+        "env_prefix": "SUNNYVALE",
+    },
+    "paloalto": {
+        "catalog_base": "https://paloalto.bibliocommons.com",
+        "gateway_base": "https://gateway.bibliocommons.com/v2/libraries/paloalto",
+        "syndetics_client": "paloaltocity",
+        "env_prefix": "PALOALTO",
+    },
 }
 
 EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"

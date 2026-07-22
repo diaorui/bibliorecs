@@ -106,6 +106,69 @@ def _sjpl_category(cn):
     return "Fiction"
 
 
+def _sunnyvale_category(cn):
+    if cn.startswith("BB "):
+        return "Board Books"
+    if cn.startswith("ER ") or cn.startswith("ER-"):
+        return "Easy Readers"
+    if cn.startswith("E ") or cn.startswith("E-"):
+        return "Picture Books"
+    if cn.startswith("JGN") or cn.startswith("J/ GN"):
+        return "Graphic Novels"
+    if cn.startswith("JP"):
+        return "Fiction"
+    if not cn.startswith("J"):
+        return "Other"
+    for p in cn.split():
+        m = re.match(r"^(\d{3})", p)
+        if m:
+            n = int(m.group(1))
+            if 300 <= n <= 399: return "Social Sciences"
+            if 500 <= n <= 599: return "Science"
+            if 600 <= n <= 699: return "Technology"
+            if 700 <= n <= 799: return "Arts & Recreation"
+            if 900 <= n <= 999: return "History"
+            break
+    rest = cn[2:].strip()
+    if rest and rest[0].isdigit():
+        return "Other"
+    return "Fiction"
+
+
+def _paloalto_category(cn):
+    if cn.startswith("J BOARD"):
+        return "Board Books"
+    if cn.startswith("J READER"):
+        return "Easy Readers"
+    if cn.startswith("J GN") or cn.startswith("J GN-"):
+        return "Graphic Novels"
+    if cn.startswith("J PICTURE") or cn.startswith("J Picture"):
+        return "Picture Books"
+    if cn.startswith("J BIOG.") or cn.startswith("J Biog."):
+        return "Biography"
+    if cn.startswith("J FICTION") or cn.startswith("J Fiction") or \
+       cn.startswith("J SERIES") or cn.startswith("J Series") or \
+       cn.startswith("J MYSTERY") or cn.startswith("J Mystery") or \
+       cn.startswith("J SCIENCE"):
+        return "Fiction"
+    if not cn.startswith("J"):
+        return "Other"
+    for p in cn.split():
+        m = re.match(r"^(\d{3})", p)
+        if m:
+            n = int(m.group(1))
+            if 300 <= n <= 399: return "Social Sciences"
+            if 500 <= n <= 599: return "Science"
+            if 600 <= n <= 699: return "Technology"
+            if 700 <= n <= 799: return "Arts & Recreation"
+            if 900 <= n <= 999: return "History"
+            break
+    rest = cn[2:].strip()
+    if rest and rest[0].isdigit():
+        return "Other"
+    return "Fiction"
+
+
 def book_category(call_number, library_id=None, genres=None):
     if not call_number:
         return "Other"
@@ -114,6 +177,10 @@ def book_category(call_number, library_id=None, genres=None):
         cat = _scc_category(cn)
     elif library_id == "sjpl":
         cat = _sjpl_category(cn)
+    elif library_id == "sunnyvale":
+        cat = _sunnyvale_category(cn)
+    elif library_id == "paloalto":
+        cat = _paloalto_category(cn)
     else:
         cat = _scl_category(cn)
 
