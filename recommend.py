@@ -30,13 +30,13 @@ def book_category(call_number, library_id=None, genres=None,
     cn = call_number.upper().strip()
 
     # 1. Format-based (universal) — physical format trumps topic
-    if books_format == "BOARD_BK": return "Board Books"
+    if books_format == "BOARD_BK": return "Picture Books"
     if books_format == "PICTURE_BOOK": return "Picture Books"
     if books_format == "EASY_READER": return "Easy Readers"
     if books_format == "GRAPHIC_NOVEL": return "Graphic Novels"
 
     # 2. Format-related keywords — reading level/format prefix trumps topic
-    if "BOARD" in cn: return "Board Books"
+    if "BOARD" in cn or "HARDPAGE" in cn: return "Picture Books"
     if "TODDLER" in cn: return "Picture Books"
     if "PICTURE" in cn: return "Picture Books"
     if "GRAPHIC" in cn or " GN " in f" {cn} ": return "Graphic Novels"
@@ -53,20 +53,20 @@ def book_category(call_number, library_id=None, genres=None,
         if 300 <= ddc <= 399: return "Social Sciences"
         if 900 <= ddc <= 999: return "History"
 
-    # 4. Other keywords
+    # 4. Genre override (Graphic Novels) — before "FICTION" keyword + content_type
+    if genres and any(g.lower() in ("graphic novels", "comic books, strips, etc", "comics (graphic works)") for g in genres):
+        return "Graphic Novels"
+
+    # 5. Other keywords
     if " 92 " in f" {cn} " or cn.startswith("92 "): return "Biography"
     if "BIOG" in cn or "BIOGRAPHY" in cn: return "Biography"
     if "FICTION" in cn or "SF " in cn or cn.startswith("SF"): return "Fiction"
     if "SERIES" in cn: return "Fiction"
     if "MYSTERY" in cn: return "Fiction"
 
-    # 5. BK + content_type=FICTION → Fiction
+    # 6. BK + content_type=FICTION → Fiction
     if content_type == "FICTION":
         return "Fiction"
-
-    # 6. Genre override (Graphic Novels)
-    if genres and any(g.lower() in ("graphic novels", "comic books, strips, etc", "comics (graphic works)") for g in genres):
-        return "Graphic Novels"
 
     return "Other"
 
