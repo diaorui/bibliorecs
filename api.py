@@ -115,6 +115,9 @@ def extract_book_info(metadata_id, bib):
         "multiscript_author": info.get("multiscriptAuthor"),
         "rating_avg": info.get("rating", {}).get("averageRating"),
         "rating_count": info.get("rating", {}).get("totalCount"),
+        "total_copies": bib.get("availability", {}).get("totalCopies"),
+        "available_copies": bib.get("availability", {}).get("availableCopies"),
+        "on_order_copies": bib.get("availability", {}).get("onOrderCopies"),
     }
 
 

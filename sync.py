@@ -207,6 +207,9 @@ def _process_page(conn, data, library_id):
                 multiscript_author=book["multiscript_author"],
                 rating_avg=book["rating_avg"],
                 rating_count=book["rating_count"],
+                total_copies=book["total_copies"],
+                available_copies=book["available_copies"],
+                on_order_copies=book["on_order_copies"],
             )
         except Exception:
             errors += 1

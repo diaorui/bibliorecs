@@ -30,6 +30,9 @@ CREATE TABLE IF NOT EXISTS books_in_library (
     multiscript_author TEXT,
     rating_avg INTEGER,
     rating_count INTEGER,
+    total_copies INTEGER,
+    available_copies INTEGER,
+    on_order_copies INTEGER,
     active INTEGER DEFAULT 1,
     first_synced TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -85,6 +88,12 @@ def get_conn():
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=OFF")
+    # Migrate: add columns if missing
+    for col in ("total_copies", "available_copies", "on_order_copies"):
+        try:
+            conn.execute(f"ALTER TABLE books_in_library ADD COLUMN {col} INTEGER")
+        except sqlite3.OperationalError:
+            pass
     return conn
 
 
@@ -136,7 +145,9 @@ def upsert_book_in_library(conn, library_id, metadata_id, title, subtitle=None,
                            group_key=None,
                            edition=None, multiscript_title=None,
                            multiscript_author=None, rating_avg=None,
-                           rating_count=None, active=1):
+                           rating_count=None, total_copies=None,
+                           available_copies=None, on_order_copies=None,
+                           active=1):
     conn.execute("""
         INSERT INTO books_in_library (
             library_id, metadata_id, title, subtitle, authors, format,
@@ -146,9 +157,10 @@ def upsert_book_in_library(conn, library_id, metadata_id, title, subtitle=None,
             super_formats, consumption_format, group_key,
             edition, multiscript_title, multiscript_author,
             rating_avg, rating_count,
+            total_copies, available_copies, on_order_copies,
             active, last_updated
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                 ?, ?, ?, ?, ?, ?, ?)
+                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(metadata_id, library_id) DO UPDATE SET
             title=excluded.title, subtitle=excluded.subtitle,
             authors=excluded.authors, format=excluded.format,
@@ -168,6 +180,9 @@ def upsert_book_in_library(conn, library_id, metadata_id, title, subtitle=None,
             multiscript_author=excluded.multiscript_author,
             rating_avg=excluded.rating_avg,
             rating_count=excluded.rating_count,
+            total_copies=excluded.total_copies,
+            available_copies=excluded.available_copies,
+            on_order_copies=excluded.on_order_copies,
             first_synced=COALESCE(first_synced, excluded.first_synced),
             last_updated=excluded.last_updated,
             active=excluded.active
@@ -179,6 +194,7 @@ def upsert_book_in_library(conn, library_id, metadata_id, title, subtitle=None,
         super_formats, consumption_format, group_key,
         edition, multiscript_title, multiscript_author,
         rating_avg, rating_count,
+        total_copies, available_copies, on_order_copies,
         active, datetime.utcnow().isoformat()
     ))
 
