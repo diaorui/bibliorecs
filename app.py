@@ -77,73 +77,80 @@ def _prefer(a, b):
 
 @app.route("/")
 def index():
-    conn = db.get_conn()
     lib_id, branch_code, lib_cfg = _lib_from_cookies()
-    if not lib_id:
-        conn.close()
-        return render_template("index.html", carousels=[])
-
-    recs = recmod.get_recommendations(conn, lib_id)
-    by_cat = recs["by_cat"]
-    has_profile = recs["has_profile"]
-
-    if not by_cat:
-        conn.close()
-        return render_template("index.html", carousels=[])
-
-    for items in by_cat.values():
-        for r in items:
-            _fmt_rec(r, lib_cfg["syndetics_client"], lib_id)
-
-    call_counts = db.get_category_order(conn, lib_id)
-    cat_counts = defaultdict(float)
-    for row in call_counts:
-        genres = json.loads(row["genres"]) if row.get("genres") and row["genres"] != "[]" else None
-        cat = recmod.book_category(row["call_number"], lib_id, genres=genres,
-                                      books_format=row.get("format"),
-                                      content_type=row.get("content_type"))
-        cat_counts[cat] += recmod._time_weight(row["checkout_date"], row["is_current"])
-
-    cat_order = sorted(
-        (c for c in by_cat if c != "Other" and c != "Top Picks" and c != "New"),
-        key=lambda c: (-cat_counts.get(c, 0), -sum(r["score"] for r in by_cat[c]) / len(by_cat[c])),
-    )
-    if "Other" in by_cat:
-        cat_order.append("Other")
-
-    ROW_DESCRIPTIONS = {
-        "Top Picks": "Best matches across all categories",
-        "Graphic Novels": "Comics and illustrated stories",
-        "Picture Books": "Stories told with full-page art",
-        "Easy Readers": "Beginning and early chapter books",
-        "Fiction": "Chapter books and novels",
-        "Science": "Animals, space, earth & experiments",
-        "History": "Countries, places & the past",
-        "Technology": "Vehicles, pets, cooking & the human body",
-        "Arts & Recreation": "Sports, drawing, crafts, games & music",
-        "Social Sciences": "Folktales, holidays & how we live together",
-        "Other": "Poetry, languages, coding & more",
-    }
-
-    new_year_cutoff = date.today().year - config.NEW_BOOK_MAX_AGE_YEARS
-    new_desc = f"Published {new_year_cutoff}–{date.today().year}"
-
-    carousels = []
-    if "Top Picks" in by_cat:
-        carousels.append({"name": "Top Picks", "books": by_cat["Top Picks"],
-                          "description": ROW_DESCRIPTIONS["Top Picks"]})
-    if "New" in by_cat:
-        carousels.append({"name": "New", "books": by_cat["New"],
-                          "description": new_desc})
-    for c in cat_order:
-        entry = {"name": c, "books": by_cat[c]}
-        if c in ROW_DESCRIPTIONS:
-            entry["description"] = ROW_DESCRIPTIONS[c]
-        carousels.append(entry)
-
-    conn.close()
-    return render_template("index.html", carousels=carousels,
+    return render_template("index.html",
                            selected_library=lib_id, selected_branch=branch_code)
+
+
+@app.route("/api/recommendations")
+def api_recommendations():
+    cache_age = request.args.get("cache_age", "30")
+    conn = db.get_conn()
+    try:
+        lib_id, _, lib_cfg = _lib_from_cookies()
+        if not lib_id:
+            return jsonify({"carousels": [], "has_profile": False})
+
+        recs = recmod.get_recommendations(conn, lib_id)
+        by_cat = recs["by_cat"]
+        has_profile = recs["has_profile"]
+
+        if not by_cat:
+            return jsonify({"carousels": [], "has_profile": has_profile})
+
+        for items in by_cat.values():
+            for r in items:
+                _fmt_rec(r, lib_cfg["syndetics_client"], lib_id)
+
+        call_counts = db.get_category_order(conn, lib_id)
+        cat_counts = defaultdict(float)
+        for row in call_counts:
+            genres = json.loads(row["genres"]) if row.get("genres") and row["genres"] != "[]" else None
+            cat = recmod.book_category(row["call_number"], lib_id, genres=genres,
+                                          books_format=row.get("format"),
+                                          content_type=row.get("content_type"))
+            cat_counts[cat] += recmod._time_weight(row["checkout_date"], row["is_current"])
+
+        cat_order = sorted(
+            (c for c in by_cat if c != "Other" and c != "Top Picks" and c != "New"),
+            key=lambda c: (-cat_counts.get(c, 0), -sum(r["score"] for r in by_cat[c]) / len(by_cat[c])),
+        )
+        if "Other" in by_cat:
+            cat_order.append("Other")
+
+        ROW_DESCRIPTIONS = {
+            "Top Picks": "Best matches across all categories",
+            "Graphic Novels": "Comics and illustrated stories",
+            "Picture Books": "Stories told with full-page art",
+            "Easy Readers": "Beginning and early chapter books",
+            "Fiction": "Chapter books and novels",
+            "Science": "Animals, space, earth & experiments",
+            "History": "Countries, places & the past",
+            "Technology": "Vehicles, pets, cooking & the human body",
+            "Arts & Recreation": "Sports, drawing, crafts, games & music",
+            "Social Sciences": "Folktales, holidays & how we live together",
+            "Other": "Poetry, languages, coding & more",
+        }
+
+        new_year_cutoff = date.today().year - config.NEW_BOOK_MAX_AGE_YEARS
+        new_desc = f"Published {new_year_cutoff}–{date.today().year}"
+
+        carousels = []
+        if "Top Picks" in by_cat:
+            carousels.append({"name": "Top Picks", "books": by_cat["Top Picks"],
+                              "description": ROW_DESCRIPTIONS["Top Picks"]})
+        if "New" in by_cat:
+            carousels.append({"name": "New", "books": by_cat["New"],
+                              "description": new_desc})
+        for c in cat_order:
+            entry = {"name": c, "books": by_cat[c]}
+            if c in ROW_DESCRIPTIONS:
+                entry["description"] = ROW_DESCRIPTIONS[c]
+            carousels.append(entry)
+
+        return jsonify({"carousels": carousels, "has_profile": has_profile})
+    finally:
+        conn.close()
 
 
 @app.route("/book/<metadata_id>")

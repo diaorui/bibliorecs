@@ -33,65 +33,85 @@
   </main>
 
   <script>
+  var PLACEHOLDER_SVG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='180' viewBox='0 0 120 180'%3E%3Crect width='120' height='180' fill='%23e8e8ed' rx='4'/%3E%3Cpath d='M45 55v70l15-8 15 8V55z' fill='%2386868b' opacity='.4'/%3E%3Crect x='48' y='65' width='24' height='2' fill='%2386868b' opacity='.3'/%3E%3C/svg%3E";
+
+  function initCoverFallback(img) {
+    var fallbacks = [];
+    var fb = img.getAttribute('data-fallback');
+    if (fb) fallbacks.push(fb);
+    var fbIdx = 0;
+    var done = false;
+    var olSearched = false;
+    var svgShown = false;
+
+    function tryFallback() {
+      if (done) return false;
+      if (fbIdx < fallbacks.length) {
+        img.src = fallbacks[fbIdx++];
+        return true;
+      }
+      if (!olSearched) {
+        olSearched = true;
+        tryOlSearch();
+      }
+      if (!svgShown) {
+        svgShown = true;
+        img.src = PLACEHOLDER_SVG;
+        return true;
+      }
+      showPlaceholder();
+      return false;
+    }
+
+    function tryOlSearch() {
+      var isbn = img.getAttribute('data-isbn');
+      if (!isbn) return;
+      fetch('/api/ol-cover-search/' + encodeURIComponent(isbn))
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.cover_url) {
+            done = false;
+            img.src = data.cover_url;
+          }
+        })
+        .catch(function() {});
+    }
+
+    function handleLoad() {
+      if (done) return;
+      if (img.naturalWidth <= 1 && img.naturalHeight <= 1) {
+        tryFallback();
+      } else {
+        done = true;
+      }
+    }
+
+    function handleError() {
+      if (done) return;
+      tryFallback();
+    }
+
+    function showPlaceholder() {
+      if (done) return;
+      done = true;
+      img.style.display = 'none';
+      var ph = img.parentNode.querySelector('.cover-placeholder');
+      if (ph) ph.style.display = 'flex';
+    }
+
+    img.addEventListener('load', handleLoad);
+    img.addEventListener('error', handleError);
+  }
+
   document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('.local-time').forEach(function(el) {
       var d = new Date(el.getAttribute('datetime'));
       if (!isNaN(d)) el.textContent = d.toLocaleString();
     });
-    var PLACEHOLDER_SVG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='180' viewBox='0 0 120 180'%3E%3Crect width='120' height='180' fill='%23e8e8ed' rx='4'/%3E%3Cpath d='M45 55v70l15-8 15 8V55z' fill='%2386868b' opacity='.4'/%3E%3Crect x='48' y='65' width='24' height='2' fill='%2386868b' opacity='.3'/%3E%3C/svg%3E";
 
     document.querySelectorAll('img.cover-img').forEach(function(img) {
-      var fallbacks = [];
-      var fb = img.getAttribute('data-fallback');
-      if (fb) fallbacks.push(fb);
-      var fbIdx = 0;
-      var done = false;
-      var olSearched = false;
-      var svgShown = false;
-
-      function tryFallback() {
-        if (done) return false;
-        if (fbIdx < fallbacks.length) {
-          img.src = fallbacks[fbIdx++];
-          return true;
-        }
-        if (!olSearched) {
-          olSearched = true;
-          tryOlSearch();
-        }
-        if (!svgShown) {
-          svgShown = true;
-          img.src = PLACEHOLDER_SVG;
-          return true;
-        }
-        showPlaceholder();
-        return false;
-      }
-
-      function tryOlSearch() {
-        var isbn = img.getAttribute('data-isbn');
-        if (!isbn) return;
-        fetch('/api/ol-cover-search/' + encodeURIComponent(isbn))
-          .then(function(r) { return r.json(); })
-          .then(function(data) {
-            if (data.cover_url) {
-              done = false;
-              img.src = data.cover_url;
-            }
-          })
-          .catch(function() {});
-      }
-
-      function handleLoad() {
-        if (done) return;
-        if (img.naturalWidth <= 1 && img.naturalHeight <= 1) {
-          tryFallback();
-        } else {
-          done = true;
-        }
-      }
-
-      function handleError() {
+      initCoverFallback(img);
+    });
         if (done) return;
         tryFallback();
       }

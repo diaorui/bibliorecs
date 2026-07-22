@@ -566,6 +566,16 @@ th {
 
 }
 
+/* ── skeleton ── */
+
+.skeleton-section { margin-bottom: 24px; }
+.skeleton-heading { width: 180px; height: 20px; background: #e8e8ed; border-radius: 4px; margin-bottom: 12px; }
+.skeleton-track { display: flex; gap: 12px; overflow: hidden; }
+.skeleton-card { flex-shrink: 0; width: 130px; }
+.skeleton-cover { width: 130px; height: 195px; background: #e8e8ed; border-radius: 6px; margin-bottom: 8px; }
+.skeleton-line { height: 12px; background: #e8e8ed; border-radius: 3px; margin-bottom: 6px; }
+.skeleton-line-short { width: 70%; }
+
 /* ── carousel ── */
 
 .carousel-section {
