@@ -69,7 +69,7 @@ def main():
         SELECT metadata_id, title, author, subjects, series, genres
         FROM books_in_library
         WHERE active = 1
-          AND isbn IS NOT NULL AND isbn != ''
+          AND isbns IS NOT NULL AND isbns != '[]'
     """).fetchall()
     books = [dict(r) for r in rows]
     mids = [b["metadata_id"] for b in books]

@@ -27,6 +27,16 @@ OL_URL = "https://covers.openlibrary.org/b/isbn/{isbn}-{size}.jpg"
 PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='180' viewBox='0 0 120 180'%3E%3Crect width='120' height='180' fill='%23e8e8ed' rx='4'/%3E%3Cpath d='M45 55v70l15-8 15 8V55z' fill='%2386868b' opacity='.4'/%3E%3Crect x='48' y='65' width='24' height='2' fill='%2386868b' opacity='.3'/%3E%3C/svg%3E"
 
 
+def _first_isbn(isbns_json):
+    if not isbns_json:
+        return None
+    try:
+        lst = json.loads(isbns_json)
+        return lst[0] if lst else None
+    except (json.JSONDecodeError, TypeError, IndexError):
+        return None
+
+
 def _lib_from_cookies():
     conn = db.get_conn()
     try:
@@ -153,6 +163,7 @@ def book_detail(metadata_id):
         return render_template("not_found.html", metadata_id=metadata_id,
                                selected_library=lib_id, selected_branch=branch_code), 404
     book = dict(row)
+    book["isbn"] = _first_isbn(book.get("isbns"))
 
     borrows = conn.execute("""
         SELECT * FROM borrow_events
@@ -160,7 +171,7 @@ def book_detail(metadata_id):
         ORDER BY checkout_date DESC
     """, (metadata_id, lib_id)).fetchall()
 
-    img, fallback = _cover_large(book.get("isbn"), lib_cfg["syndetics_client"])
+    img, fallback = _cover_large(book["isbn"], lib_cfg["syndetics_client"])
     conn.close()
     return render_template(
         "book.html",
@@ -228,7 +239,7 @@ def api_holds():
             row = None
             if mid:
                 row = conn.execute(
-                    "SELECT title, subtitle, author, isbn FROM books_in_library WHERE metadata_id = ? AND library_id = ?",
+                    "SELECT title, subtitle, author, isbns FROM books_in_library WHERE metadata_id = ? AND library_id = ?",
                     (mid, lib_id)
                 ).fetchone()
             holds.append({
@@ -237,7 +248,7 @@ def api_holds():
                 "title": row["title"] if row else (h.get("bibTitle") or ""),
                 "subtitle": row["subtitle"] if row else None,
                 "author": row["author"] if row else "",
-                "isbn": row["isbn"] if row else None,
+                "isbn": _first_isbn(row["isbns"]) if row else None,
                 "status": h.get("status"),
                 "position": h.get("holdsPosition"),
                 "pickup_branch": (h.get("pickupLocation") or {}).get("code"),
@@ -373,7 +384,7 @@ def api_history_data():
     lib_id, branch_code, lib_cfg = _lib_from_cookies()
     try:
         current = conn.execute("""
-            SELECT b.*, bk.title, bk.subtitle, bk.author, bk.isbn, bk.metadata_id
+            SELECT b.*, bk.title, bk.subtitle, bk.author, bk.isbns, bk.metadata_id
             FROM borrow_events b
             LEFT JOIN books_in_library bk
                 ON bk.metadata_id = b.metadata_id AND bk.library_id = b.library_id
@@ -382,7 +393,7 @@ def api_history_data():
         """, (lib_id,)).fetchall()
 
         past = conn.execute("""
-            SELECT b.*, bk.title, bk.subtitle, bk.author, bk.isbn, bk.metadata_id
+            SELECT b.*, bk.title, bk.subtitle, bk.author, bk.isbns, bk.metadata_id
             FROM borrow_events b
             LEFT JOIN books_in_library bk
                 ON bk.metadata_id = b.metadata_id AND bk.library_id = b.library_id
@@ -394,7 +405,8 @@ def api_history_data():
         current_list = []
         for c in current:
             c = dict(c)
-            img, fallback = _cover(c.get("isbn"), syndetics)
+            c["isbn"] = _first_isbn(c.get("isbns"))
+            img, fallback = _cover(c["isbn"], syndetics)
             c["img_url"] = img
             c["fallback_url"] = fallback
             c["due_label"] = due_info(c.get("checkout_date"), True)
@@ -405,7 +417,8 @@ def api_history_data():
         past_list = []
         for p in past:
             p = dict(p)
-            img, fallback = _cover(p.get("isbn"), syndetics)
+            p["isbn"] = _first_isbn(p.get("isbns"))
+            img, fallback = _cover(p["isbn"], syndetics)
             p["img_url"] = img
             p["fallback_url"] = fallback
             past_list.append(p)
@@ -509,7 +522,7 @@ def history():
     syndetics = lib_cfg["syndetics_client"]
 
     current = conn.execute("""
-        SELECT b.*, bk.title, bk.subtitle, bk.author, bk.isbn, bk.metadata_id
+        SELECT b.*, bk.title, bk.subtitle, bk.author, bk.isbns, bk.metadata_id
         FROM borrow_events b
         LEFT JOIN books_in_library bk
             ON bk.metadata_id = b.metadata_id AND bk.library_id = b.library_id
@@ -518,7 +531,7 @@ def history():
     """, (lib_id,)).fetchall()
 
     past = conn.execute("""
-        SELECT b.*, bk.title, bk.subtitle, bk.author, bk.isbn, bk.metadata_id
+        SELECT b.*, bk.title, bk.subtitle, bk.author, bk.isbns, bk.metadata_id
         FROM borrow_events b
         LEFT JOIN books_in_library bk
             ON bk.metadata_id = b.metadata_id AND bk.library_id = b.library_id
@@ -529,7 +542,8 @@ def history():
     current_list = []
     for c in current:
         c = dict(c)
-        img, fallback = _cover(c.get("isbn"), syndetics)
+        c["isbn"] = _first_isbn(c.get("isbns"))
+        img, fallback = _cover(c["isbn"], syndetics)
         c["img_url"] = img
         c["fallback_url"] = fallback
         current_list.append(c)
@@ -537,7 +551,8 @@ def history():
     past_list = []
     for p in past:
         p = dict(p)
-        img, fallback = _cover(p.get("isbn"), syndetics)
+        p["isbn"] = _first_isbn(p.get("isbns"))
+        img, fallback = _cover(p["isbn"], syndetics)
         p["img_url"] = img
         p["fallback_url"] = fallback
         past_list.append(p)
@@ -936,7 +951,9 @@ def _fmt_rec(r, syndetics_client, library_id=None):
     desc = r.get("description") or ""
     if len(desc) > 200:
         r["description"] = desc[:200] + "\u2026"
-    img, fallback = _cover(r.get("isbn"), syndetics_client)
+    isbn = _first_isbn(r.get("isbns"))
+    r["isbn"] = isbn
+    img, fallback = _cover(isbn, syndetics_client)
     r["img_url"] = img
     r["fallback_url"] = fallback
 

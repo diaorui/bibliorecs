@@ -103,7 +103,6 @@ def extract_book_info(metadata_id, bib):
         "call_number": info.get("callNumber", ""),
         "publication_year": _parse_year(info.get("publicationDate", "")),
         "primary_language": info.get("primaryLanguage", ""),
-        "isbn": isbns[0] if isbns else None,
         "isbns": json.dumps(isbns, ensure_ascii=False),
         "subjects": json.dumps(subjects, ensure_ascii=False),
         "composite_subjects": json.dumps(composite_subjects, ensure_ascii=False),

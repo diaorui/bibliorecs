@@ -194,7 +194,6 @@ def _process_page(conn, data, library_id):
                 call_number=book["call_number"],
                 publication_year=book["publication_year"],
                 primary_language=book["primary_language"],
-                isbn=book["isbn"],
                 isbns=book["isbns"],
                 subjects=book["subjects"],
                 composite_subjects=book["composite_subjects"],
