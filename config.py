@@ -16,7 +16,7 @@ LIBRARIES = {
         "syndetics_client": "santaclaracfl",
     },
     "sjpl": {
-        "name": "San José Public Library",
+        "name": "San Jose Public Library",
         "catalog_base": "https://sjpl.bibliocommons.com",
         "gateway_base": "https://gateway.bibliocommons.com/v2/libraries/sjpl",
         "syndetics_client": "sanjosepl",
