@@ -1316,13 +1316,10 @@ th {
 @media (max-width: 640px) {
   .container { padding: 16px 12px; }
 
-  .nav-inner { padding: 0 12px; flex-wrap: wrap; height: auto; min-height: 52px; gap: 4px; }
-  .nav-links { gap: 8px; }
-  .nav-link { font-size: 0.85rem; }
+  .nav-inner { padding: 0 12px; flex-wrap: wrap; height: auto; min-height: 52px; gap: 2px; }
+  .nav-links { width: 100%; justify-content: center; gap: 12px; padding: 6px 0 8px; border-top: 1px solid #e8e8ed; }
+  .nav-link { font-size: 0.82rem; }
   .nav-brand { font-size: 1rem; }
-  .nav-center { order: 3; width: 100%; }
-  .selector-group { width: 100%; justify-content: center; }
-  .sel-lib, .sel-branch { max-width: 140px; font-size: 0.78rem; }
 
   .page-title { font-size: 1.3rem; }
   .page-subtitle { font-size: 0.82rem; margin-bottom: 16px; }
