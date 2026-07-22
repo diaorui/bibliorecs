@@ -164,6 +164,7 @@ def book_detail(metadata_id):
                                selected_library=lib_id, selected_branch=branch_code), 404
     book = dict(row)
     book["isbn"] = _first_isbn(book.get("isbns"))
+    book["author"] = ", ".join(json.loads(book.get("authors") or "[]")) or book.get("author", "")
 
     borrows = conn.execute("""
         SELECT * FROM borrow_events
@@ -239,7 +240,7 @@ def api_holds():
             row = None
             if mid:
                 row = conn.execute(
-                    "SELECT title, subtitle, author, isbns FROM books_in_library WHERE metadata_id = ? AND library_id = ?",
+                    "SELECT title, subtitle, authors, isbns FROM books_in_library WHERE metadata_id = ? AND library_id = ?",
                     (mid, lib_id)
                 ).fetchone()
             holds.append({
@@ -247,7 +248,7 @@ def api_holds():
                 "metadata_id": mid,
                 "title": row["title"] if row else (h.get("bibTitle") or ""),
                 "subtitle": row["subtitle"] if row else None,
-                "author": row["author"] if row else "",
+                "author": ", ".join(json.loads(row["authors"])) if row and row["authors"] else "",
                 "isbn": _first_isbn(row["isbns"]) if row else None,
                 "status": h.get("status"),
                 "position": h.get("holdsPosition"),
@@ -384,7 +385,7 @@ def api_history_data():
     lib_id, branch_code, lib_cfg = _lib_from_cookies()
     try:
         current = conn.execute("""
-            SELECT b.*, bk.title, bk.subtitle, bk.author, bk.isbns, bk.metadata_id
+            SELECT b.*, bk.title, bk.subtitle, bk.authors, bk.isbns, bk.metadata_id
             FROM borrow_events b
             LEFT JOIN books_in_library bk
                 ON bk.metadata_id = b.metadata_id AND bk.library_id = b.library_id
@@ -393,7 +394,7 @@ def api_history_data():
         """, (lib_id,)).fetchall()
 
         past = conn.execute("""
-            SELECT b.*, bk.title, bk.subtitle, bk.author, bk.isbns, bk.metadata_id
+            SELECT b.*, bk.title, bk.subtitle, bk.authors, bk.isbns, bk.metadata_id
             FROM borrow_events b
             LEFT JOIN books_in_library bk
                 ON bk.metadata_id = b.metadata_id AND bk.library_id = b.library_id
@@ -406,6 +407,7 @@ def api_history_data():
         for c in current:
             c = dict(c)
             c["isbn"] = _first_isbn(c.get("isbns"))
+            c["author"] = ", ".join(json.loads(c.get("authors") or "[]"))
             img, fallback = _cover(c["isbn"], syndetics)
             c["img_url"] = img
             c["fallback_url"] = fallback
@@ -418,6 +420,7 @@ def api_history_data():
         for p in past:
             p = dict(p)
             p["isbn"] = _first_isbn(p.get("isbns"))
+            p["author"] = ", ".join(json.loads(p.get("authors") or "[]"))
             img, fallback = _cover(p["isbn"], syndetics)
             p["img_url"] = img
             p["fallback_url"] = fallback
@@ -522,7 +525,7 @@ def history():
     syndetics = lib_cfg["syndetics_client"]
 
     current = conn.execute("""
-        SELECT b.*, bk.title, bk.subtitle, bk.author, bk.isbns, bk.metadata_id
+        SELECT b.*, bk.title, bk.subtitle, bk.authors, bk.isbns, bk.metadata_id
         FROM borrow_events b
         LEFT JOIN books_in_library bk
             ON bk.metadata_id = b.metadata_id AND bk.library_id = b.library_id
@@ -531,7 +534,7 @@ def history():
     """, (lib_id,)).fetchall()
 
     past = conn.execute("""
-        SELECT b.*, bk.title, bk.subtitle, bk.author, bk.isbns, bk.metadata_id
+        SELECT b.*, bk.title, bk.subtitle, bk.authors, bk.isbns, bk.metadata_id
         FROM borrow_events b
         LEFT JOIN books_in_library bk
             ON bk.metadata_id = b.metadata_id AND bk.library_id = b.library_id
@@ -543,6 +546,7 @@ def history():
     for c in current:
         c = dict(c)
         c["isbn"] = _first_isbn(c.get("isbns"))
+        c["author"] = ", ".join(json.loads(c.get("authors") or "[]"))
         img, fallback = _cover(c["isbn"], syndetics)
         c["img_url"] = img
         c["fallback_url"] = fallback
@@ -552,6 +556,7 @@ def history():
     for p in past:
         p = dict(p)
         p["isbn"] = _first_isbn(p.get("isbns"))
+        p["author"] = ", ".join(json.loads(p.get("authors") or "[]"))
         img, fallback = _cover(p["isbn"], syndetics)
         p["img_url"] = img
         p["fallback_url"] = fallback
@@ -765,6 +770,8 @@ def _best_series(series_list, title=None):
     items = []
     seen = set()
     for s in series_list:
+        if isinstance(s, dict):
+            s = s.get("name", "")
         if not isinstance(s, str):
             continue
         c = clean_name(s)
@@ -953,6 +960,7 @@ def _fmt_rec(r, syndetics_client, library_id=None):
         r["description"] = desc[:200] + "\u2026"
     isbn = _first_isbn(r.get("isbns"))
     r["isbn"] = isbn
+    r["author"] = ", ".join(json.loads(r.get("authors") or "[]")) or r.get("author", "")
     img, fallback = _cover(isbn, syndetics_client)
     r["img_url"] = img
     r["fallback_url"] = fallback
@@ -964,7 +972,11 @@ def _fmt_rec(r, syndetics_client, library_id=None):
     r["genre_tag"] = _clean_genre(genres[0]) if genres else None
 
     series = _json_list(r.get("series"))
-    r["series_name"] = series[0] if series else None
+    if series:
+        first = series[0]
+        r["series_name"] = first.get("name", first) if isinstance(first, dict) else first
+    else:
+        r["series_name"] = None
 
     r["book_category"] = book_category(r.get("call_number"), library_id, genres)
 

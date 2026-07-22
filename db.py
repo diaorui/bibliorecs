@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS books_in_library (
     title TEXT NOT NULL,
     subtitle TEXT,
     author TEXT,
+    authors TEXT,
     format TEXT,
     content_type TEXT,
     description TEXT,
@@ -128,7 +129,7 @@ def schema_matches(conn):
 
 
 def upsert_book_in_library(conn, library_id, metadata_id, title, subtitle=None,
-                           author=None, format=None, content_type=None,
+                           author=None, authors=None, format=None, content_type=None,
                            description=None, call_number=None,
                            publication_year=None, primary_language=None,
                            isbns=None, subjects=None,
@@ -140,7 +141,7 @@ def upsert_book_in_library(conn, library_id, metadata_id, title, subtitle=None,
                            rating_count=None, active=1):
     conn.execute("""
         INSERT INTO books_in_library (
-            library_id, metadata_id, title, subtitle, author, format,
+            library_id, metadata_id, title, subtitle, author, authors, format,
             content_type, description, call_number,
             publication_year, primary_language, isbns,
             subjects, composite_subjects, genres, series,
@@ -148,11 +149,11 @@ def upsert_book_in_library(conn, library_id, metadata_id, title, subtitle=None,
             edition, multiscript_title, multiscript_author,
             rating_avg, rating_count,
             active, last_updated
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                  ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(metadata_id, library_id) DO UPDATE SET
             title=excluded.title, subtitle=excluded.subtitle,
-            author=excluded.author, format=excluded.format,
+            author=excluded.author, authors=excluded.authors, format=excluded.format,
             content_type=excluded.content_type,
             description=excluded.description,
             call_number=excluded.call_number,
@@ -173,7 +174,7 @@ def upsert_book_in_library(conn, library_id, metadata_id, title, subtitle=None,
             last_updated=excluded.last_updated,
             active=excluded.active
     """, (
-        library_id, metadata_id, title, subtitle, author, format,
+        library_id, metadata_id, title, subtitle, author, authors, format,
         content_type, description, call_number,
         publication_year, primary_language, isbns,
         subjects, composite_subjects, genres, series,
