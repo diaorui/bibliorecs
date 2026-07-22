@@ -253,20 +253,10 @@ def api_holds():
                 "isbn": _first_isbn(row["isbns"]) if row else None,
                 "status": h.get("status"),
                 "position": h.get("holdsPosition"),
-                "pickup_branch_code": (h.get("pickupLocation") or {}).get("code"),
-                "pickup_branch": None,
+                "pickup_branch": (h.get("pickupLocation") or {}).get("name"),
                 "placed_date": h.get("holdPlacedDate"),
                 "expiry_date": h.get("pickupByDate"),
             })
-            # Look up branch name
-            pbc = holds[-1]["pickup_branch_code"]
-            if pbc:
-                br = conn.execute(
-                    "SELECT branch_name FROM branches WHERE library_id = ? AND branch_code = ?",
-                    (lib_id, pbc)
-                ).fetchone()
-                if br:
-                    holds[-1]["pickup_branch"] = br["branch_name"]
         conn.close()
         quotas = data.get("borrowing", {}).get("summaries", {}).get("holds", {}).get("quotas", [])
         return jsonify({"holds": holds, "quotas": quotas})
