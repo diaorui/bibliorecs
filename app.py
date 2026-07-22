@@ -954,7 +954,7 @@ def _clean_genre(raw):
         candidates.append(p)
     best = min(candidates, key=len) if candidates else parts[0].strip().rstrip(".")
     best = best.split(",")[0].split("(")[0].strip()
-    return best[:40] if len(best) > 40 else best
+    return best.split(",")[0].split("(")[0].strip()
 
 
 def _fmt_rec(r, syndetics_client, library_id=None):
