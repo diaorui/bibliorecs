@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import sys
 import json
-import csv
 import os
 
 import db
@@ -60,35 +59,6 @@ def print_samples(n=10):
         print(f"      Subjects:  {', '.join(subjects[:4])}")
         print(f"      Genres:    {', '.join(genres[:3])}")
         print(f"      Desc:      {desc}{'...' if len((b['description'] or '')) > 120 else ''}")
-    conn.close()
-
-
-def export_csv():
-    conn = db.get_conn()
-    rows = conn.execute("""
-        SELECT metadata_id, library_id, title, author, format, publication_year,
-               primary_language, isbns,
-               subjects, genres, series, call_number
-        FROM books_in_library
-        ORDER BY title
-    """).fetchall()
-
-    out_path = os.path.join(os.path.dirname(db.DB_PATH), "books_export.csv")
-    with open(out_path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-        writer.writerow(["metadata_id", "library_id", "title", "author", "format",
-                         "publication_year", "language", "isbns",
-                         "subjects", "genres", "series", "call_number"])
-        for row in rows:
-            writer.writerow([
-                row["metadata_id"], row["library_id"], row["title"], row["author"],
-                row["format"], row["publication_year"],
-                row["primary_language"], json.loads(row["isbns"])[0] if row["isbns"] else None,
-                row["subjects"], row["genres"], row["series"],
-                row["call_number"],
-            ])
-
-    print(f"Exported {len(rows)} books to {out_path}")
     conn.close()
 
 
