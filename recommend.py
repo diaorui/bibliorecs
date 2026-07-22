@@ -158,6 +158,7 @@ def get_recommendations(conn, library_id):
                 borrowed_isbns.add(i)
 
     min_year = date.today().year - config.NEW_BOOK_MAX_AGE_YEARS
+    current_year = date.today().year
     by_cat = defaultdict(list)
     new_indices = set()
     meta_info = {}
@@ -179,7 +180,7 @@ def get_recommendations(conn, library_id):
                              books_format=b.get("format"),
                              content_type=b.get("content_type"))
         by_cat[cat].append(idx)
-        if b["publication_year"] and b["publication_year"] >= min_year:
+        if b["publication_year"] and min_year <= b["publication_year"] <= current_year:
             new_indices.add(idx)
 
     if has_profile:
