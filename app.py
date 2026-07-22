@@ -386,6 +386,8 @@ def settings():
 @app.route("/api/reset-onboarding", methods=["POST"])
 def api_reset_onboarding():
     import auth_store
+    api._AUTH_CACHE.clear()
+    api._AUTH_EXPIRES_AT.clear()
     conn = db.get_conn()
     conn.execute("DELETE FROM borrow_events")
     conn.commit()
@@ -445,6 +447,7 @@ def api_creds_set():
 def api_creds_remove(library_id):
     import auth_store
     auth_store.remove(library_id)
+    api._invalidate_auth(library_id)
     return jsonify({"success": True})
 
 
