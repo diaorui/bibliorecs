@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS books_in_library (
     publication_year INTEGER,
     primary_language TEXT,
     isbn TEXT,
+    isbns TEXT,
     subjects TEXT,
     composite_subjects TEXT,
     genres TEXT,
@@ -132,7 +133,7 @@ def upsert_book_in_library(conn, library_id, metadata_id, title, subtitle=None,
                            author=None, format=None, content_type=None,
                            description=None, call_number=None,
                            publication_year=None, primary_language=None,
-                           isbn=None, subjects=None,
+                           isbn=None, isbns=None, subjects=None,
                            composite_subjects=None, genres=None, series=None,
                            super_formats=None, consumption_format=None,
                            group_key=None,
@@ -143,14 +144,14 @@ def upsert_book_in_library(conn, library_id, metadata_id, title, subtitle=None,
         INSERT INTO books_in_library (
             library_id, metadata_id, title, subtitle, author, format,
             content_type, description, call_number,
-            publication_year, primary_language, isbn,
+            publication_year, primary_language, isbn, isbns,
             subjects, composite_subjects, genres, series,
             super_formats, consumption_format, group_key,
             edition, multiscript_title, multiscript_author,
             rating_avg, rating_count,
             active, last_updated
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                 ?, ?, ?, ?, ?, ?)
+                 ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(metadata_id, library_id) DO UPDATE SET
             title=excluded.title, subtitle=excluded.subtitle,
             author=excluded.author, format=excluded.format,
@@ -159,7 +160,7 @@ def upsert_book_in_library(conn, library_id, metadata_id, title, subtitle=None,
             call_number=excluded.call_number,
             publication_year=excluded.publication_year,
             primary_language=excluded.primary_language,
-            isbn=excluded.isbn, subjects=excluded.subjects,
+            isbn=excluded.isbn, isbns=excluded.isbns, subjects=excluded.subjects,
             composite_subjects=excluded.composite_subjects,
             genres=excluded.genres, series=excluded.series,
             super_formats=excluded.super_formats,
@@ -176,7 +177,7 @@ def upsert_book_in_library(conn, library_id, metadata_id, title, subtitle=None,
     """, (
         library_id, metadata_id, title, subtitle, author, format,
         content_type, description, call_number,
-        publication_year, primary_language, isbn,
+        publication_year, primary_language, isbn, isbns,
         subjects, composite_subjects, genres, series,
         super_formats, consumption_format, group_key,
         edition, multiscript_title, multiscript_author,
@@ -207,7 +208,7 @@ def get_borrow_event_ids(conn):
 def get_borrow_events_for_recommendation(conn, library_id=None):
     if library_id:
         rows = conn.execute("""
-            SELECT b.metadata_id, b.checkout_date, b.is_current, bk.group_key
+            SELECT b.metadata_id, b.checkout_date, b.is_current, bk.group_key, bk.isbns
             FROM borrow_events b
             INNER JOIN books_in_library bk
                 ON bk.metadata_id = b.metadata_id AND bk.library_id = b.library_id
@@ -215,7 +216,7 @@ def get_borrow_events_for_recommendation(conn, library_id=None):
         """, (library_id,)).fetchall()
     else:
         rows = conn.execute("""
-            SELECT b.metadata_id, b.checkout_date, b.is_current, bk.group_key
+            SELECT b.metadata_id, b.checkout_date, b.is_current, bk.group_key, bk.isbns
             FROM borrow_events b
             INNER JOIN books_in_library bk
                 ON bk.metadata_id = b.metadata_id AND bk.library_id = b.library_id

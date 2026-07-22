@@ -255,7 +255,7 @@ def get_recommendations(conn, library_id):
 
     books = conn.execute("""
         SELECT metadata_id, call_number, publication_year,
-               title, subtitle, author, isbn, format,
+               title, subtitle, author, isbn, isbns, format,
                content_type, subjects, genres, description, series
         FROM books_in_library
         WHERE active = 1 AND library_id = ?
@@ -270,15 +270,8 @@ def get_recommendations(conn, library_id):
     if has_profile:
         for b in borrows:
             borrowed_mids.add(b["metadata_id"])
-        gk_list = [b["group_key"] for b in borrows if b.get("group_key")]
-        if gk_list:
-            placeholders = ",".join("?" * len(gk_list))
-            rows = conn.execute(f"""
-                SELECT DISTINCT isbn FROM books_in_library
-                WHERE group_key IN ({placeholders})
-                  AND isbn IS NOT NULL AND isbn != ''
-            """, gk_list)
-            borrowed_isbns = {r["isbn"] for r in rows}
+            for i in json.loads(b.get("isbns") or "[]"):
+                borrowed_isbns.add(i)
 
     min_year = date.today().year - config.NEW_BOOK_MAX_AGE_YEARS
     by_cat = defaultdict(list)
@@ -290,7 +283,10 @@ def get_recommendations(conn, library_id):
         mid = b["metadata_id"]
         if mid not in mid_to_idx:
             continue
-        if mid in borrowed_mids or (b.get("isbn") and b["isbn"] in borrowed_isbns):
+        if mid in borrowed_mids:
+            continue
+        candidate_isbns = json.loads(b.get("isbns") or "[]")
+        if any(i in borrowed_isbns for i in candidate_isbns):
             continue
         meta_info[mid] = b
         idx = mid_to_idx[mid]
