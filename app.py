@@ -941,21 +941,7 @@ def _fmt_label_filter(val):
     return val.replace("_", " ").title().strip()
 
 
-_GENRE_LABELS = {
-    "Comics (Graphic Works)": "Comics",
-    "Humorous Comics": "Humor",
-    "School Comics": "School",
-    "Action and Adventure Comics": "Adventure",
-    "Graphic Novels": "Graphic Novel",
-    "Fantasy comic books, strips, etc": "Fantasy",
-    "Animal comics": "Animals",
-}
-
-
 def _clean_genre(raw):
-    cleaned = _GENRE_LABELS.get(raw)
-    if cleaned:
-        return cleaned
     parts = re.split(r"<delimit>\s*", raw)
     candidates = []
     for p in parts:
