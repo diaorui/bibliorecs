@@ -118,7 +118,7 @@ function selectBranch(libId, branchCode) {
   document.querySelector('.tree-select').innerHTML =
     '<div style="text-align:center;padding:40px">' +
     '<div class="spinner"></div>' +
-    '<p style="margin-top:12px;color:#86868b">Loading recommendations…</p></div>';
+    '<p style="margin-top:12px;color:#86868b">Saving…</p></div>';
   document.cookie = 'selected_library=' + libId + '; path=/; max-age=31536000';
   document.cookie = 'selected_branch=' + branchCode + '; path=/; max-age=31536000';
   location.reload();
