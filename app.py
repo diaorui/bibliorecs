@@ -670,7 +670,7 @@ def stats():
 
     conn.close()
 
-    chart_formats = [{"label": _FORMAT_LABELS.get(f["format"], f["format"].replace("_", " ").title().strip()),
+    chart_formats = [{"label": f["format"].replace("_", " ").title().strip(),
                        "count": f["count"]} for f in formats]
 
     top_langs = languages[:10]
@@ -697,7 +697,7 @@ def stats():
 def _fmt_label_filter(val):
     if not val:
         return ""
-    return _FORMAT_LABELS.get(val, val.replace("_", " ").title().strip())
+    return val.replace("_", " ").title().strip()
 
 
 @app.template_filter("content_type_label")
@@ -935,18 +935,12 @@ def _json_list(val):
         return []
 
 
-_FORMAT_LABELS = {
-    "GRAPHIC_NOVEL": "Graphic Novel",
-    "PICTURE_BOOK": "Picture Book",
-    "BOOK": "Book",
-    "BK": "Book",
-    "BOARD_BK": "Board Book",
-    "PAPERBACK": "Paperback",
-    "EBOOK": "eBook",
-    "AUDIOBOOK": "Audiobook",
-    "LARGE_PRINT": "Large Print",
-    "UK": "Unknown",
-}
+@app.template_filter("fmt_label")
+def _fmt_label_filter(val):
+    if not val:
+        return ""
+    return val.replace("_", " ").title().strip()
+
 
 _GENRE_LABELS = {
     "Comics (Graphic Works)": "Comics",
@@ -990,7 +984,7 @@ def _fmt_rec(r, syndetics_client, library_id=None):
     r["fallback_url"] = fallback
 
     fmt = r.get("format") or ""
-    r["format_label"] = _FORMAT_LABELS.get(fmt, fmt.replace("_", " ").title().strip())
+    r["format_label"] = fmt.replace("_", " ").title().strip()
 
     genres = _json_list(r.get("genres"))
     r["genre_tag"] = _clean_genre(genres[0]) if genres else None
