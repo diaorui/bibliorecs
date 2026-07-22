@@ -435,12 +435,7 @@ def api_creds_set():
     try:
         bc_token, session_id, account_id, _ = api._get_auth(lib_id)
     except Exception as e:
-        msg = str(e)
-        if "login failed" in msg or "401" in msg or "no auth tokens" in msg:
-            msg = "Card number or PIN is incorrect. Please try again."
-        elif "timeout" in msg.lower():
-            msg = "Connection timed out. Please check your network and try again."
-        return jsonify({"success": False, "error": msg})
+        return jsonify({"success": False, "error": str(e)})
     auth_store.set(lib_id, body["user"], body["password"])
     # Sync
     try:
