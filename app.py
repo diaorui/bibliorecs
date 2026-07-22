@@ -430,13 +430,14 @@ def api_creds_set():
     lib_id = body["library_id"]
     if lib_id not in config.LIBRARIES:
         return jsonify({"error": "unknown library"}), 400
-    # First try login — only save creds if successful
+    # Save creds first, then try login — login() reads from auth_store
+    auth_store.set(lib_id, body["user"], body["password"])
     api._invalidate_auth(lib_id)
     try:
         bc_token, session_id, account_id, _ = api._get_auth(lib_id)
     except Exception as e:
+        auth_store.remove(lib_id)
         return jsonify({"success": False, "error": str(e)})
-    auth_store.set(lib_id, body["user"], body["password"])
     # Sync
     try:
         conn = db.get_conn()
