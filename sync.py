@@ -218,7 +218,23 @@ def _deactivate_stale_books(conn, active_mids, library_id):
         "SELECT COUNT(*) as c FROM books_in_library WHERE active = 1 AND library_id = ?",
         (library_id,)
     ).fetchone()[0]
+    if total == 0:
+        return
+
     mids_json = json.dumps(list(active_mids))
+    would = conn.execute("""
+        SELECT COUNT(*) as c FROM books_in_library
+        WHERE active = 1 AND library_id = ? AND metadata_id NOT IN (
+            SELECT value FROM json_each(?)
+        )
+    """, (library_id, mids_json)).fetchone()[0]
+
+    ratio = would / total
+    if ratio > config.DEACTIVATE_MAX_RATIO:
+        print(f"  SAFETY: would deactivate {would:,}/{total:,} ({ratio:.0%})"
+              f" — exceeds {config.DEACTIVATE_MAX_RATIO:.0%}, skipped")
+        return
+
     conn.execute("""
         UPDATE books_in_library SET active = 0
         WHERE active = 1 AND library_id = ? AND metadata_id NOT IN (
