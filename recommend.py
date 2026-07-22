@@ -32,30 +32,19 @@ def book_category(call_number, library_id=None, genres=None,
         return "Other"
     cn = call_number.upper().strip()
 
-    # 1. Format field (universal, ~100% precision)
+    # 1. Format field
     if books_format == "BOARD_BK": return "Picture Books"
     if books_format == "PICTURE_BOOK": return "Picture Books"
     if books_format == "EASY_READER": return "Easy Readers"
     if books_format == "GRAPHIC_NOVEL": return "Graphic Novels"
 
-    # 2. DDC (universal, ~100% precision)
-    ddc = _extract_ddc(cn)
-    cat = None
-    if ddc is not None:
-        if 300 <= ddc <= 399: cat = "Social Sciences"
-        elif 500 <= ddc <= 599: cat = "Science"
-        elif 600 <= ddc <= 699: cat = "Technology"
-        elif 700 <= ddc <= 799: cat = "Arts & Recreation"
-        elif 900 <= ddc <= 999: cat = "History"
-        else: return "Other"
-
-    # 3. Genre regex (Graphic Novels) — overrides topic
+    # 2. Genre (Graphic Novels)
     if genres and any(
         _GN_RE.search(g) or "comic" in g.lower() for g in genres
     ):
         return "Graphic Novels"
 
-    # 4. Format keywords — overrides topic (reading level > subject)
+    # 3. Format keywords
     if "BOARD" in cn or "HARDPAGE" in cn: return "Picture Books"
     if "TODDLER" in cn: return "Picture Books"
     if "PICTURE" in cn: return "Picture Books"
@@ -64,11 +53,17 @@ def book_category(call_number, library_id=None, genres=None,
     if "EASY" in cn: return "Easy Readers"
     if "READER" in cn: return "Easy Readers"
 
-    # 5. DDC topic (if set and not overridden)
-    if cat is not None:
-        return cat
+    # 4. DDC
+    ddc = _extract_ddc(cn)
+    if ddc is not None:
+        if 300 <= ddc <= 399: return "Social Sciences"
+        if 500 <= ddc <= 599: return "Science"
+        if 600 <= ddc <= 699: return "Technology"
+        if 700 <= ddc <= 799: return "Arts & Recreation"
+        if 900 <= ddc <= 999: return "History"
+        return "Other"
 
-    # 6. content_type == "FICTION"
+    # 5. content_type == "FICTION"
     if content_type == "FICTION":
         return "Fiction"
 
