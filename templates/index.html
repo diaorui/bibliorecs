@@ -376,7 +376,7 @@ function selectBranch(libId, branchCode) {
     });
   });
 
-  init();
+  window.addEventListener('pageshow', function() { init(); });
 })();
 </script>
 {% endif %}

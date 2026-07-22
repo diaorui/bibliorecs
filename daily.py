@@ -6,7 +6,6 @@ import reset_db
 import sync
 import generate_embeddings
 import api
-import patron
 
 import config
 
