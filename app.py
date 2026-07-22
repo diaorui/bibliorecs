@@ -711,8 +711,7 @@ def _content_type_label(val):
 def _lang_label(val):
     if not val:
         return ""
-    labels = {"eng": "English"}
-    return labels.get(val, val)
+    return val.capitalize()
 
 
 _SUBJECT_SUFFIXES = [
