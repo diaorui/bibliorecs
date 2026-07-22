@@ -95,6 +95,9 @@ def main():
         t0 = time.time()
         embeddings = model.encode(texts, batch_size=256, show_progress_bar=True)
     else:
+        torch.set_num_threads(os.cpu_count())
+        from tqdm import trange
+
         print(f"  Loading OpenVINO int8 model ({config.EMBEDDING_MODEL})...")
         from optimum.intel import OVModelForFeatureExtraction
         from transformers import AutoTokenizer
@@ -106,11 +109,10 @@ def main():
         load_t = time.time() - t0
         print(f"  Model loaded in {load_t:.1f}s (OpenVINO int8 — CPU)")
 
-        os.environ.pop("OPENVINO_LOG_LEVEL", None)
         batch_size = 64
         t0 = time.time()
         rows = []
-        for i in range(0, len(texts), batch_size):
+        for i in trange(0, len(texts), batch_size, desc="Encoding"):
             batch = texts[i:i+batch_size]
             inputs = tokenizer(batch, padding=True, truncation=True,
                                max_length=512, return_tensors="pt")
@@ -118,11 +120,6 @@ def main():
             mask = inputs["attention_mask"].unsqueeze(-1).expand(out.last_hidden_state.size())
             emb = (out.last_hidden_state * mask).sum(1) / mask.sum(1).clamp(min=1e-9)
             rows.append(torch.nn.functional.normalize(emb).detach().numpy())
-            if (i // batch_size + 1) % 100 == 0:
-                elapsed = time.time() - t0
-                rate = (i + batch_size) / elapsed
-                remaining = (len(texts) - i - batch_size) / rate if rate > 0 else 0
-                print(f"  {i + batch_size}/{len(texts):,} — {rate:.0f} docs/s — ETA {remaining:.0f}s")
         embeddings = np.concatenate(rows)
     encode_t = time.time() - t0
     print(f"  Encoded {len(embeddings):,} vectors in {encode_t:.1f}s (dim={embeddings.shape[1]})")
