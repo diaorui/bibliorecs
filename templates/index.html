@@ -2,6 +2,125 @@
 {% block title %}Recommendations – Bibliorecs{% endblock %}
 
 {% block content %}
+{% if not selected_branch %}
+<div class="onboarding-page">
+  <h1 class="page-title">Welcome to Bibliorecs</h1>
+  <p class="section-desc">Get children's book recommendations based on what you borrow. Select your library and pickup branch to begin.</p>
+
+  <div class="tree-select">
+    <div class="tree-search">
+      <span class="tree-search-icon">🔍</span>
+      <input type="text" id="tree-filter" class="tree-input" placeholder="Search branch or library name…" oninput="filterTree()" autofocus>
+    </div>
+
+    <div class="tree-list" id="tree-list">
+      {% for lid, lcfg in libraries.items() %}
+      {% set lib_branches = branches.get(lid, []) %}
+      <div class="tree-lib" data-lib-id="{{ lid }}" data-lib-name="{{ lcfg.name }}">
+        <div class="tree-lib-header" onclick="toggleLib(this)">
+          <span class="tree-lib-icon">📖</span>
+          <span class="tree-lib-name">{{ lcfg.name }}</span>
+          <span class="tree-lib-count">{{ lib_branches|length }} branches</span>
+          <span class="tree-chevron">▶</span>
+        </div>
+        <div class="tree-branches">
+          {% for b in lib_branches %}
+          <div class="tree-branch" data-branch-code="{{ b.code }}" data-branch-name="{{ b.name }}" onclick="selectBranch('{{ lid }}', '{{ b.code }}')">
+            <span class="tree-branch-icon">📍</span>
+            <span class="tree-branch-name">{{ b.name }}</span>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div id="tree-empty" class="tree-empty" style="display:none">
+      <p>😕 No library or branch matches your search.</p>
+      <p class="section-desc" style="margin-top:4px">Bibliorecs currently supports:</p>
+      <ul class="tree-support-list">
+        {% for lid, lcfg in libraries.items() %}
+        <li>{{ lcfg.name }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script>
+var _treeData = [
+  {% for lid, lcfg in libraries.items() %}
+  {% set lib_branches = branches.get(lid, []) %}
+  {
+    libId: '{{ lid }}',
+    libName: '{{ lcfg.name }}',
+    branches: [
+      {% for b in lib_branches %}
+      {code: '{{ b.code }}', name: '{{ b.name }}'}{% if not loop.last %},{% endif %}
+      {% endfor %}
+    ]
+  }{% if not loop.last %},{% endif %}
+  {% endfor %}
+];
+
+function toggleLib(header) {
+  var lib = header.closest('.tree-lib');
+  lib.classList.toggle('tree-lib-open');
+  var chevron = header.querySelector('.tree-chevron');
+  chevron.textContent = lib.classList.contains('tree-lib-open') ? '▼' : '▶';
+}
+
+function filterTree() {
+  var q = document.getElementById('tree-filter').value.toLowerCase().trim();
+  var list = document.getElementById('tree-list');
+  var empty = document.getElementById('tree-empty');
+  var anyVisible = false;
+
+  _treeData.forEach(function(lib) {
+    var el = list.querySelector('.tree-lib[data-lib-id="' + lib.libId + '"]');
+    var branchEls = el.querySelectorAll('.tree-branch');
+    var libMatch = lib.libName.toLowerCase().includes(q);
+
+    branchEls.forEach(function(b) {
+      var name = b.getAttribute('data-branch-name').toLowerCase() + ' ' + lib.libName.toLowerCase();
+      var match = q === '' || name.includes(q);
+      b.style.display = match ? '' : 'none';
+    });
+
+    var visibleBranches = el.querySelectorAll('.tree-branch[style*="display: none"]').length === 0
+      ? branchEls.length
+      : el.querySelectorAll('.tree-branch:not([style*="display: none"])').length;
+
+    if (q === '') {
+      el.style.display = '';
+      el.querySelector('.tree-branches').style.display = '';
+      el.classList.remove('tree-lib-open');
+    } else if (libMatch) {
+      el.style.display = '';
+      el.querySelector('.tree-branches').style.display = '';
+      el.classList.add('tree-lib-open');
+    } else if (visibleBranches > 0) {
+      el.style.display = '';
+      el.querySelector('.tree-branches').style.display = '';
+      el.classList.add('tree-lib-open');
+    } else {
+      el.style.display = 'none';
+    }
+
+    if (el.style.display !== 'none') anyVisible = true;
+  });
+
+  list.style.display = anyVisible ? '' : 'none';
+  empty.style.display = anyVisible ? 'none' : '';
+}
+
+function selectBranch(libId, branchCode) {
+  document.cookie = 'selected_library=' + libId + '; path=/; max-age=31536000';
+  document.cookie = 'selected_branch=' + branchCode + '; path=/; max-age=31536000';
+  location.reload();
+}
+</script>
+{% else %}
 <h1 class="page-title">Your Recommendations</h1>
 
 {% for carousel in carousels %}
@@ -43,9 +162,12 @@
   <p>Sync borrowing history first by running <code>python daily.py</code>.</p>
 </div>
 {% endfor %}
+{% endif %}
 {% endblock %}
 
 {% block scripts %}
+{% if not selected_branch %}
+{% else %}
 <script>
 (function() {
   var __holdsByMid = {};
@@ -144,4 +266,5 @@
   window.addEventListener('pageshow', function() { init(); });
 })();
 </script>
+{% endif %}
 {% endblock %}

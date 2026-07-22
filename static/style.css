@@ -1210,6 +1210,109 @@ th {
 .onboarding-modal .btn:hover { background: #1d4ed8; }
 .onboarding-modal .btn:disabled { opacity: 0.4; cursor: default; }
 
+/* ── tree selector ── */
+
+.onboarding-page {
+  max-width: 600px;
+  margin: 0 auto;
+  padding-top: 20px;
+}
+
+.onboarding-page .page-title {
+  margin-bottom: 6px;
+}
+
+.tree-select {
+  margin-top: 24px;
+}
+
+.tree-search {
+  position: relative;
+  margin-bottom: 12px;
+}
+
+.tree-search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 1rem;
+  pointer-events: none;
+}
+
+.tree-input {
+  width: 100%;
+  padding: 10px 12px 10px 36px;
+  font-size: 0.92rem;
+  border: 1px solid #d2d2d7;
+  border-radius: 8px;
+  outline: none;
+  background: #fff;
+}
+
+.tree-input:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.15); }
+
+.tree-list { border: 1px solid #e8e8ed; border-radius: 8px; overflow: hidden; background: #fff; }
+
+.tree-lib { border-bottom: 1px solid #e8e8ed; }
+.tree-lib:last-child { border-bottom: none; }
+
+.tree-lib-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.1s;
+}
+
+.tree-lib-header:hover { background: #f5f5f7; }
+
+.tree-lib-icon { font-size: 1.1rem; flex-shrink: 0; }
+.tree-lib-name { font-weight: 500; flex: 1; }
+.tree-lib-count { font-size: 0.78rem; color: #86868b; }
+.tree-chevron { font-size: 0.7rem; color: #86868b; transition: transform 0.15s; }
+
+.tree-branches { display: none; }
+.tree-lib-open .tree-branches { display: block; }
+
+.tree-branch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px 10px 40px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background 0.1s;
+}
+
+.tree-branch:hover { background: #eff6ff; }
+.tree-branch-icon { font-size: 0.9rem; flex-shrink: 0; }
+
+.tree-empty {
+  text-align: center;
+  padding: 32px 20px;
+  border: 1px solid #e8e8ed;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.tree-support-list {
+  list-style: none;
+  margin-top: 12px;
+  text-align: left;
+  display: inline-block;
+}
+
+.tree-support-list li {
+  padding: 4px 0;
+  font-size: 0.9rem;
+  color: #515154;
+}
+
+.tree-support-list li::before { content: "• "; color: #2563eb; }
+
 @media (max-width: 640px) {
   .container { padding: 16px 12px; }
 

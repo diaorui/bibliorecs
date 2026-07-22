@@ -26,72 +26,11 @@
     </div>
   </nav>
 
-  {% if not selected_branch %}
-  <div class="onboarding-overlay" id="onboarding">
-    <div class="onboarding-modal">
-      <h1>Welcome to Bibliorecs</h1>
-      <p class="onboarding-sub">Select your library and pickup branch to get started.</p>
 
-      <div class="onboarding-step" id="step-lib">
-        <h2>Which library do you use?</h2>
-        <div class="lib-cards">
-          {% for lid, lcfg in libraries.items() %}
-          <div class="lib-card" data-lib="{{ lid }}" onclick="pickLib('{{ lid }}')">
-            <div class="lib-card-name">{{ lcfg.name }}</div>
-          </div>
-          {% endfor %}
-        </div>
-      </div>
-
-      <div class="onboarding-step" id="step-branch" style="display:none">
-        <h2>Which branch do you pick up from?</h2>
-        <div class="branch-list" id="branch-list"></div>
-        <button class="btn" id="btn-confirm" onclick="confirmOnboarding()" disabled>Confirm</button>
-      </div>
-    </div>
-  </div>
-  {% endif %}
 
   <main class="container">
     {% block content %}{% endblock %}
   </main>
-
-  <script>
-  // ── onboarding ──
-  var _onboardingLib = null;
-  var _onboardingBranch = null;
-
-  function pickLib(lib) {
-    _onboardingLib = lib;
-    document.getElementById('step-lib').style.display = 'none';
-    document.getElementById('step-branch').style.display = 'block';
-    var list = document.getElementById('branch-list');
-    list.innerHTML = '';
-    fetch('/api/branches').then(function(r) { return r.json(); }).then(function(data) {
-      var branches = (data[lib] || {}).branches || [];
-      branches.forEach(function(b) {
-        var el = document.createElement('div');
-        el.className = 'branch-option';
-        el.textContent = b.name;
-        el.dataset.code = b.code;
-        el.onclick = function() {
-          document.querySelectorAll('.branch-option').forEach(function(x) { x.classList.remove('selected'); });
-          el.classList.add('selected');
-          _onboardingBranch = b.code;
-          document.getElementById('btn-confirm').disabled = false;
-        };
-        list.appendChild(el);
-      });
-    });
-  }
-
-  function confirmOnboarding() {
-    document.cookie = 'selected_library=' + _onboardingLib + '; path=/; max-age=31536000';
-    document.cookie = 'selected_branch=' + _onboardingBranch + '; path=/; max-age=31536000';
-    location.reload();
-  }
-
-  </script>
 
   <script>
   document.addEventListener('DOMContentLoaded', function() {
