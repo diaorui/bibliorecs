@@ -88,12 +88,6 @@ def get_conn():
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=OFF")
-    # Migrate: add columns if missing
-    for col in ("total_copies", "available_copies", "on_order_copies"):
-        try:
-            conn.execute(f"ALTER TABLE books_in_library ADD COLUMN {col} INTEGER")
-        except sqlite3.OperationalError:
-            pass
     return conn
 
 
