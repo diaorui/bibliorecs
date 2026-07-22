@@ -35,7 +35,7 @@ LIBRARIES = {
     },
 }
 
-EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
+EMBEDDING_MODEL = "sentence-transformers/static-retrieval-mrl-en-v1"
 EMBEDDING_PATH = os.path.join(_SCRIPT_DIR, "embeddings.npy")
 EMBEDDING_IDS_PATH = os.path.join(_SCRIPT_DIR, "embedding_ids.json")
 

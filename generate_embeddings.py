@@ -85,7 +85,7 @@ def main():
 
     from sentence_transformers import SentenceTransformer
     t0 = time.time()
-    model = SentenceTransformer(config.EMBEDDING_MODEL)
+    model = SentenceTransformer(config.EMBEDDING_MODEL, truncate_dim=256)
     load_t = time.time() - t0
     use_gpu = torch.cuda.is_available()
     print(f"  Model loaded in {load_t:.1f}s ({config.EMBEDDING_MODEL}{' — CUDA' if use_gpu else ''})")
