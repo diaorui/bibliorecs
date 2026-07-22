@@ -50,7 +50,9 @@ def book_category(call_number, library_id=None, genres=None,
         else: return "Other"
 
     # 3. Genre regex (Graphic Novels) — overrides topic
-    if genres and any(_GN_RE.search(g) for g in genres):
+    if genres and any(
+        _GN_RE.search(g) or "comic" in g.lower() for g in genres
+    ):
         return "Graphic Novels"
 
     # 4. Format keywords — overrides topic (reading level > subject)
