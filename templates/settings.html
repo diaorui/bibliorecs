@@ -287,6 +287,7 @@ document.getElementById('creds-form-save').addEventListener('click', function() 
   var btn = this;
   btn.textContent = 'Connecting...';
   btn.disabled = true;
+  document.getElementById('creds-form-cancel').disabled = true;
   var errEl = document.getElementById('creds-form-error');
   errEl.style.display = 'none';
   fetch('/api/creds', {
@@ -304,6 +305,7 @@ document.getElementById('creds-form-save').addEventListener('click', function() 
       errEl.style.display = '';
       btn.textContent = 'Connect';
       btn.disabled = false;
+      document.getElementById('creds-form-cancel').disabled = false;
     }
   })
   .catch(function() {
@@ -311,6 +313,7 @@ document.getElementById('creds-form-save').addEventListener('click', function() 
     errEl.style.display = '';
     btn.textContent = 'Connect';
     btn.disabled = false;
+    document.getElementById('creds-form-cancel').disabled = false;
   });
 });
 

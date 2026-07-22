@@ -245,6 +245,8 @@ function selectBranch(libId, branchCode) {
       var btn = this;
       btn.textContent = 'Connecting...';
       btn.disabled = true;
+      document.getElementById('creds-skip').disabled = true;
+      document.getElementById('creds-skip').style.opacity = '0.5';
       var status = document.getElementById('creds-status');
       status.style.display = '';
       status.textContent = 'Syncing borrowing history...';
