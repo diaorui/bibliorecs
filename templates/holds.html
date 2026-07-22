@@ -94,6 +94,12 @@
     container.innerHTML = '<h2>Could not load holds</h2><p style="color:#86868b;margin-top:4px">' + (msg || 'Unknown error') + '</p><button onclick="location.reload()" class="btn btn-primary" style="margin-top:12px">Retry</button>';
   }
 
+  function renderMessage(msg) {
+    document.getElementById('page-title').textContent = 'Your Holds';
+    container.className = 'empty-state';
+    container.innerHTML = '<h2>Not connected</h2><p style="color:#86868b;margin-top:4px">' + msg + '</p><a href="/settings" class="btn btn-primary" style="margin-top:12px;display:inline-block;text-decoration:none">Settings</a>';
+  }
+
   function attachCancel() {
     document.querySelectorAll('.btn-cancel').forEach(function(btn) {
       btn.addEventListener('click', function(e) {
