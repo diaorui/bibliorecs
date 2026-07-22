@@ -42,7 +42,6 @@ CREATE INDEX IF NOT EXISTS idx_bil_author ON books_in_library(author);
 CREATE INDEX IF NOT EXISTS idx_bil_year ON books_in_library(publication_year);
 CREATE INDEX IF NOT EXISTS idx_bil_lang ON books_in_library(primary_language);
 CREATE INDEX IF NOT EXISTS idx_bil_content ON books_in_library(content_type);
-CREATE INDEX IF NOT EXISTS idx_bil_isbn ON books_in_library(isbn);
 
 CREATE TABLE IF NOT EXISTS borrow_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
