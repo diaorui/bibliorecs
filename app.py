@@ -385,6 +385,12 @@ def settings():
 
 @app.route("/api/reset-onboarding", methods=["POST"])
 def api_reset_onboarding():
+    import auth_store
+    conn = db.get_conn()
+    conn.execute("DELETE FROM borrow_events")
+    conn.commit()
+    conn.close()
+    auth_store._creds.clear()
     resp = jsonify({"success": True})
     resp.set_cookie("selected_library", "", expires=0, path="/")
     resp.set_cookie("selected_branch", "", expires=0, path="/")
