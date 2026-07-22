@@ -8,35 +8,30 @@ LIBRARIES = {
         "catalog_base": "https://sclibrary.bibliocommons.com",
         "gateway_base": "https://gateway.bibliocommons.com/v2/libraries/sclibrary",
         "syndetics_client": "sepup",
-        "env_prefix": "SCL",
     },
     "sccl": {
         "name": "Santa Clara County Library",
         "catalog_base": "https://sccl.bibliocommons.com",
         "gateway_base": "https://gateway.bibliocommons.com/v2/libraries/sccl",
         "syndetics_client": "santaclaracfl",
-        "env_prefix": "SCCL",
     },
     "sjpl": {
         "name": "San José Public Library",
         "catalog_base": "https://sjpl.bibliocommons.com",
         "gateway_base": "https://gateway.bibliocommons.com/v2/libraries/sjpl",
         "syndetics_client": "sanjosepl",
-        "env_prefix": "SJPL",
     },
     "sunnyvale": {
         "name": "Sunnyvale Public Library",
         "catalog_base": "https://sunnyvale.bibliocommons.com",
         "gateway_base": "https://gateway.bibliocommons.com/v2/libraries/sunnyvale",
         "syndetics_client": "sunnyvaleca",
-        "env_prefix": "SUNNYVALE",
     },
     "paloalto": {
         "name": "Palo Alto City Library",
         "catalog_base": "https://paloalto.bibliocommons.com",
         "gateway_base": "https://gateway.bibliocommons.com/v2/libraries/paloalto",
         "syndetics_client": "paloaltocity",
-        "env_prefix": "PALOALTO",
     },
 }
 
