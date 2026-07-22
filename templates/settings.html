@@ -271,7 +271,8 @@ function attachCredsEvents() {
   document.querySelectorAll('.creds-disconnect').forEach(function(btn) {
     btn.addEventListener('click', function() {
       var lib = btn.getAttribute('data-lib');
-      if (!confirm('Disconnect your library card for ' + lib + '?')) return;
+      var name = btn.closest('.creds-row').querySelector('.creds-row-name').textContent;
+      if (!confirm('Disconnect your library card for ' + name + '?')) return;
       fetch('/api/creds/' + lib, { method: 'DELETE' })
         .then(function(r) { return r.json(); })
         .then(function() { loadCreds(); })
