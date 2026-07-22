@@ -479,8 +479,8 @@ def api_history_category_data():
         for r in rows:
             genres = json.loads(r["genres"]) if r["genres"] and r["genres"] != "[]" else None
             cat_counts[book_category(r["call_number"], lib_id, genres=genres,
-                                       books_format=r.get("format"),
-                                       content_type=r.get("content_type"))] += 1
+                                       books_format=r["format"],
+                                       content_type=r["content_type"])] += 1
         result = [{"label": k, "count": v}
                   for k, v in sorted(cat_counts.items(), key=lambda x: (x[0] == "Other", -x[1]))]
         return jsonify(result)
@@ -600,8 +600,8 @@ def history():
     for r in cat_rows:
         genres = json.loads(r["genres"]) if r["genres"] and r["genres"] != "[]" else None
         cat_counts[book_category(r["call_number"], lib_id, genres=genres,
-                                  books_format=r.get("format"),
-                                  content_type=r.get("content_type"))] += 1
+                                  books_format=r["format"],
+                                  content_type=r["content_type"])] += 1
     chart_cats = [{"label": k, "count": v}
                   for k, v in sorted(cat_counts.items(), key=lambda x: (x[0] == "Other", -x[1]))]
 
