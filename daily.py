@@ -43,6 +43,8 @@ def main():
             bc_token, session_id, account_id, _ = api.login(lib_id)
             new_history, pages = patron.sync_history(conn, bc_token, session_id, account_id, lib_id)
             print(f"  {pages} pages checked, {new_history} new entries")
+            n_checkouts = patron.sync_checkouts(conn, bc_token, session_id, account_id, lib_id)
+            print(f"  {n_checkouts} current checkouts synced")
         except Exception as e:
             print(f"  Skipped — {e}")
 
