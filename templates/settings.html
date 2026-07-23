@@ -283,6 +283,7 @@ function attachCredsEvents() {
       delete creds[lib];
       saveCreds(creds);
       localStorage.removeItem('bibliorecs_history_' + lib);
+      localStorage.removeItem('bibliorecs_history_render_' + lib);
       loadCreds();
     });
   });
