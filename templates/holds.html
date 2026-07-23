@@ -163,7 +163,7 @@
             status: h.status,
             position: h.holdsPosition,
             pickup_branch: (h.pickupLocation || {}).name || '',
-            expiry_date: h.expiryDate
+            expiry_date: h.pickupByDate
           };
         });
         renderHolds(holds);

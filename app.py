@@ -298,60 +298,6 @@ def api_reset_onboarding():
     return resp
 
 
-@app.route("/api/history/data")
-def api_history_data():
-    conn = db.get_conn()
-    lib_id, branch_code, lib_cfg = _lib_from_cookies()
-    try:
-        current = conn.execute("""
-            SELECT b.*, bk.title, bk.subtitle, bk.authors, bk.isbns, bk.metadata_id
-            FROM borrow_events b
-            LEFT JOIN books_in_library bk
-                ON bk.metadata_id = b.metadata_id AND bk.library_id = b.library_id
-            WHERE b.is_current = 1 AND b.library_id = ?
-            ORDER BY COALESCE(b.checkout_date, '9999-12-31') ASC
-        """, (lib_id,)).fetchall()
-
-        past = conn.execute("""
-            SELECT b.*, bk.title, bk.subtitle, bk.authors, bk.isbns, bk.metadata_id
-            FROM borrow_events b
-            LEFT JOIN books_in_library bk
-                ON bk.metadata_id = b.metadata_id AND bk.library_id = b.library_id
-            WHERE b.source = 'history' AND b.library_id = ?
-            ORDER BY b.checkout_date DESC
-        """, (lib_id,)).fetchall()
-
-        syndetics = lib_cfg["syndetics_client"]
-        current_list = []
-        for c in current:
-            c = dict(c)
-            c["isbn"] = _first_isbn(c.get("isbns"))
-            c["author"] = ", ".join(json.loads(c.get("authors") or "[]"))
-            img, fallback = _cover(c["isbn"], syndetics)
-            c["img_url"] = img
-            c["fallback_url"] = fallback
-            c["due_label"] = due_info(c.get("checkout_date"), True)
-            c["due_label_compact"] = due_label_compact(c.get("checkout_date"), True)
-            c["due_remaining"] = due_remaining(c.get("checkout_date"), True)
-            current_list.append(c)
-
-        past_list = []
-        for p in past:
-            p = dict(p)
-            p["isbn"] = _first_isbn(p.get("isbns"))
-            p["author"] = ", ".join(json.loads(p.get("authors") or "[]"))
-            img, fallback = _cover(p["isbn"], syndetics)
-            p["img_url"] = img
-            p["fallback_url"] = fallback
-            past_list.append(p)
-
-        return jsonify({"current": current_list, "past": past_list})
-    except Exception as e:
-        return jsonify({"error": str(e)})
-    finally:
-        conn.close()
-
-
 @app.route("/api/history/chart-data")
 def api_history_chart_data():
     conn = db.get_conn()
@@ -867,47 +813,6 @@ def due_info(checkout_date, is_current):
             return f"Due {formatted} ({delta} days left)"
     except (ValueError, TypeError):
         return f"Due {checkout_date}"
-
-
-@app.template_filter("due_label_compact")
-def due_label_compact(checkout_date, is_current):
-    if not checkout_date or not is_current:
-        return None
-    from datetime import date as date_cls
-    try:
-        due = date_cls.fromisoformat(checkout_date[:10])
-        today = date_cls.today()
-        delta = (due - today).days
-        formatted = due.strftime("%b %-d")
-        if delta < 0:
-            return f"Overdue {formatted}"
-        elif delta == 0:
-            return "Due today"
-        else:
-            return f"Due {formatted}"
-    except (ValueError, TypeError):
-        return None
-
-
-@app.template_filter("due_remaining")
-def due_remaining(checkout_date, is_current):
-    if not checkout_date or not is_current:
-        return None
-    from datetime import date as date_cls
-    try:
-        due = date_cls.fromisoformat(checkout_date[:10])
-        today = date_cls.today()
-        delta = (due - today).days
-        if delta < 0:
-            return f"{-delta} days ago"
-        elif delta == 0:
-            return None
-        elif delta == 1:
-            return "1 day left"
-        else:
-            return f"{delta} days left"
-    except (ValueError, TypeError):
-        return None
 
 
 @app.template_filter("parse_json")

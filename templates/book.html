@@ -168,7 +168,7 @@ function showCheckedOut() {
 }
 
 function showReady(h) {
-  var expiry = h.expiryDate ? '<div class="hold-expiry">Pick up by ' + h.expiryDate.slice(0,10) + '</div>' : '';
+  var expiry = h.pickupByDate ? '<div class="hold-expiry">Pick up by ' + h.pickupByDate.slice(0,10) + '</div>' : '';
   holdContent.innerHTML =
     '<div class="hold-status hold-status-ready">' +
       '<span class="hold-status-badge">Ready for Pickup</span>' +
@@ -178,10 +178,11 @@ function showReady(h) {
 }
 
 function showOnHold(h) {
-  var pos = (h.holdsPosition && h.holdsPosition > 0) ? ' — Position #' + h.holdsPosition : '';
+  var pos = (h.holdsPosition || h.position);
+  var posStr = (pos && pos > 0) ? ' — Position #' + pos : '';
   holdContent.innerHTML =
     '<div class="hold-status hold-status-queued">' +
-      '<span class="hold-status-badge">On hold' + pos + '</span>' +
+      '<span class="hold-status-badge">On hold' + posStr + '</span>' +
     '</div>';
   holdSection.style.display = '';
 }
