@@ -203,31 +203,6 @@ function showHoldError(msg) {
   showToast(msg, 8000);
 }
 
-function handlePlaceHold(e) {
-  var btn = e.target.closest('.btn-hold-main');
-  if (!btn) return;
-  btn.textContent = 'Placing...';
-  btn.disabled = true;
-  fetch('/api/hold/place', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({metadata_id: mid})
-  })
-  .then(function(r) { return r.json(); })
-  .then(function(d) {
-    if (d.success) {
-      showOnHold({position: d.position, hold_id: d.hold_id});
-    } else if (d.error && d.error.indexOf('already') !== -1) {
-      showOnHold({position: null, hold_id: null});
-    } else {
-      showHoldError(d.error || 'Hold failed');
-    }
-  })
-  .catch(function() {
-    showHoldError('Network error placing hold');
-  });
-}
-
 function showNoCreds() {
   holdContent.innerHTML = '<div class="hold-status"><span class="hold-status-label">Connect your library card in Settings to place holds.</span></div>';
   holdSection.style.display = '';

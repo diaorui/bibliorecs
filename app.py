@@ -13,7 +13,6 @@ from flask import Flask, render_template, abort, jsonify, request, redirect
 import api
 import config
 import db
-import patron
 import updater
 import recommend as recmod
 book_category = recmod.book_category
@@ -245,115 +244,6 @@ def api_branches():
 
 # ── holds ──
 
-@app.route("/api/holds")
-def api_holds():
-    try:
-        lib_id, branch_code, lib_cfg = _lib_from_cookies()
-        if not lib_id:
-            return jsonify({"holds": [], "quotas": []})
-        bc_token, session_id, account_id, _ = api._get_auth(lib_id)
-        data = api.fetch_holds(lib_id, bc_token, session_id, account_id)
-        holds_ents = data.get("entities", {}).get("holds", {})
-        conn = db.get_conn()
-        holds = []
-        for hid, h in holds_ents.items():
-            mid = h.get("metadataId")
-            row = None
-            if mid:
-                row = conn.execute(
-                    "SELECT title, subtitle, authors, isbns FROM books_in_library WHERE metadata_id = ? AND library_id = ?",
-                    (mid, lib_id)
-                ).fetchone()
-            holds.append({
-                "hold_id": hid,
-                "metadata_id": mid,
-                "title": row["title"] if row else (h.get("bibTitle") or ""),
-                "subtitle": row["subtitle"] if row else None,
-                "author": ", ".join(json.loads(row["authors"])) if row and row["authors"] else "",
-                "isbn": _first_isbn(row["isbns"]) if row else None,
-                "status": h.get("status"),
-                "position": h.get("holdsPosition"),
-                "pickup_branch": (h.get("pickupLocation") or {}).get("name"),
-                "placed_date": h.get("holdPlacedDate"),
-                "expiry_date": h.get("pickupByDate"),
-            })
-        conn.close()
-        quotas = data.get("borrowing", {}).get("summaries", {}).get("holds", {}).get("quotas", [])
-        return jsonify({"holds": holds, "quotas": quotas})
-    except Exception as e:
-        return jsonify({"error": str(e)})
-
-
-@app.route("/api/hold/place", methods=["POST"])
-def api_hold_place():
-    body = request.get_json()
-    if not body or "metadata_id" not in body:
-        return jsonify({"error": "metadata_id required"}), 400
-    try:
-        lib_id, branch_code, _ = _lib_from_cookies()
-        if not lib_id or not branch_code:
-            return jsonify({"error": "no library/branch selected"}), 400
-        bc_token, session_id, account_id, _ = api._get_auth(lib_id)
-        data = api.place_hold(lib_id, bc_token, session_id, account_id,
-                              body["metadata_id"], branch_code)
-        holds = data.get("entities", {}).get("holds", {})
-        if holds:
-            hid = next(iter(holds))
-            h = holds[hid]
-            return jsonify({
-                "success": True,
-                "hold_id": hid,
-                "position": h.get("holdsPosition"),
-                "status": h.get("status"),
-            })
-        return jsonify({"success": False, "error": "no hold in response"})
-    except urllib.error.HTTPError as e:
-        status = e.code
-        try:
-            err = json.loads(e.read().decode())
-            msg = err.get("error", {}).get("message", str(e))
-        except Exception:
-            msg = str(e)
-        return jsonify({"success": False, "error": msg}), status
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
-
-
-@app.route("/api/hold/cancel", methods=["POST"])
-def api_hold_cancel():
-    body = request.get_json()
-    if not body or "hold_id" not in body or "metadata_id" not in body:
-        return jsonify({"error": "hold_id and metadata_id required"}), 400
-    try:
-        lib_id, _, _ = _lib_from_cookies()
-        if not lib_id:
-            return jsonify({"error": "no library selected"}), 400
-        bc_token, session_id, account_id, _ = api._get_auth(lib_id)
-        data = api.cancel_hold(lib_id, bc_token, session_id, account_id,
-                                body["hold_id"], body["metadata_id"])
-        failures = data.get("failures") or {}
-        if body["hold_id"] in failures:
-            return jsonify({"success": False, "error": failures[body["hold_id"]]})
-        return jsonify({"success": True})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
-
-
-# ── checkouts ──
-
-@app.route("/api/checkouts")
-def api_checkouts():
-    try:
-        lib_id, _, _ = _lib_from_cookies()
-        if not lib_id:
-            return jsonify({"checked_out": [], "error": "no library selected"})
-        bc_token, session_id, account_id, _ = api._get_auth(lib_id)
-        mids = list(api.fetch_current_checkouts_map(lib_id, bc_token, session_id, account_id))
-        return jsonify({"checked_out": mids})
-    except Exception as e:
-        return jsonify({"checked_out": [], "error": str(e)})
-
-
 # ── misc ──
 
 @app.route("/api/restart", methods=["POST"])
@@ -398,80 +288,14 @@ def settings():
 
 @app.route("/api/reset-onboarding", methods=["POST"])
 def api_reset_onboarding():
-    import auth_store
-    api._AUTH_CACHE.clear()
-    api._AUTH_EXPIRES_AT.clear()
     conn = db.get_conn()
     conn.execute("DELETE FROM borrow_events")
     conn.commit()
     conn.close()
-    auth_store._creds.clear()
     resp = jsonify({"success": True})
     resp.set_cookie("selected_library", "", expires=0, path="/")
     resp.set_cookie("selected_branch", "", expires=0, path="/")
     return resp
-
-
-@app.route("/api/sync-history", methods=["POST"])
-def api_sync_history():
-    try:
-        lib_id, _, _ = _lib_from_cookies()
-        if not lib_id:
-            return jsonify({"synced": False, "error": "no library selected"})
-        bc_token, session_id, account_id, _ = api._get_auth(lib_id)
-        conn = db.get_conn()
-        co = patron.sync_checkouts(conn, bc_token, session_id, account_id, lib_id)
-        hi = patron.sync_history(conn, bc_token, session_id, account_id, lib_id)
-        conn.close()
-        return jsonify({"synced": True, "checkouts": co, "history_new": hi})
-    except Exception as e:
-        return jsonify({"synced": False, "error": str(e)})
-
-
-@app.route("/api/creds", methods=["GET"])
-def api_creds_list():
-    import auth_store
-    return jsonify({"connected": list(auth_store.list_connected())})
-
-
-@app.route("/api/creds", methods=["POST"])
-def api_creds_set():
-    import auth_store
-    body = request.get_json()
-    if not body or "library_id" not in body or "user" not in body or "password" not in body:
-        return jsonify({"error": "library_id, user, password required"}), 400
-    lib_id = body["library_id"]
-    if lib_id not in config.LIBRARIES:
-        return jsonify({"error": "unknown library"}), 400
-    # Save creds first, then try login — login() reads from auth_store
-    auth_store.set(lib_id, body["user"], body["password"])
-    api._invalidate_auth(lib_id)
-    try:
-        bc_token, session_id, account_id, _ = api._get_auth(lib_id)
-    except Exception as e:
-        auth_store.remove(lib_id)
-        return jsonify({"success": False, "error": str(e)})
-    # Sync
-    try:
-        conn = db.get_conn()
-        co = patron.sync_checkouts(conn, bc_token, session_id, account_id, lib_id)
-        hi = patron.sync_history(conn, bc_token, session_id, account_id, lib_id)
-        conn.close()
-        return jsonify({"success": True, "checkouts": co, "history_new": hi})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-
-@app.route("/api/creds/<library_id>", methods=["DELETE"])
-def api_creds_remove(library_id):
-    import auth_store
-    auth_store.remove(library_id)
-    api._invalidate_auth(library_id)
-    conn = db.get_conn()
-    conn.execute("DELETE FROM borrow_events WHERE library_id = ?", (library_id,))
-    conn.commit()
-    conn.close()
-    return jsonify({"success": True})
 
 
 @app.route("/api/history/data")

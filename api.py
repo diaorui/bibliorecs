@@ -294,17 +294,6 @@ def _gateway_patch(library_id, path, bc_token, session_id, body, retries=2):
             raise
 
 
-def renew_checkouts(library_id, bc_token, session_id, account_id, checkout_ids):
-    if not checkout_ids:
-        return {"entities": {"checkouts": {}}, "failures": []}
-    body = {
-        "accountId": account_id,
-        "checkoutIds": checkout_ids,
-        "renew": True,
-    }
-    return _gateway_patch(library_id, "/checkouts", bc_token, session_id, body)
-
-
 # ── Proxy functions (stateless, tokens passed by caller) ──
 
 def proxy_fetch_holds(library_id, bc_token, session_id, account_id):
