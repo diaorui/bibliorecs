@@ -1,16 +1,11 @@
 import time
 import json
-import os
-import threading
 import urllib.parse
 import urllib.request
 import urllib.error
 import http.cookiejar
 import re
 import config
-
-
-REQUEST_DELAY = 0.6
 
 
 def _lib_cfg(library_id):
@@ -141,39 +136,11 @@ def _parse_year(date_str):
     return int(match.group(1)) if match else None
 
 
-_AUTH_CACHE = {}
-_AUTH_EXPIRES_AT = {}
-_AUTH_LOCK = threading.Lock()
-_AUTH_TTL = 1800
+# ── Auth / Proxy ──
 
-
-def _invalidate_auth(library_id):
-    _AUTH_CACHE.pop(library_id, None)
-    _AUTH_EXPIRES_AT.pop(library_id, None)
-
-
-def _get_auth(library_id):
-    now = time.time()
-    if _AUTH_CACHE.get(library_id) and now < _AUTH_EXPIRES_AT.get(library_id, 0):
-        return _AUTH_CACHE[library_id]
-    with _AUTH_LOCK:
-        if _AUTH_CACHE.get(library_id) and time.time() < _AUTH_EXPIRES_AT.get(library_id, 0):
-            return _AUTH_CACHE[library_id]
-        _AUTH_CACHE[library_id] = login(library_id)
-        _AUTH_EXPIRES_AT[library_id] = time.time() + _AUTH_TTL
-        return _AUTH_CACHE[library_id]
-
-
-def login(library_id):
+def login(library_id, username, password):
     cfg = config.LIBRARIES[library_id]
     catalog_base = cfg["catalog_base"]
-
-    import auth_store
-    creds = auth_store.get(library_id)
-    if not creds:
-        raise RuntimeError(f"no credentials for {library_id}")
-    username = creds["user"]
-    password = creds["password"]
 
     jar = http.cookiejar.CookieJar()
     opener = urllib.request.build_opener(
@@ -221,7 +188,7 @@ def login(library_id):
         raise RuntimeError("login failed: no auth tokens")
 
     account_id = int(session_id.split("-")[-1]) + 1
-    return bc_token, session_id, account_id, opener
+    return bc_token, session_id, account_id
 
 
 def _gateway_headers(bc_token, session_id, catalog_base):
@@ -234,8 +201,8 @@ def _gateway_headers(bc_token, session_id, catalog_base):
     }
 
 
-def _gateway_get(library_id, path, bc_token, session_id, params=None, retries=3):
-    cfg = _lib_cfg(library_id)
+def _gateway_get(library_id, path, bc_token, session_id, params=None, retries=2):
+    cfg = config.LIBRARIES[library_id]
     url = f"{cfg['gateway_base']}{path}"
     if params:
         qs = urllib.parse.urlencode(params)
@@ -247,12 +214,7 @@ def _gateway_get(library_id, path, bc_token, session_id, params=None, retries=3)
             with urllib.request.urlopen(req, timeout=30) as resp:
                 return json.loads(resp.read().decode())
         except urllib.error.HTTPError as e:
-            if e.code == 401:
-                _invalidate_auth(library_id)
-                new_auth = _get_auth(library_id)
-                headers = _gateway_headers(new_auth[0], new_auth[1], cfg["catalog_base"])
-                continue
-            if attempt < retries - 1:
+            if attempt < retries - 1 and e.code >= 500:
                 time.sleep(2 ** attempt)
                 continue
             raise
@@ -263,8 +225,8 @@ def _gateway_get(library_id, path, bc_token, session_id, params=None, retries=3)
             raise
 
 
-def _gateway_post(library_id, path, bc_token, session_id, body, retries=3):
-    cfg = _lib_cfg(library_id)
+def _gateway_post(library_id, path, bc_token, session_id, body, retries=2):
+    cfg = config.LIBRARIES[library_id]
     url = f"{cfg['gateway_base']}{path}?locale=en-US"
     headers = _gateway_headers(bc_token, session_id, cfg["catalog_base"])
     headers["Content-Type"] = "application/json"
@@ -275,12 +237,6 @@ def _gateway_post(library_id, path, bc_token, session_id, body, retries=3):
             with urllib.request.urlopen(req, timeout=30) as resp:
                 return json.loads(resp.read().decode())
         except urllib.error.HTTPError as e:
-            if e.code == 401:
-                _invalidate_auth(library_id)
-                new_auth = _get_auth(library_id)
-                headers = _gateway_headers(new_auth[0], new_auth[1], cfg["catalog_base"])
-                headers["Content-Type"] = "application/json"
-                continue
             if attempt < retries - 1 and e.code >= 500:
                 time.sleep(2 ** attempt)
                 continue
@@ -292,8 +248,8 @@ def _gateway_post(library_id, path, bc_token, session_id, body, retries=3):
             raise
 
 
-def _gateway_delete(library_id, path, bc_token, session_id, body, retries=3):
-    cfg = _lib_cfg(library_id)
+def _gateway_delete(library_id, path, bc_token, session_id, body, retries=2):
+    cfg = config.LIBRARIES[library_id]
     url = f"{cfg['gateway_base']}{path}?locale=en-US"
     headers = _gateway_headers(bc_token, session_id, cfg["catalog_base"])
     headers["Content-Type"] = "application/json"
@@ -304,12 +260,6 @@ def _gateway_delete(library_id, path, bc_token, session_id, body, retries=3):
             with urllib.request.urlopen(req, timeout=30) as resp:
                 return json.loads(resp.read().decode())
         except urllib.error.HTTPError as e:
-            if e.code == 401:
-                _invalidate_auth(library_id)
-                new_auth = _get_auth(library_id)
-                headers = _gateway_headers(new_auth[0], new_auth[1], cfg["catalog_base"])
-                headers["Content-Type"] = "application/json"
-                continue
             if attempt < retries - 1 and e.code >= 500:
                 time.sleep(2 ** attempt)
                 continue
@@ -321,15 +271,8 @@ def _gateway_delete(library_id, path, bc_token, session_id, body, retries=3):
             raise
 
 
-def fetch_borrowing_history(library_id, bc_token, session_id, account_id, page=0):
-    return _gateway_get(
-        library_id, "/borrowinghistory", bc_token, session_id,
-        {"accountId": account_id, "page": page, "locale": "en-US"}
-    )
-
-
-def _gateway_patch(library_id, path, bc_token, session_id, body, retries=3):
-    cfg = _lib_cfg(library_id)
+def _gateway_patch(library_id, path, bc_token, session_id, body, retries=2):
+    cfg = config.LIBRARIES[library_id]
     url = f"{cfg['gateway_base']}{path}?locale=en-US"
     headers = _gateway_headers(bc_token, session_id, cfg["catalog_base"])
     headers["Content-Type"] = "application/json"
@@ -340,12 +283,6 @@ def _gateway_patch(library_id, path, bc_token, session_id, body, retries=3):
             with urllib.request.urlopen(req, timeout=30) as resp:
                 return json.loads(resp.read().decode())
         except urllib.error.HTTPError as e:
-            if e.code == 401:
-                _invalidate_auth(library_id)
-                new_auth = _get_auth(library_id)
-                headers = _gateway_headers(new_auth[0], new_auth[1], cfg["catalog_base"])
-                headers["Content-Type"] = "application/json"
-                continue
             if attempt < retries - 1 and e.code >= 500:
                 time.sleep(2 ** attempt)
                 continue
@@ -368,19 +305,24 @@ def renew_checkouts(library_id, bc_token, session_id, account_id, checkout_ids):
     return _gateway_patch(library_id, "/checkouts", bc_token, session_id, body)
 
 
-def fetch_current_checkouts(library_id, bc_token, session_id, account_id):
-    return _gateway_get(
-        library_id, "/checkouts", bc_token, session_id,
-        {"accountId": account_id, "size": 100}
-    )
+# ── Proxy functions (stateless, tokens passed by caller) ──
 
-
-def fetch_holds(library_id, bc_token, session_id, account_id):
+def proxy_fetch_holds(library_id, bc_token, session_id, account_id):
     return _gateway_get(library_id, "/holds", bc_token, session_id,
                         {"accountId": account_id, "size": 100, "locale": "en-US"})
 
 
-def place_hold(library_id, bc_token, session_id, account_id, metadata_id, branch_code):
+def proxy_fetch_checkouts(library_id, bc_token, session_id, account_id):
+    return _gateway_get(library_id, "/checkouts", bc_token, session_id,
+                        {"accountId": account_id, "size": 100})
+
+
+def proxy_fetch_history(library_id, bc_token, session_id, account_id, page=0):
+    return _gateway_get(library_id, "/borrowinghistory", bc_token, session_id,
+                        {"accountId": account_id, "page": page, "locale": "en-US"})
+
+
+def proxy_place_hold(library_id, bc_token, session_id, account_id, metadata_id, branch_code):
     return _gateway_post(library_id, "/holds", bc_token, session_id, {
         "metadataId": metadata_id,
         "materialType": "PHYSICAL",
@@ -394,17 +336,10 @@ def place_hold(library_id, bc_token, session_id, account_id, metadata_id, branch
     })
 
 
-def cancel_hold(library_id, bc_token, session_id, account_id, hold_id, metadata_id):
+def proxy_cancel_hold(library_id, bc_token, session_id, account_id, hold_id, metadata_id):
     return _gateway_delete(library_id, "/holds", bc_token, session_id, {
         "accountId": account_id,
         "metadataIds": [metadata_id],
         "holdIds": [hold_id],
         "errorMessageLocale": "en-US",
     })
-
-
-def fetch_current_checkouts_map(library_id, bc_token, session_id, account_id):
-    data = _gateway_get(library_id, "/checkouts", bc_token, session_id,
-                        {"accountId": account_id, "size": 100})
-    checkouts = data.get("entities", {}).get("checkouts", {})
-    return {c.get("metadataId") for c in checkouts.values() if c.get("metadataId")}

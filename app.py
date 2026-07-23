@@ -82,16 +82,21 @@ def index():
                            selected_library=lib_id, selected_branch=branch_code)
 
 
-@app.route("/api/recommendations")
+@app.route("/api/recommendations", methods=["POST"])
 def api_recommendations():
-    cache_age = request.args.get("cache_age", "30")
+    body = request.get_json() or {}
+    lib_id = body.get("library_id") or request.cookies.get("selected_library")
+    if not lib_id:
+        return jsonify({"carousels": [], "has_profile": False})
+
+    lib_cfg = config.LIBRARIES.get(lib_id)
+    if not lib_cfg:
+        return jsonify({"carousels": [], "has_profile": False})
+
+    borrowing_history = body.get("borrowing_history", [])
     conn = db.get_conn()
     try:
-        lib_id, _, lib_cfg = _lib_from_cookies()
-        if not lib_id:
-            return jsonify({"carousels": [], "has_profile": False})
-
-        recs = recmod.get_recommendations(conn, lib_id)
+        recs = recmod.get_recommendations(conn, lib_id, borrowing_history=borrowing_history)
         by_cat = recs["by_cat"]
         has_profile = recs["has_profile"]
 
@@ -102,14 +107,22 @@ def api_recommendations():
             for r in items:
                 _fmt_rec(r, lib_cfg["syndetics_client"], lib_id)
 
-        call_counts = db.get_category_order(conn, lib_id)
+        # Category ordering from borrowing history
         cat_counts = defaultdict(float)
-        for row in call_counts:
-            genres = json.loads(row["genres"]) if row.get("genres") and row["genres"] != "[]" else None
-            cat = recmod.book_category(row["call_number"], lib_id, genres=genres,
-                                          books_format=row.get("format"),
-                                          content_type=row.get("content_type"))
-            cat_counts[cat] += recmod._time_weight(row["checkout_date"], row["is_current"])
+        if borrowing_history:
+            mids = [b["metadata_id"] for b in borrowing_history if b.get("metadata_id")]
+            placeholders = ",".join("?" for _ in mids)
+            if mids:
+                for row in conn.execute(f"""
+                    SELECT call_number, format, content_type, genres
+                    FROM books_in_library
+                    WHERE metadata_id IN ({placeholders})
+                """, mids).fetchall():
+                    cat = recmod.book_category(row["call_number"], lib_id,
+                                                  json.loads(row["genres"]) if row["genres"] else None,
+                                                  books_format=row["format"],
+                                                  content_type=row["content_type"])
+                    cat_counts[cat] += 1
 
         cat_order = sorted(
             (c for c in by_cat if c != "Other" and c != "Top Picks" and c != "New"),

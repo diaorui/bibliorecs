@@ -121,7 +121,7 @@ def _load_embeddings():
     return _EMB_CACHE, _EMB_IDS_CACHE
 
 
-def get_recommendations(conn, library_id):
+def get_recommendations(conn, library_id, borrowing_history=None):
     if not os.path.exists(config.EMBEDDING_PATH):
         return {"by_cat": {}, "has_profile": False}
 
@@ -141,15 +141,14 @@ def get_recommendations(conn, library_id):
           AND primary_language = 'eng'
     """, (library_id,)).fetchall()
 
-    borrows = db.get_borrow_events_for_recommendation(conn)
-    has_profile = bool(borrows)
+    has_profile = bool(borrowing_history)
 
     borrowed_mids = set()
     borrowed_isbns = set()
     if has_profile:
-        for b in borrows:
+        for b in borrowing_history:
             borrowed_mids.add(b["metadata_id"])
-            for i in json.loads(b.get("isbns") or "[]"):
+            for i in b.get("isbns", []):
                 borrowed_isbns.add(i)
 
     min_year = date.today().year - config.NEW_BOOK_MAX_AGE_YEARS
@@ -180,11 +179,11 @@ def get_recommendations(conn, library_id):
 
     if has_profile:
         valid = []
-        for b in borrows:
+        for b in borrowing_history:
             mid = b["metadata_id"]
             if mid in mid_to_idx:
                 idx = mid_to_idx[mid]
-                valid.append((idx, _time_weight(b["checkout_date"], b["is_current"])))
+                valid.append((idx, _time_weight(b.get("checkout_date"), b.get("is_current"))))
 
         indices, weights = zip(*valid) if valid else ([], [])
         indices = list(indices)
