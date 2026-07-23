@@ -368,27 +368,54 @@ var __catData = {{ chart_cats | tojson }};
 
     setIndicator('\u27F3 Syncing');
 
-    // Fetch history, checkouts, chart data via proxy
+    // Fetch history, checkouts via proxy
     Promise.all([
       fetch('/api/proxy/history', {
         method: 'POST', headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({library_id: libId, bc_token: libCreds.bc_token, session_id: libCreds.session_id, account_id: libCreds.account_id, page: 0})
+      }).then(function(r) { return r.json(); }),
+      fetch('/api/proxy/checkouts', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({library_id: libId, bc_token: libCreds.bc_token, session_id: libCreds.session_id, account_id: libCreds.account_id})
       }).then(function(r) { return r.json(); })
     ]).then(function(results) {
       var historyData = results[0];
+      var checkoutsData = results[1];
+      var allBibs = Object.assign({},
+        (historyData.entities || {}).bibs || {},
+        (checkoutsData.entities || {}).bibs || {}
+      );
       var historyEntries = historyData.entities.borrowingHistory || {};
-      var bibs = historyData.entities.bibs || {};
 
-      // Build history list with bib info
+      // Build past borrows list
       var past = [];
       Object.keys(historyEntries).forEach(function(k) {
         var entry = historyEntries[k];
-        var bib = (bibs[entry.metadataId] || {}).briefInfo || {};
+        var bib = (allBibs[entry.metadataId] || {}).briefInfo || {};
         var isbn = (bib.isbns || [])[0] || '';
         past.push({
           metadata_id: entry.metadataId,
           checkout_date: entry.checkedoutDate,
           title: bib.title || '',
+          subtitle: bib.subtitle || '',
+          author: (bib.authors || []).join(', '),
+          isbn: isbn,
+          img_url: isbn ? 'https://secure.syndetics.com/index.aspx?isbn=' + isbn + '/LC.GIF&client=sepup&type=xw12&oclc=' : '',
+          fallback_url: isbn ? 'https://covers.openlibrary.org/b/isbn/' + isbn + '-L.jpg' : ''
+        });
+      });
+
+      // Build current checkouts list
+      var current = [];
+      var checkoutsObj = (checkoutsData.entities || {}).checkouts || {};
+      Object.keys(checkoutsObj).forEach(function(k) {
+        var co = checkoutsObj[k];
+        var bib = (allBibs[co.metadataId] || {}).briefInfo || {};
+        var isbn = (bib.isbns || [])[0] || '';
+        current.push({
+          metadata_id: co.metadataId,
+          checkout_date: co.dueDate,
+          title: bib.title || co.bibTitle || '',
           subtitle: bib.subtitle || '',
           author: (bib.authors || []).join(', '),
           isbn: isbn,
@@ -408,7 +435,7 @@ var __catData = {{ chart_cats | tojson }};
       } catch(e) {}
 
       // Update content
-      updateContent({current: [], past: past});
+      updateContent({current: current, past: past});
       document.querySelectorAll('img.cover-img').forEach(function(img) {
         if (typeof initCoverFallback === 'function') initCoverFallback(img);
       });
