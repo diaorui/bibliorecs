@@ -32,8 +32,8 @@ var __catData = {{ chart_cats | tojson }};
   {% if not current and not past %}
   <div class="empty-state" id="history-empty">
     <h2>No borrowing history</h2>
-    <p>Connect your library card to sync your borrowing history.</p>
-    <a href="/settings" class="btn btn-primary" style="margin-top:12px;display:inline-block;text-decoration:none">Go to Settings</a>
+    <p id="history-empty-msg">Connect your library card in Settings to sync your borrowing history.</p>
+    <a id="history-empty-btn" href="/settings" class="btn btn-primary" style="margin-top:12px;display:inline-block;text-decoration:none">Go to Settings</a>
   </div>
   {% endif %}
 </div>
@@ -295,20 +295,25 @@ var __catData = {{ chart_cats | tojson }};
     container.style.display = '';
   }
 
-  function updateContent(data) {
+  function updateContent(data, synced) {
     renderItems(data.current || [], 'section-current', true);
     renderItems(data.past || [], 'section-past', false);
 
     var emptyState = document.getElementById('history-empty');
+    var emptyMsg = document.getElementById('history-empty-msg');
+    if (!emptyState) return;
+
     if (!data.current || !data.current.length) {
       if (!data.past || !data.past.length) {
-        if (emptyState) emptyState.style.display = '';
-      } else {
-        if (emptyState) emptyState.style.display = 'none';
+        if (synced) {
+          emptyMsg.textContent = 'No borrowing history — borrow some books and they\'ll show up here.';
+          document.getElementById('history-empty-btn').style.display = '';
+        }
+        emptyState.style.display = '';
+        return;
       }
-    } else {
-      if (emptyState) emptyState.style.display = 'none';
     }
+    emptyState.style.display = 'none';
   }
 
   function fmtDueLabel(dateStr) {
@@ -337,8 +342,14 @@ var __catData = {{ chart_cats | tojson }};
           return a.checkout_date.localeCompare(b.checkout_date);
         });
         updateContent(cached);
+        return;
       }
     } catch(e) {}
+    var creds = getCreds();
+    if (creds[libId] && creds[libId].bc_token) {
+      document.getElementById('history-empty-msg').textContent = 'Syncing your borrowing history...';
+      document.getElementById('history-empty-btn').style.display = 'none';
+    }
   }
 
   function doSync() {
@@ -347,7 +358,9 @@ var __catData = {{ chart_cats | tojson }};
     var creds = getCreds();
     var libCreds = creds[libId];
     if (!libCreds || !libCreds.bc_token) {
-      renderMessage('Connect a library card in Settings to sync your borrowing history.');
+      document.getElementById('history-empty-msg').textContent = 'Connect a library card in Settings to sync your borrowing history.';
+      document.getElementById('history-empty-btn').style.display = '';
+      hideIndicator();
       return;
     }
 
@@ -438,7 +451,7 @@ var __catData = {{ chart_cats | tojson }};
       try { localStorage.setItem('bibliorecs_history_render_' + libId, JSON.stringify({current: current, past: past})); } catch(e) {}
 
       // Update content
-      updateContent({current: current, past: past});
+      updateContent({current: current, past: past}, true);
       document.querySelectorAll('img.cover-img').forEach(function(img) {
         if (typeof initCoverFallback === 'function') initCoverFallback(img);
       });
@@ -460,12 +473,6 @@ var __catData = {{ chart_cats | tojson }};
       hideIndicator();
       showToast('Sync failed', 5000);
     });
-  }
-
-  function renderMessage(msg) {
-    document.querySelector('.empty-state h2').textContent = 'No borrowing history';
-    var p = document.querySelector('.empty-state p');
-    if (p) p.textContent = msg;
   }
 
   drawChart();
