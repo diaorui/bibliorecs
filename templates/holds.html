@@ -13,11 +13,12 @@
 <script>
 (function() {
   var container = document.getElementById('holds-container');
+  var _syndeticsClient = document.body.getAttribute('data-syndetics') || 'sepup';
 
   function renderItem(h) {
     var placeholder = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='180' viewBox='0 0 120 180'%3E%3Crect width='120' height='180' fill='%23e8e8ed' rx='4'/%3E%3Cpath d='M45 55v70l15-8 15 8V55z' fill='%2386868b' opacity='.4'/%3E%3Crect x='48' y='65' width='24' height='2' fill='%2386868b' opacity='.3'/%3E%3C/svg%3E";
     var isbn = h.isbn || '';
-    var syndetics = isbn ? 'https://secure.syndetics.com/index.aspx?isbn=' + isbn + '/LC.GIF&client=sepup&type=xw12&oclc=' : placeholder;
+    var syndetics = isbn ? 'https://secure.syndetics.com/index.aspx?isbn=' + isbn + '/LC.GIF&client=' + _syndeticsClient + '&type=xw12&oclc=' : placeholder;
     var openlibrary = isbn ? 'https://covers.openlibrary.org/b/isbn/' + isbn + '-L.jpg' : placeholder;
     var dataIsbn = ' data-isbn="' + isbn + '"';
     var isReady = h.status === 'READY_FOR_PICKUP';

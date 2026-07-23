@@ -359,6 +359,7 @@ var __catData = {{ chart_cats | tojson }};
 
   function doSync() {
     var libId = document.body.getAttribute('data-lib');
+    var syndeticsClient = document.body.getAttribute('data-syndetics') || 'sepup';
     var creds = getCreds();
     var libCreds = creds[libId];
     if (!libCreds || !libCreds.bc_token) {
@@ -407,7 +408,7 @@ var __catData = {{ chart_cats | tojson }};
           subtitle: bib.subtitle || '',
           author: (bib.authors || []).join(', '),
           isbn: isbn,
-          img_url: isbn ? 'https://secure.syndetics.com/index.aspx?isbn=' + isbn + '/LC.GIF&client=sepup&type=xw12&oclc=' : '',
+          img_url: isbn ? 'https://secure.syndetics.com/index.aspx?isbn=' + isbn + '/LC.GIF&client=' + syndeticsClient + '&type=xw12&oclc=' : '',
           fallback_url: isbn ? 'https://covers.openlibrary.org/b/isbn/' + isbn + '-L.jpg' : ''
         });
       });
@@ -426,7 +427,7 @@ var __catData = {{ chart_cats | tojson }};
           subtitle: bib.subtitle || '',
           author: (bib.authors || []).join(', '),
           isbn: isbn,
-          img_url: isbn ? 'https://secure.syndetics.com/index.aspx?isbn=' + isbn + '/LC.GIF&client=sepup&type=xw12&oclc=' : '',
+          img_url: isbn ? 'https://secure.syndetics.com/index.aspx?isbn=' + isbn + '/LC.GIF&client=' + syndeticsClient + '&type=xw12&oclc=' : '',
           fallback_url: isbn ? 'https://covers.openlibrary.org/b/isbn/' + isbn + '-L.jpg' : ''
         });
       });
