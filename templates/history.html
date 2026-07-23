@@ -369,13 +369,8 @@ var __catData = {{ chart_cats | tojson }};
 
     setIndicator('\u27F3 Syncing');
 
-    // Build set of known entry IDs from existing localStorage
-    var knownIds = {};
-    var existingHistory = [];
-    try { existingHistory = JSON.parse(localStorage.getItem('bibliorecs_history_' + libId)) || []; } catch(e) {}
-    existingHistory.forEach(function(e) { if (e.entry_id) knownIds[e.entry_id] = true; });
-
-    var allNewEntries = {};
+    // Fetch ALL history pages (page 1 is first valid page)
+    var allEntries = {};
     var allBibs = {};
 
     function fetchHistoryPage(page) {
@@ -387,16 +382,7 @@ var __catData = {{ chart_cats | tojson }};
         var keys = Object.keys(entries);
         if (keys.length === 0) return;
         Object.assign(allBibs, data.entities.bibs || {});
-        // Check: all entries already known? stop pagination
-        var allKnown = true;
-        keys.forEach(function(k) {
-          if (!knownIds[k]) {
-            knownIds[k] = true;
-            allNewEntries[k] = entries[k];
-            allKnown = false;
-          }
-        });
-        if (allKnown) return;
+        keys.forEach(function(k) { allEntries[k] = entries[k]; });
         return fetchHistoryPage(page + 1);
       });
     }
@@ -409,14 +395,13 @@ var __catData = {{ chart_cats | tojson }};
     }).then(function(checkoutsData) {
       Object.assign(allBibs, checkoutsData.entities.bibs || {});
 
-      // Build past borrows list from new entries
+      // Build past borrows list
       var past = [];
-      Object.keys(allNewEntries).forEach(function(k) {
-        var entry = allNewEntries[k];
+      Object.keys(allEntries).forEach(function(k) {
+        var entry = allEntries[k];
         var bib = (allBibs[entry.metadataId] || {}).briefInfo || {};
         var isbn = (bib.isbns || [])[0] || '';
         past.push({
-          entry_id: k,
           metadata_id: entry.metadataId,
           checkout_date: entry.checkedoutDate,
           title: bib.title || '',
@@ -447,20 +432,14 @@ var __catData = {{ chart_cats | tojson }};
         });
       });
 
-      // Build borrowing history for recommendations (preserve existing, add new)
-      var borrowingHistory = existingHistory.slice();
-      var knownEntryIds = {};
-      var knownMetaKeys = {};
-      existingHistory.forEach(function(e) {
-        if (e.entry_id) knownEntryIds[e.entry_id] = true;
-        knownMetaKeys[e.metadata_id + '|' + (e.checkout_date || '')] = true;
-      });
+      // Build borrowing history for recommendations (dedup by metadata_id+date)
+      var seen = {};
+      var borrowingHistory = [];
       past.forEach(function(p) {
-        // Dedup by entry_id first, then by metadata_id+date (for old data migration)
-        if (!knownEntryIds[p.entry_id] && !knownMetaKeys[p.metadata_id + '|' + (p.checkout_date || '')]) {
-          knownEntryIds[p.entry_id] = true;
+        var key = p.metadata_id + '|' + (p.checkout_date || '');
+        if (!seen[key]) {
+          seen[key] = true;
           borrowingHistory.push({
-            entry_id: p.entry_id,
             metadata_id: p.metadata_id,
             isbns: [],
             checkout_date: p.checkout_date,
@@ -470,9 +449,7 @@ var __catData = {{ chart_cats | tojson }};
       });
 
       // Store in localStorage
-      try {
-        localStorage.setItem('bibliorecs_history_' + libId, JSON.stringify(borrowingHistory));
-      } catch(e) {}
+      try { localStorage.setItem('bibliorecs_history_' + libId, JSON.stringify(borrowingHistory)); } catch(e) {}
 
       // Update content
       updateContent({current: current, past: past});
