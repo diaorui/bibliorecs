@@ -373,7 +373,7 @@ var __catData = {{ chart_cats | tojson }};
     var allHistoryEntries = {};
     var allBibs = {};
     var sinceDate = null;
-    try { sinceDate = localStorage.getItem('bibliorecs_history_min_date_' + libId) || null; } catch(e) {}
+    try { sinceDate = localStorage.getItem('bibliorecs_history_max_date_' + libId) || null; } catch(e) {}
 
     function fetchHistoryPage(page) {
       return fetch('/api/proxy/history', {
@@ -454,7 +454,6 @@ var __catData = {{ chart_cats | tojson }};
       if (sinceDate) {
         var existing = [];
         try { existing = JSON.parse(localStorage.getItem('bibliorecs_history_' + libId)) || []; } catch(e) {}
-        var seen = {};
         // Collect all keys from new data (removing them from existing)
         var newKeys = {};
         borrowingHistory.forEach(function(e) { newKeys[e.metadata_id + '|' + (e.checkout_date || '')] = true; });
@@ -466,16 +465,16 @@ var __catData = {{ chart_cats | tojson }};
         borrowingHistory = merged;
       }
 
-      // Compute min_date for next incremental sync
-      var minDate = null;
+      // Compute max_date for next incremental sync (newest entry date)
+      var maxDate = null;
       borrowingHistory.forEach(function(e) {
-        if (e.checkout_date && (!minDate || e.checkout_date < minDate)) minDate = e.checkout_date;
+        if (e.checkout_date && (!maxDate || e.checkout_date > maxDate)) maxDate = e.checkout_date;
       });
 
       // Store in localStorage
       try {
         localStorage.setItem('bibliorecs_history_' + libId, JSON.stringify(borrowingHistory));
-        if (minDate) localStorage.setItem('bibliorecs_history_min_date_' + libId, minDate);
+        if (maxDate) localStorage.setItem('bibliorecs_history_max_date_' + libId, maxDate);
       } catch(e) {}
 
       // Update content
