@@ -44,14 +44,14 @@
 
 <div class="section" style="margin-top:2rem">
   <h2 class="section-title">Library Cards</h2>
-  <p class="section-desc">Connect your library cards to get personalized recommendations based on your borrowing history. Credentials are stored in memory and never saved to disk.</p>
+  <p class="section-desc">Connect your library cards to sync borrowing history and place holds. Your card number and PIN are stored in your browser only.</p>
   <div id="creds-list">
     {% for lid, lcfg in libraries.items() %}
     <div class="creds-row" data-lib="{{ lid }}">
       <div class="creds-row-name">{{ lcfg.name }}</div>
       <div class="creds-row-status" id="creds-status-{{ lid }}">
         <span class="creds-status-dot creds-status-unknown"></span>
-        Checking...
+        ...
       </div>
       <div class="creds-row-actions" id="creds-actions-{{ lid }}"></div>
     </div>
@@ -69,7 +69,7 @@
     </div>
     <button class="btn" id="creds-form-save">Connect</button>
     <button class="btn-ghost" id="creds-form-cancel">Cancel</button>
-    <div id="creds-form-error" style="display:none;color:#dc2626;font-size:0.85rem;margin-top:6px"></div>
+    <div id="creds-form-status" style="display:none;margin-top:8px;font-size:0.85rem"></div>
   </div>
 </div>
 <div class="section" style="margin-top:2rem">
@@ -192,6 +192,7 @@ function selectBranch(libId, branchCode) {
 
 function resetOnboarding() {
   if (!confirm('Reset your library and branch selection? You will need to set them again.')) return;
+  localStorage.removeItem('bibliorecs_creds');
   fetch('/api/reset-onboarding', { method: 'POST' })
     .then(function(r) { return r.json(); })
     .then(function(data) {
@@ -227,32 +228,34 @@ function restartServer() {
   });
 }
 
-// ── creds management ──
+// ── creds management (localStorage) ──
 var _credsFormLib = null;
 
+function getCreds() {
+  try { return JSON.parse(localStorage.getItem('bibliorecs_creds')) || {}; } catch(e) { return {}; }
+}
+
+function saveCreds(creds) {
+  localStorage.setItem('bibliorecs_creds', JSON.stringify(creds));
+}
+
 function loadCreds() {
-  fetch('/api/creds').then(function(r) { return r.json(); }).then(function(data) {
-    var connected = data.connected || [];
-    {% for lid, lcfg in libraries.items() %}
-    (function() {
-      var lid = '{{ lid }}';
-      var statusEl = document.getElementById('creds-status-' + lid);
-      var actionsEl = document.getElementById('creds-actions-' + lid);
-      if (connected.indexOf(lid) !== -1) {
-        statusEl.innerHTML = '<span class="creds-status-dot creds-status-on"></span> Connected';
-        actionsEl.innerHTML = '<button class="btn-ghost creds-disconnect" data-lib="' + lid + '">Disconnect</button>';
-      } else {
-        statusEl.innerHTML = '<span class="creds-status-dot creds-status-off"></span> Not connected';
-        actionsEl.innerHTML = '<button class="btn-ghost creds-connect-btn" data-lib="' + lid + '">Connect</button>';
-      }
-    })();
-    {% endfor %}
-    attachCredsEvents();
-  }).catch(function() {
-    document.querySelectorAll('.creds-row-status').forEach(function(el) {
-      el.innerHTML = '<span class="creds-status-dot creds-status-unknown"></span> Error';
-    });
-  });
+  var creds = getCreds();
+  {% for lid, lcfg in libraries.items() %}
+  (function() {
+    var lid = '{{ lid }}';
+    var statusEl = document.getElementById('creds-status-' + lid);
+    var actionsEl = document.getElementById('creds-actions-' + lid);
+    if (creds[lid] && creds[lid].bc_token) {
+      statusEl.innerHTML = '<span class="creds-status-dot creds-status-on"></span> Connected';
+      actionsEl.innerHTML = '<button class="btn-ghost creds-disconnect" data-lib="' + lid + '">Disconnect</button>';
+    } else {
+      statusEl.innerHTML = '<span class="creds-status-dot creds-status-off"></span> Not connected';
+      actionsEl.innerHTML = '<button class="btn-ghost creds-connect-btn" data-lib="' + lid + '">Connect</button>';
+    }
+  })();
+  {% endfor %}
+  attachCredsEvents();
 }
 
 function attachCredsEvents() {
@@ -263,7 +266,7 @@ function attachCredsEvents() {
       document.getElementById('creds-form-label').textContent = name + ' — Card Number';
       document.getElementById('creds-form-user').value = '';
       document.getElementById('creds-form-pass').value = '';
-      document.getElementById('creds-form-error').style.display = 'none';
+      document.getElementById('creds-form-status').style.display = 'none';
       document.getElementById('creds-form').style.display = '';
     });
   });
@@ -273,10 +276,10 @@ function attachCredsEvents() {
       var lib = btn.getAttribute('data-lib');
       var name = btn.closest('.creds-row').querySelector('.creds-row-name').textContent;
       if (!confirm('Disconnect your library card for ' + name + '?')) return;
-      fetch('/api/creds/' + lib, { method: 'DELETE' })
-        .then(function(r) { return r.json(); })
-        .then(function() { loadCreds(); })
-        .catch(function() { showToast('Failed to disconnect', 3000); });
+      var creds = getCreds();
+      delete creds[lib];
+      saveCreds(creds);
+      loadCreds();
     });
   });
 }
@@ -289,9 +292,11 @@ document.getElementById('creds-form-save').addEventListener('click', function() 
   btn.textContent = 'Connecting...';
   btn.disabled = true;
   document.getElementById('creds-form-cancel').disabled = true;
-  var errEl = document.getElementById('creds-form-error');
-  errEl.style.display = 'none';
-  fetch('/api/creds', {
+  var statusEl = document.getElementById('creds-form-status');
+  statusEl.style.display = '';
+  statusEl.style.color = '#86868b';
+  statusEl.textContent = 'Logging in...';
+  fetch('/api/proxy/login', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({library_id: _credsFormLib, user: user, password: pass})
@@ -299,19 +304,28 @@ document.getElementById('creds-form-save').addEventListener('click', function() 
   .then(function(r) { return r.json(); })
   .then(function(d) {
     if (d.success) {
+      var creds = getCreds();
+      creds[_credsFormLib] = {
+        user: user,
+        password: pass,
+        bc_token: d.bc_token,
+        session_id: d.session_id,
+        account_id: d.account_id
+      };
+      saveCreds(creds);
       document.getElementById('creds-form').style.display = 'none';
       loadCreds();
     } else {
-      errEl.textContent = d.error || 'Connection failed';
-      errEl.style.display = '';
+      statusEl.style.color = '#dc2626';
+      statusEl.textContent = d.error || 'Login failed';
       btn.textContent = 'Connect';
       btn.disabled = false;
       document.getElementById('creds-form-cancel').disabled = false;
     }
   })
   .catch(function() {
-    errEl.textContent = 'Network error';
-    errEl.style.display = '';
+    statusEl.style.color = '#dc2626';
+    statusEl.textContent = 'Network error';
     btn.textContent = 'Connect';
     btn.disabled = false;
     document.getElementById('creds-form-cancel').disabled = false;

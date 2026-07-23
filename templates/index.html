@@ -156,7 +156,10 @@ function selectBranch(libId, branchCode) {
   var skeleton = document.getElementById('rec-skeleton');
   var __holdsByMid = {};
   var __checkedOutByMe = new Set();
-  var __hasCreds = false;
+
+  function getCreds() {
+    try { return JSON.parse(localStorage.getItem('bibliorecs_creds')) || {}; } catch(e) { return {}; }
+  }
 
   function renderCarousels(carousels) {
     skeleton.style.display = 'none';
@@ -200,99 +203,57 @@ function selectBranch(libId, branchCode) {
   }
 
   function init() {
-    fetch('/api/recommendations')
+    var libId = document.body.getAttribute('data-lib');
+    var creds = getCreds();
+    var libCreds = creds[libId];
+    var history = [];
+    try { history = JSON.parse(localStorage.getItem('bibliorecs_history_' + libId)) || []; } catch(e) {}
+
+    fetch('/api/recommendations', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({library_id: libId, borrowing_history: history})
+    })
       .then(function(r) { return r.json(); })
       .then(function(data) {
         renderCarousels(data.carousels || []);
-        checkCreds();
-        fetchHoldsAndCheckouts();
+        if (libCreds && libCreds.bc_token) {
+          fetchHoldsAndCheckouts();
+        }
       })
       .catch(function() {
         showToast('Could not load recommendations', 6000);
       });
   }
-
-  function checkCreds() {
-    fetch('/api/creds')
-      .then(function(r) { return r.json(); })
-      .then(function(data) {
-        var libId = document.body.getAttribute('data-lib');
-        if (data.connected && data.connected.indexOf(libId) !== -1) {
-          __hasCreds = true;
-          return;
-        }
-        showCredsBanner();
-      })
-      .catch(function() {});
-  }
-
-  function showCredsBanner() {
-    var banner = document.createElement('div');
-    banner.className = 'creds-banner';
-    banner.innerHTML = '<div class="creds-banner-inner">'
-      + '<div class="creds-banner-text">🔗 <strong>Connect your library card</strong> for personalized recommendations based on what you borrow.</div>'
-      + '<div class="creds-banner-form">'
-      + '<input type="text" id="creds-user" class="creds-input" placeholder="Library card number">'
-      + '<input type="password" id="creds-pass" class="creds-input" placeholder="PIN">'
-      + '<button class="btn btn-sml" id="creds-connect">Connect</button>'
-      + '</div>'
-      + '<div id="creds-status" style="display:none;margin-top:8px;font-size:0.85rem"></div>'
-      + '</div>';
-    container.insertBefore(banner, container.firstChild.nextSibling);
-
-    document.getElementById('creds-connect').addEventListener('click', function() {
-      var user = document.getElementById('creds-user').value.trim();
-      var pass = document.getElementById('creds-pass').value;
-      if (!user || !pass) return;
-      var btn = this;
-      btn.textContent = 'Connecting...';
-      btn.disabled = true;
-      var status = document.getElementById('creds-status');
-      status.style.display = '';
-      status.textContent = 'Syncing borrowing history...';
-      status.style.color = '#86868b';
-      fetch('/api/creds', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({library_id: document.body.getAttribute('data-lib'), user: user, password: pass})
-      })
-      .then(function(r) { return r.json(); })
-      .then(function(d) {
-        if (d.success) {
-          status.textContent = 'Connected! Refreshing recommendations...';
-          status.style.color = '#16a34a';
-          setTimeout(function() { location.reload(); }, 1500);
-        } else {
-          status.textContent = d.error || 'Connection failed';
-          status.style.color = '#dc2626';
-          btn.textContent = 'Connect';
-          btn.disabled = false;
-        }
-      })
-      .catch(function() {
-        status.textContent = 'Network error';
-        status.style.color = '#dc2626';
-        btn.textContent = 'Connect';
-        btn.disabled = false;
-      });
-    });
-  }
-
   function fetchHoldsAndCheckouts() {
+    var libId = document.body.getAttribute('data-lib');
+    var creds = getCreds();
+    var libCreds = creds[libId];
+    if (!libCreds) return;
+
     Promise.all([
-      fetch('/api/holds').then(function(r) { return r.json(); }),
-      fetch('/api/checkouts').then(function(r) { return r.json(); })
+      fetch('/api/proxy/holds', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({library_id: libId, bc_token: libCreds.bc_token, session_id: libCreds.session_id, account_id: libCreds.account_id})
+      }).then(function(r) { return r.json(); }),
+      fetch('/api/proxy/checkouts', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({library_id: libId, bc_token: libCreds.bc_token, session_id: libCreds.session_id, account_id: libCreds.account_id})
+      }).then(function(r) { return r.json(); })
     ]).then(function(results) {
       var holdsData = results[0];
       var checkoutsData = results[1];
-      if (holdsData.holds) {
-        holdsData.holds.forEach(function(h) {
-          if (h.metadata_id) __holdsByMid[h.metadata_id] = h;
-        });
-      }
-      if (checkoutsData.checked_out) {
-        checkoutsData.checked_out.forEach(function(mid) { __checkedOutByMe.add(mid); });
-      }
+      // Proxy returns raw BC data: entities.holds = {id: hold}, entities.checkouts = {id: checkout}
+      var holdsObj = (holdsData.entities || {}).holds || {};
+      Object.keys(holdsObj).forEach(function(k) {
+        var h = holdsObj[k];
+        if (h.metadata_id) __holdsByMid[h.metadata_id] = h;
+      });
+      var checkoutsObj = (checkoutsData.entities || {}).checkouts || {};
+      Object.keys(checkoutsObj).forEach(function(k) {
+        var c = checkoutsObj[k];
+        if (c.metadata_id) __checkedOutByMe.add(c.metadata_id);
+      });
       applyButtonStates();
       revealButtons();
       document.querySelectorAll('img.cover-img').forEach(function(img) {
@@ -346,18 +307,28 @@ function selectBranch(libId, branchCode) {
     var btn = e.target.closest('.btn-card:not(:disabled)');
     if (!btn) return;
     e.preventDefault();
-    if (!__hasCreds) {
-      showToast('Connect your library card to place holds', 4000);
+    var libId = document.body.getAttribute('data-lib');
+    var creds = getCreds();
+    var libCreds = creds[libId];
+    if (!libCreds || !libCreds.bc_token) {
+      showToast('Connect a library card in Settings to place holds', 4000);
       return;
     }
     var mid = btn.getAttribute('data-mid');
     var orig = btn.textContent;
     btn.textContent = 'Placing...';
     btn.disabled = true;
-    fetch('/api/hold/place', {
+    fetch('/api/proxy/hold/place', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({metadata_id: mid})
+      body: JSON.stringify({
+        library_id: libId,
+        bc_token: libCreds.bc_token,
+        session_id: libCreds.session_id,
+        account_id: libCreds.account_id,
+        metadata_id: mid,
+        branch_code: document.body.getAttribute('data-branch')
+      })
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {
