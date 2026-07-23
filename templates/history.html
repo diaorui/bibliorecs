@@ -368,29 +368,36 @@ var __catData = {{ chart_cats | tojson }};
 
     setIndicator('\u27F3 Syncing');
 
-    // Fetch history, checkouts via proxy
-    Promise.all([
-      fetch('/api/proxy/history', {
+    // Fetch all history pages recursively
+    var allHistoryEntries = {};
+    var allBibs = {};
+
+    function fetchHistoryPage(page) {
+      return fetch('/api/proxy/history', {
         method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({library_id: libId, bc_token: libCreds.bc_token, session_id: libCreds.session_id, account_id: libCreds.account_id, page: 0})
-      }).then(function(r) { return r.json(); }),
-      fetch('/api/proxy/checkouts', {
+        body: JSON.stringify({library_id: libId, bc_token: libCreds.bc_token, session_id: libCreds.session_id, account_id: libCreds.account_id, page: page})
+      }).then(function(r) { return r.json(); }).then(function(data) {
+        var entries = data.entities.borrowingHistory || {};
+        var keys = Object.keys(entries);
+        if (keys.length === 0) return;
+        Object.assign(allBibs, data.entities.bibs || {});
+        keys.forEach(function(k) { allHistoryEntries[k] = entries[k]; });
+        return fetchHistoryPage(page + 1);
+      });
+    }
+
+    fetchHistoryPage(0).then(function() {
+      return fetch('/api/proxy/checkouts', {
         method: 'POST', headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({library_id: libId, bc_token: libCreds.bc_token, session_id: libCreds.session_id, account_id: libCreds.account_id})
-      }).then(function(r) { return r.json(); })
-    ]).then(function(results) {
-      var historyData = results[0];
-      var checkoutsData = results[1];
-      var allBibs = Object.assign({},
-        (historyData.entities || {}).bibs || {},
-        (checkoutsData.entities || {}).bibs || {}
-      );
-      var historyEntries = historyData.entities.borrowingHistory || {};
+      }).then(function(r) { return r.json(); });
+    }).then(function(checkoutsData) {
+      Object.assign(allBibs, checkoutsData.entities.bibs || {});
 
       // Build past borrows list
       var past = [];
-      Object.keys(historyEntries).forEach(function(k) {
-        var entry = historyEntries[k];
+      Object.keys(allHistoryEntries).forEach(function(k) {
+        var entry = allHistoryEntries[k];
         var bib = (allBibs[entry.metadataId] || {}).briefInfo || {};
         var isbn = (bib.isbns || [])[0] || '';
         past.push({
