@@ -311,6 +311,31 @@ var __catData = {{ chart_cats | tojson }};
     }
   }
 
+  function fmtDueLabel(dateStr) {
+    if (!dateStr) return null;
+    try {
+      var d = new Date(dateStr.slice(0,10));
+      var today = new Date(); today.setHours(0,0,0,0);
+      var delta = Math.round((d - today) / 86400000);
+      var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      var fmt = months[d.getMonth()] + ' ' + d.getDate();
+      if (delta < 0) return {label: 'Overdue ' + fmt, remain: (-delta) + ' days ago'};
+      if (delta === 0) return {label: 'Due today', remain: null};
+      if (delta === 1) return {label: 'Due ' + fmt, remain: '1 day left'};
+      return {label: 'Due ' + fmt, remain: delta + ' days left'};
+    } catch(e) { return null; }
+  }
+
+  function loadCached() {
+    var libId = document.body.getAttribute('data-lib');
+    try {
+      var cached = JSON.parse(localStorage.getItem('bibliorecs_history_render_' + libId));
+      if (cached && cached.current && cached.past) {
+        updateContent(cached);
+      }
+    } catch(e) {}
+  }
+
   function doSync() {
     var libId = document.body.getAttribute('data-lib');
     var syndeticsClient = document.body.getAttribute('data-syndetics') || 'sepup';
@@ -378,6 +403,8 @@ var __catData = {{ chart_cats | tojson }};
           img_url: isbn ? 'https://secure.syndetics.com/index.aspx?isbn=' + isbn + '/LC.GIF&client=' + syndeticsClient + '&type=xw12&oclc=' : '',
           fallback_url: isbn ? 'https://covers.openlibrary.org/b/isbn/' + isbn + '-L.jpg' : ''
         });
+        var dl = fmtDueLabel(co.dueDate);
+        if (dl) { current[current.length-1].due_label_compact = dl.label; current[current.length-1].due_remaining = dl.remain; }
       });
 
       // Build borrowing history for recommendations (dedup by metadata_id+date)
@@ -398,6 +425,7 @@ var __catData = {{ chart_cats | tojson }};
 
       // Store in localStorage
       try { localStorage.setItem('bibliorecs_history_' + libId, JSON.stringify(borrowingHistory)); } catch(e) {}
+      try { localStorage.setItem('bibliorecs_history_render_' + libId, JSON.stringify({current: current, past: past})); } catch(e) {}
 
       // Update content
       updateContent({current: current, past: past});
@@ -439,6 +467,7 @@ var __catData = {{ chart_cats | tojson }};
     resizeTimer = setTimeout(onResize, 200);
   });
 
+  loadCached();
   doSync();
 })();
   </script>
