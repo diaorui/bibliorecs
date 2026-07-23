@@ -331,6 +331,11 @@ var __catData = {{ chart_cats | tojson }};
     try {
       var cached = JSON.parse(localStorage.getItem('bibliorecs_history_render_' + libId));
       if (cached && cached.current && cached.past) {
+        cached.current.sort(function(a, b) {
+          if (!a.checkout_date) return 1;
+          if (!b.checkout_date) return -1;
+          return a.checkout_date.localeCompare(b.checkout_date);
+        });
         updateContent(cached);
       }
     } catch(e) {}
@@ -405,6 +410,11 @@ var __catData = {{ chart_cats | tojson }};
         });
         var dl = fmtDueLabel(co.dueDate);
         if (dl) { current[current.length-1].due_label_compact = dl.label; current[current.length-1].due_remaining = dl.remain; }
+      });
+      current.sort(function(a, b) {
+        if (!a.checkout_date) return 1;
+        if (!b.checkout_date) return -1;
+        return a.checkout_date.localeCompare(b.checkout_date);
       });
 
       // Build borrowing history for recommendations (dedup by metadata_id+date)
