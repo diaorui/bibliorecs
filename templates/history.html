@@ -26,54 +26,8 @@ var __catData = {{ chart_cats | tojson }};
 </script>
 
 <div id="history-content">
-  {% if current %}
-  <div class="section" id="section-current">
-    <h2 class="section-title">Currently Checked Out ({{ current | length }})</h2>
-    {% for c in current %}
-      <a href="/book/{{ c.metadata_id }}" class="history-item">
-        <div class="history-cover-wrap">
-          <img class="history-cover cover-img" src="{{ c.img_url }}"
-               alt="" loading="lazy"
-               data-fallback="{{ c.fallback_url }}"
-               data-isbn="{{ c.isbn or '' }}">
-          <div class="cover-placeholder cover-placeholder-sm">📖</div>
-        </div>
-        <div class="history-body">
-          <div class="title">{{ c.title or c.metadata_id }}</div>
-          {% if c.subtitle %}<div class="sub">{{ c.subtitle }}</div>{% endif %}
-          <div class="sub">{{ c.author or '' }}</div>
-        </div>
-        <span class="history-date"><span class="due-date">{{ c.checkout_date | due_label_compact(true) or c.checkout_date }}</span>
-          {% set rem = c.checkout_date | due_remaining(true) %}
-          {% if rem %}<span class="due-relative">{{ rem }}</span>{% endif %}
-        </span>
-      </a>
-    {% endfor %}
-  </div>
-  {% endif %}
-
-  {% if past %}
-  <div class="section" id="section-past">
-    <h2 class="section-title">Past Borrows ({{ past | length }})</h2>
-    {% for p in past %}
-      <a href="/book/{{ p.metadata_id }}" class="history-item">
-        <div class="history-cover-wrap">
-          <img class="history-cover cover-img" src="{{ p.img_url }}"
-               alt="" loading="lazy"
-               data-fallback="{{ p.fallback_url }}"
-               data-isbn="{{ p.isbn or '' }}">
-          <div class="cover-placeholder cover-placeholder-sm">📖</div>
-        </div>
-        <div class="history-body">
-          <div class="title">{{ p.title or p.metadata_id }}</div>
-          {% if p.subtitle %}<div class="sub">{{ p.subtitle }}</div>{% endif %}
-          <div class="sub">{{ p.author or '' }}</div>
-        </div>
-        <span class="history-date"><span class="due-date">{{ p.checkout_date or '' }}</span></span>
-      </a>
-    {% endfor %}
-  </div>
-  {% endif %}
+  <div class="section" id="section-current" style="display:none"></div>
+  <div class="section" id="section-past" style="display:none"></div>
 
   {% if not current and not past %}
   <div class="empty-state" id="history-empty">
@@ -377,7 +331,7 @@ var __catData = {{ chart_cats | tojson }};
       return proxyFetch('/api/proxy/history', {page: page}).then(function(data) {
         var entries = data.entities.borrowingHistory || {};
         var keys = Object.keys(entries);
-        if (keys.length === 0) return;
+        if (keys.length === 0 || page > 100) return;
         Object.assign(allBibs, data.entities.bibs || {});
         keys.forEach(function(k) { allEntries[k] = entries[k]; });
         return fetchHistoryPage(page + 1);

@@ -102,6 +102,7 @@
 
     img.addEventListener('load', handleLoad);
     img.addEventListener('error', handleError);
+    if (img.complete) handleLoad();
   }
 
   document.addEventListener('DOMContentLoaded', function() {
