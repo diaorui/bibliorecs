@@ -161,16 +161,20 @@
         // Convert {id: hold} to array with id
         var holds = Object.keys(holdsObj).map(function(k) {
           var h = holdsObj[k];
-          h.hold_id = k;
-          // Get bib info
           var bib = (data.entities || {}).bibs || {};
-          var info = (bib[h.metadata_id] || {}).briefInfo || {};
-          h.title = h.bibTitle || info.title || '';
-          h.subtitle = info.subtitle || '';
-          h.author = (info.authors || []).join(', ');
-          h.isbn = (info.isbns || [])[0] || '';
-          h.pickup_branch = (h.pickupLocation || {}).name || '';
-          return h;
+          var info = (bib[h.metadataId] || {}).briefInfo || {};
+          return {
+            hold_id: k,
+            metadata_id: h.metadataId,
+            title: h.bibTitle || info.title || '',
+            subtitle: info.subtitle || '',
+            author: (info.authors || []).join(', '),
+            isbn: (info.isbns || [])[0] || '',
+            status: h.status,
+            position: h.holdsPosition,
+            pickup_branch: (h.pickupLocation || {}).name || '',
+            expiry_date: h.expiryDate
+          };
         });
         renderHolds(holds);
         document.querySelectorAll('img.cover-img').forEach(function(img) {
