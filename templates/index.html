@@ -217,13 +217,89 @@ function selectBranch(libId, branchCode) {
       .then(function(r) { return r.json(); })
       .then(function(data) {
         renderCarousels(data.carousels || []);
-        if (libCreds && libCreds.bc_token) {
+        if (!libCreds || !libCreds.bc_token) {
+          if (!localStorage.getItem('bibliorecs_skip_creds')) {
+            showCredsBanner();
+          }
+        } else {
           fetchHoldsAndCheckouts();
         }
       })
       .catch(function() {
         showToast('Could not load recommendations', 6000);
       });
+  }
+
+  function showCredsBanner() {
+    var banner = document.createElement('div');
+    banner.className = 'creds-banner';
+    banner.id = 'creds-banner';
+    banner.innerHTML = '<div class="creds-banner-inner">'
+      + '<div class="creds-banner-text">🔗 <strong>Connect your library card</strong> for personalized recommendations based on what you borrow.</div>'
+      + '<div class="creds-banner-form">'
+      + '<input type="text" id="creds-user" class="creds-input" placeholder="Library card number">'
+      + '<input type="password" id="creds-pass" class="creds-input" placeholder="PIN">'
+      + '<button class="btn btn-sml" id="creds-connect">Connect</button>'
+      + '<button class="btn-sml btn-ghost" id="creds-skip">Skip</button>'
+      + '</div>'
+      + '<div id="creds-status" style="display:none;margin-top:8px;font-size:0.85rem"></div>'
+      + '</div>';
+    container.insertBefore(banner, container.firstChild.nextSibling);
+
+    document.getElementById('creds-connect').addEventListener('click', function() {
+      var user = document.getElementById('creds-user').value.trim();
+      var pass = document.getElementById('creds-pass').value;
+      if (!user || !pass) return;
+      var btn = this;
+      btn.textContent = 'Connecting...';
+      btn.disabled = true;
+      document.getElementById('creds-skip').disabled = true;
+      var status = document.getElementById('creds-status');
+      status.style.display = '';
+      status.textContent = 'Logging in...';
+      status.style.color = '#86868b';
+      var libId = document.body.getAttribute('data-lib');
+      fetch('/api/proxy/login', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({library_id: libId, user: user, password: pass})
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (d.success) {
+          var creds = getCreds();
+          creds[libId] = {
+            user: user,
+            password: pass,
+            bc_token: d.bc_token,
+            session_id: d.session_id,
+            account_id: d.account_id
+          };
+          localStorage.setItem('bibliorecs_creds', JSON.stringify(creds));
+          status.textContent = 'Connected! Refreshing...';
+          status.style.color = '#16a34a';
+          setTimeout(function() { location.reload(); }, 1500);
+        } else {
+          status.textContent = d.error || 'Connection failed';
+          status.style.color = '#dc2626';
+          btn.textContent = 'Connect';
+          btn.disabled = false;
+          document.getElementById('creds-skip').disabled = false;
+        }
+      })
+      .catch(function() {
+        status.textContent = 'Network error';
+        status.style.color = '#dc2626';
+        btn.textContent = 'Connect';
+        btn.disabled = false;
+        document.getElementById('creds-skip').disabled = false;
+      });
+    });
+
+    document.getElementById('creds-skip').addEventListener('click', function() {
+      localStorage.setItem('bibliorecs_skip_creds', 'true');
+      banner.remove();
+    });
   }
   function fetchHoldsAndCheckouts() {
     var libId = document.body.getAttribute('data-lib');

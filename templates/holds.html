@@ -173,6 +173,9 @@
           return h;
         });
         renderHolds(holds);
+        document.querySelectorAll('img.cover-img').forEach(function(img) {
+          if (typeof initCoverFallback === 'function') initCoverFallback(img);
+        });
       })
       .catch(function() {
         renderError('Could not load holds');

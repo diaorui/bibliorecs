@@ -384,13 +384,16 @@ var __catData = {{ chart_cats | tojson }};
       Object.keys(historyEntries).forEach(function(k) {
         var entry = historyEntries[k];
         var bib = (bibs[entry.metadataId] || {}).briefInfo || {};
+        var isbn = (bib.isbns || [])[0] || '';
         past.push({
           metadata_id: entry.metadataId,
           checkout_date: entry.checkedoutDate,
           title: bib.title || '',
           subtitle: bib.subtitle || '',
           author: (bib.authors || []).join(', '),
-          isbn: (bib.isbns || [])[0] || ''
+          isbn: isbn,
+          img_url: isbn ? 'https://secure.syndetics.com/index.aspx?isbn=' + isbn + '/LC.GIF&client=sepup&type=xw12&oclc=' : '',
+          fallback_url: isbn ? 'https://covers.openlibrary.org/b/isbn/' + isbn + '-L.jpg' : ''
         });
       });
 
@@ -406,6 +409,9 @@ var __catData = {{ chart_cats | tojson }};
 
       // Update content
       updateContent({current: [], past: past});
+      document.querySelectorAll('img.cover-img').forEach(function(img) {
+        if (typeof initCoverFallback === 'function') initCoverFallback(img);
+      });
       hideIndicator();
       setIndicator('\u2713 Updated (' + past.length + ' items)', 'sync-done');
       setTimeout(hideIndicator, 3000);
