@@ -208,30 +208,18 @@ function showNoCreds() {
   holdSection.style.display = '';
 }
 
-function getCreds() {
-  try { return JSON.parse(localStorage.getItem('bibliorecs_creds')) || {}; } catch(e) { return {}; }
-}
+  var libId = document.body.getAttribute('data-lib');
+  var creds = getCreds();
+  var libCreds = creds[libId];
 
-showLoading();
-
-var libId = document.body.getAttribute('data-lib');
-var creds = getCreds();
-var libCreds = creds[libId];
-
-if (!libCreds || !libCreds.bc_token) {
-  showNoCreds();
-} else {
-  Promise.all([
-    fetch('/api/proxy/holds', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({library_id: libId, bc_token: libCreds.bc_token, session_id: libCreds.session_id, account_id: libCreds.account_id})
-    }).then(function(r) { return r.json(); }),
-    fetch('/api/proxy/checkouts', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({library_id: libId, bc_token: libCreds.bc_token, session_id: libCreds.session_id, account_id: libCreds.account_id})
-    }).then(function(r) { return r.json(); })
-  ]).then(function(results) {
-    var holdsData = results[0], checkoutsData = results[1];
+  if (!libCreds || !libCreds.bc_token) {
+    showNoCreds();
+  } else {
+    Promise.all([
+      proxyFetch('/api/proxy/holds', {}),
+      proxyFetch('/api/proxy/checkouts', {})
+    ]).then(function(results) {
+      var holdsData = results[0], checkoutsData = results[1];
 
     // Check if checked out
     var checkoutsObj = (checkoutsData.entities || {}).checkouts || {};
@@ -272,16 +260,9 @@ document.addEventListener('click', function(e) {
   var orig = btn.textContent;
   btn.textContent = 'Placing...';
   btn.disabled = true;
-  fetch('/api/proxy/hold/place', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({
-      library_id: libId, bc_token: libCreds.bc_token,
-      session_id: libCreds.session_id, account_id: libCreds.account_id,
-      metadata_id: mid, branch_code: document.body.getAttribute('data-branch')
-    })
+  proxyFetch('/api/proxy/hold/place', {
+    metadata_id: mid, branch_code: document.body.getAttribute('data-branch')
   })
-  .then(function(r) { return r.json(); })
   .then(function(d) {
     if (d.success) {
       showOnHold({position: d.position, hold_id: d.hold_id});

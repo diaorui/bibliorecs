@@ -157,10 +157,6 @@ function selectBranch(libId, branchCode) {
   var __holdsByMid = {};
   var __checkedOutByMe = new Set();
 
-  function getCreds() {
-    try { return JSON.parse(localStorage.getItem('bibliorecs_creds')) || {}; } catch(e) { return {}; }
-  }
-
   function renderCarousels(carousels) {
     skeleton.style.display = 'none';
     var html = '<h1 class="page-title">Your Recommendations</h1>';
@@ -308,14 +304,8 @@ function selectBranch(libId, branchCode) {
     if (!libCreds) return;
 
     Promise.all([
-      fetch('/api/proxy/holds', {
-        method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({library_id: libId, bc_token: libCreds.bc_token, session_id: libCreds.session_id, account_id: libCreds.account_id})
-      }).then(function(r) { return r.json(); }),
-      fetch('/api/proxy/checkouts', {
-        method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({library_id: libId, bc_token: libCreds.bc_token, session_id: libCreds.session_id, account_id: libCreds.account_id})
-      }).then(function(r) { return r.json(); })
+      proxyFetch('/api/proxy/holds', {}),
+      proxyFetch('/api/proxy/checkouts', {})
     ]).then(function(results) {
       var holdsData = results[0];
       var checkoutsData = results[1];
@@ -394,19 +384,10 @@ function selectBranch(libId, branchCode) {
     var orig = btn.textContent;
     btn.textContent = 'Placing...';
     btn.disabled = true;
-    fetch('/api/proxy/hold/place', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        library_id: libId,
-        bc_token: libCreds.bc_token,
-        session_id: libCreds.session_id,
-        account_id: libCreds.account_id,
-        metadata_id: mid,
-        branch_code: document.body.getAttribute('data-branch')
-      })
+    proxyFetch('/api/proxy/hold/place', {
+      metadata_id: mid,
+      branch_code: document.body.getAttribute('data-branch')
     })
-    .then(function(r) { return r.json(); })
     .then(function(data) {
       if (data.success) {
         __holdsByMid[mid] = {status: 'ON_HOLD', metadata_id: mid};

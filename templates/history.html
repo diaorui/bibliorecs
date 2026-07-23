@@ -374,10 +374,7 @@ var __catData = {{ chart_cats | tojson }};
     var allBibs = {};
 
     function fetchHistoryPage(page) {
-      return fetch('/api/proxy/history', {
-        method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({library_id: libId, bc_token: libCreds.bc_token, session_id: libCreds.session_id, account_id: libCreds.account_id, page: page})
-      }).then(function(r) { return r.json(); }).then(function(data) {
+      return proxyFetch('/api/proxy/history', {page: page}).then(function(data) {
         var entries = data.entities.borrowingHistory || {};
         var keys = Object.keys(entries);
         if (keys.length === 0) return;
@@ -388,10 +385,7 @@ var __catData = {{ chart_cats | tojson }};
     }
 
     fetchHistoryPage(1).then(function() {
-      return fetch('/api/proxy/checkouts', {
-        method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({library_id: libId, bc_token: libCreds.bc_token, session_id: libCreds.session_id, account_id: libCreds.account_id})
-      }).then(function(r) { return r.json(); });
+      return proxyFetch('/api/proxy/checkouts', {});
     }).then(function(checkoutsData) {
       Object.assign(allBibs, checkoutsData.entities.bibs || {});
 
@@ -474,10 +468,6 @@ var __catData = {{ chart_cats | tojson }};
       hideIndicator();
       showToast('Sync failed', 5000);
     });
-  }
-
-  function getCreds() {
-    try { return JSON.parse(localStorage.getItem('bibliorecs_creds')) || {}; } catch(e) { return {}; }
   }
 
   function renderMessage(msg) {

@@ -111,10 +111,8 @@
           var mid = btn.dataset.mid;
           btn.textContent = 'Cancelling...';
           btn.disabled = true;
-          fetch('/api/proxy/hold/cancel', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({library_id: libId, bc_token: libCreds.bc_token, session_id: libCreds.session_id, account_id: libCreds.account_id, hold_id: holdId, metadata_id: mid})
+          proxyFetch('/api/proxy/hold/cancel', {
+            hold_id: holdId, metadata_id: mid
           })
           .then(function(r) { return r.json(); })
           .then(function(data) {
@@ -141,10 +139,6 @@
     });
   }
 
-  function getCreds() {
-    try { return JSON.parse(localStorage.getItem('bibliorecs_creds')) || {}; } catch(e) { return {}; }
-  }
-
   var libId = document.body.getAttribute('data-lib');
   var creds = getCreds();
   var libCreds = creds[libId];
@@ -152,11 +146,7 @@
   if (!libCreds || !libCreds.bc_token) {
     renderMessage('Connect a library card in Settings to view and manage holds.');
   } else {
-    fetch('/api/proxy/holds', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({library_id: libId, bc_token: libCreds.bc_token, session_id: libCreds.session_id, account_id: libCreds.account_id})
-    })
-      .then(function(r) { return r.json(); })
+    proxyFetch('/api/proxy/holds', {})
       .then(function(data) {
         var holdsObj = (data.entities || {}).holds || {};
         // Convert {id: hold} to array with id

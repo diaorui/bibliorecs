@@ -116,6 +116,53 @@
   });
   </script>
   <script>
+  function getCreds() {
+    try { return JSON.parse(localStorage.getItem('bibliorecs_creds')) || {}; } catch(e) { return {}; }
+  }
+
+  function saveCreds(creds) {
+    localStorage.setItem('bibliorecs_creds', JSON.stringify(creds));
+  }
+
+  function proxyFetch(url, body) {
+    var libId = document.body.getAttribute('data-lib');
+    var creds = getCreds();
+    var libCreds = creds[libId];
+    if (!libCreds || !libCreds.user) return Promise.reject('No credentials');
+
+    body.library_id = libId;
+    body.bc_token = libCreds.bc_token;
+    body.session_id = libCreds.session_id;
+    body.account_id = libCreds.account_id;
+
+    return doProxyFetch(url, body, creds, libCreds);
+  }
+
+  function doProxyFetch(url, body, creds, libCreds) {
+    return fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)})
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.error && data.error.indexOf('401') !== -1) {
+          return fetch('/api/proxy/login', {method:'POST', headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({library_id: body.library_id, user: libCreds.user, password: libCreds.password})})
+            .then(function(r) { return r.json(); })
+            .then(function(loginData) {
+              if (!loginData.success) throw new Error('Session expired. Reconnect in Settings.');
+              libCreds.bc_token = loginData.bc_token;
+              libCreds.session_id = loginData.session_id;
+              libCreds.account_id = loginData.account_id;
+              saveCreds(creds);
+              body.bc_token = loginData.bc_token;
+              body.session_id = loginData.session_id;
+              body.account_id = loginData.account_id;
+              return fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)})
+                .then(function(r) { return r.json(); });
+            });
+        }
+        return data;
+      });
+  }
+
   function showToast(msg, duration) {
     duration = duration || 5000;
     var t = document.querySelector('.toast');
