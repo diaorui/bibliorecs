@@ -369,11 +369,14 @@ var __catData = {{ chart_cats | tojson }};
 
     setIndicator('\u27F3 Syncing');
 
-    // Fetch all history pages (BC starts at page 1, page 0 returns same data)
-    var allHistoryEntries = {};
+    // Build set of known entry IDs from existing localStorage
+    var knownIds = {};
+    var existingHistory = [];
+    try { existingHistory = JSON.parse(localStorage.getItem('bibliorecs_history_' + libId)) || []; } catch(e) {}
+    existingHistory.forEach(function(e) { if (e.entry_id) knownIds[e.entry_id] = true; });
+
+    var allNewEntries = {};
     var allBibs = {};
-    var sinceDate = null;
-    try { sinceDate = localStorage.getItem('bibliorecs_history_max_date_' + libId) || null; } catch(e) {}
 
     function fetchHistoryPage(page) {
       return fetch('/api/proxy/history', {
@@ -384,17 +387,16 @@ var __catData = {{ chart_cats | tojson }};
         var keys = Object.keys(entries);
         if (keys.length === 0) return;
         Object.assign(allBibs, data.entities.bibs || {});
-        // Add entries newer than since_date
-        var newCount = 0;
+        // Check: all entries already known? stop pagination
+        var allKnown = true;
         keys.forEach(function(k) {
-          var entry = entries[k];
-          if (!sinceDate || entry.checkedoutDate >= sinceDate) {
-            allHistoryEntries[k] = entry;
-            newCount++;
+          if (!knownIds[k]) {
+            knownIds[k] = true;
+            allNewEntries[k] = entries[k];
+            allKnown = false;
           }
         });
-        // If no new entries on this page, stop pagination
-        if (newCount === 0) return;
+        if (allKnown) return;
         return fetchHistoryPage(page + 1);
       });
     }
@@ -407,13 +409,14 @@ var __catData = {{ chart_cats | tojson }};
     }).then(function(checkoutsData) {
       Object.assign(allBibs, checkoutsData.entities.bibs || {});
 
-      // Build past borrows list
+      // Build past borrows list from new entries
       var past = [];
-      Object.keys(allHistoryEntries).forEach(function(k) {
-        var entry = allHistoryEntries[k];
+      Object.keys(allNewEntries).forEach(function(k) {
+        var entry = allNewEntries[k];
         var bib = (allBibs[entry.metadataId] || {}).briefInfo || {};
         var isbn = (bib.isbns || [])[0] || '';
         past.push({
+          entry_id: k,
           metadata_id: entry.metadataId,
           checkout_date: entry.checkedoutDate,
           title: bib.title || '',
@@ -444,37 +447,31 @@ var __catData = {{ chart_cats | tojson }};
         });
       });
 
-      // Build borrowing history for recommendations (merge with existing)
-      var borrowingHistory = past.map(function(p) {
-        return {metadata_id: p.metadata_id, isbns: [], checkout_date: p.checkout_date, is_current: false};
+      // Build borrowing history for recommendations (preserve existing, add new)
+      var borrowingHistory = existingHistory.slice();
+      var knownEntryIds = {};
+      var knownMetaKeys = {};
+      existingHistory.forEach(function(e) {
+        if (e.entry_id) knownEntryIds[e.entry_id] = true;
+        knownMetaKeys[e.metadata_id + '|' + (e.checkout_date || '')] = true;
       });
-
-      // Merge with existing history if incremental
-      // New data takes precedence over existing for same key
-      if (sinceDate) {
-        var existing = [];
-        try { existing = JSON.parse(localStorage.getItem('bibliorecs_history_' + libId)) || []; } catch(e) {}
-        // Collect all keys from new data (removing them from existing)
-        var newKeys = {};
-        borrowingHistory.forEach(function(e) { newKeys[e.metadata_id + '|' + (e.checkout_date || '')] = true; });
-        // Keep existing entries not in new data
-        var merged = borrowingHistory.slice();
-        existing.forEach(function(e) {
-          if (!newKeys[e.metadata_id + '|' + (e.checkout_date || '')]) merged.push(e);
-        });
-        borrowingHistory = merged;
-      }
-
-      // Compute max_date for next incremental sync (newest entry date)
-      var maxDate = null;
-      borrowingHistory.forEach(function(e) {
-        if (e.checkout_date && (!maxDate || e.checkout_date > maxDate)) maxDate = e.checkout_date;
+      past.forEach(function(p) {
+        // Dedup by entry_id first, then by metadata_id+date (for old data migration)
+        if (!knownEntryIds[p.entry_id] && !knownMetaKeys[p.metadata_id + '|' + (p.checkout_date || '')]) {
+          knownEntryIds[p.entry_id] = true;
+          borrowingHistory.push({
+            entry_id: p.entry_id,
+            metadata_id: p.metadata_id,
+            isbns: [],
+            checkout_date: p.checkout_date,
+            is_current: false
+          });
+        }
       });
 
       // Store in localStorage
       try {
         localStorage.setItem('bibliorecs_history_' + libId, JSON.stringify(borrowingHistory));
-        if (maxDate) localStorage.setItem('bibliorecs_history_max_date_' + libId, maxDate);
       } catch(e) {}
 
       // Update content
