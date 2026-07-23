@@ -358,40 +358,82 @@ var __catData = {{ chart_cats | tojson }};
   }
 
   function doSync() {
+    var libId = document.body.getAttribute('data-lib');
+    var creds = getCreds();
+    var libCreds = creds[libId];
+    if (!libCreds || !libCreds.bc_token) {
+      renderMessage('Connect a library card in Settings to sync your borrowing history.');
+      return;
+    }
+
     setIndicator('\u27F3 Syncing');
-    fetch('/api/sync-history', { method: 'POST' })
-      .then(function(r) { return r.json(); })
-      .then(function(result) {
-        if (result.synced) {
-          setIndicator('\u2713 Updated', 'sync-done');
-          setTimeout(function() {
-            fetch('/api/history/data')
-              .then(function(r) { return r.json(); })
-              .then(function(data) {
-                if (data.current || data.past) {
-                  updateContent(data);
-                }
-                hideIndicator();
-                fetch('/api/history/chart-data')
-                  .then(function(r) { return r.json(); })
-                  .then(function(d) { if (d && d.length) { chartData = d; drawChart(); } })
-                  .catch(function() {});
-                fetch('/api/history/category-data')
-                  .then(function(r) { return r.json(); })
-                  .then(function(d) { if (d && d.length) { catData = d; drawCatBars(); } })
-                  .catch(function() {});
-              })
-              .catch(function() { hideIndicator(); });
-          }, 1500);
-        } else {
-          hideIndicator();
-          showToast('Sync failed', 5000);
-        }
-      })
-      .catch(function() {
-        hideIndicator();
-        showToast('Sync failed', 5000);
+
+    // Fetch history, checkouts, chart data via proxy
+    Promise.all([
+      fetch('/api/proxy/history', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({library_id: libId, bc_token: libCreds.bc_token, session_id: libCreds.session_id, account_id: libCreds.account_id, page: 0})
+      }).then(function(r) { return r.json(); })
+    ]).then(function(results) {
+      var historyData = results[0];
+      var historyEntries = historyData.entities.borrowingHistory || {};
+      var bibs = historyData.entities.bibs || {};
+
+      // Build history list with bib info
+      var past = [];
+      Object.keys(historyEntries).forEach(function(k) {
+        var entry = historyEntries[k];
+        var bib = (bibs[entry.metadataId] || {}).briefInfo || {};
+        past.push({
+          metadata_id: entry.metadataId,
+          checkout_date: entry.checkedoutDate,
+          title: bib.title || '',
+          subtitle: bib.subtitle || '',
+          author: (bib.authors || []).join(', '),
+          isbn: (bib.isbns || [])[0] || ''
+        });
       });
+
+      // Build borrowing history for recommendations
+      var borrowingHistory = past.map(function(p) {
+        return {metadata_id: p.metadata_id, isbns: [], checkout_date: p.checkout_date, is_current: false};
+      });
+
+      // Store in localStorage
+      try {
+        localStorage.setItem('bibliorecs_history_' + libId, JSON.stringify(borrowingHistory));
+      } catch(e) {}
+
+      // Update content
+      updateContent({current: [], past: past});
+      hideIndicator();
+      setIndicator('\u2713 Updated (' + past.length + ' items)', 'sync-done');
+      setTimeout(hideIndicator, 3000);
+
+      // Also fetch chart data from server (still reads from DB which may be empty)
+      fetch('/api/history/chart-data')
+        .then(function(r) { return r.json(); })
+        .then(function(d) { if (d && d.length) { chartData = d; drawChart(); } })
+        .catch(function() {});
+      fetch('/api/history/category-data')
+        .then(function(r) { return r.json(); })
+        .then(function(d) { if (d && d.length) { catData = d; drawCatBars(); } })
+        .catch(function() {});
+    })
+    .catch(function() {
+      hideIndicator();
+      showToast('Sync failed', 5000);
+    });
+  }
+
+  function getCreds() {
+    try { return JSON.parse(localStorage.getItem('bibliorecs_creds')) || {}; } catch(e) { return {}; }
+  }
+
+  function renderMessage(msg) {
+    document.querySelector('.empty-state h2').textContent = 'No borrowing history';
+    var p = document.querySelector('.empty-state p');
+    if (p) p.textContent = msg;
   }
 
   drawChart();
@@ -403,13 +445,6 @@ var __catData = {{ chart_cats | tojson }};
     resizeTimer = setTimeout(onResize, 200);
   });
 
-  // Check if we have credentials before syncing
-  fetch('/api/creds').then(function(r) { return r.json(); }).then(function(credsData) {
-    var libId = document.body.getAttribute('data-lib');
-    if ((credsData.connected || []).indexOf(libId) !== -1) {
-      doSync();
-    }
-  }).catch(function() {});
-})();
+  doSync();
   </script>
   {% endblock %}

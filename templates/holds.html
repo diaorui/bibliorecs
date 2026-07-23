@@ -110,10 +110,10 @@
           var mid = btn.dataset.mid;
           btn.textContent = 'Cancelling...';
           btn.disabled = true;
-          fetch('/api/hold/cancel', {
+          fetch('/api/proxy/hold/cancel', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({hold_id: holdId, metadata_id: mid})
+            body: JSON.stringify({library_id: libId, bc_token: libCreds.bc_token, session_id: libCreds.session_id, account_id: libCreds.account_id, hold_id: holdId, metadata_id: mid})
           })
           .then(function(r) { return r.json(); })
           .then(function(data) {
@@ -140,28 +140,44 @@
     });
   }
 
-  fetch('/api/creds')
-    .then(function(r) { return r.json(); })
-    .then(function(credsData) {
-      var libId = document.body.getAttribute('data-lib');
-      if ((credsData.connected || []).indexOf(libId) === -1) {
-        renderMessage('Connect your library card in Settings to view and manage holds.');
-        return;
-      }
-      fetch('/api/holds')
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-          if (data.holds) {
-            renderHolds(data.holds);
-          } else {
-            renderError(data.error);
-          }
-        })
-        .catch(function() {
-          renderError('Network error');
-        });
+  function getCreds() {
+    try { return JSON.parse(localStorage.getItem('bibliorecs_creds')) || {}; } catch(e) { return {}; }
+  }
+
+  var libId = document.body.getAttribute('data-lib');
+  var creds = getCreds();
+  var libCreds = creds[libId];
+
+  if (!libCreds || !libCreds.bc_token) {
+    renderMessage('Connect a library card in Settings to view and manage holds.');
+  } else {
+    fetch('/api/proxy/holds', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({library_id: libId, bc_token: libCreds.bc_token, session_id: libCreds.session_id, account_id: libCreds.account_id})
     })
-    .catch(function() {});
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        var holdsObj = (data.entities || {}).holds || {};
+        // Convert {id: hold} to array with id
+        var holds = Object.keys(holdsObj).map(function(k) {
+          var h = holdsObj[k];
+          h.hold_id = k;
+          // Get bib info
+          var bib = (data.entities || {}).bibs || {};
+          var info = (bib[h.metadata_id] || {}).briefInfo || {};
+          h.title = h.bibTitle || info.title || '';
+          h.subtitle = info.subtitle || '';
+          h.author = (info.authors || []).join(', ');
+          h.isbn = (info.isbns || [])[0] || '';
+          h.pickup_branch = (h.pickupLocation || {}).name || '';
+          return h;
+        });
+        renderHolds(holds);
+      })
+      .catch(function() {
+        renderError('Could not load holds');
+      });
+  }
 })();
 </script>
 {% endblock %}
