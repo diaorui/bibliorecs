@@ -227,7 +227,7 @@ function showNoCreds() {
     var checkoutsObj = (checkoutsData.entities || {}).checkouts || {};
     var isCheckedOut = false;
     Object.keys(checkoutsObj).forEach(function(k) {
-      if (checkoutsObj[k].metadata_id === mid) isCheckedOut = true;
+      if (checkoutsObj[k].metadataId === mid) isCheckedOut = true;
     });
     if (isCheckedOut) { showCheckedOut(); return; }
 
@@ -235,7 +235,7 @@ function showNoCreds() {
     var holdsObj = (holdsData.entities || {}).holds || {};
     var myHold = null;
     Object.keys(holdsObj).forEach(function(k) {
-      if (holdsObj[k].metadata_id === mid) myHold = holdsObj[k];
+      if (holdsObj[k].metadataId === mid) myHold = holdsObj[k];
     });
     if (myHold) {
       if (myHold.status === 'READY_FOR_PICKUP')

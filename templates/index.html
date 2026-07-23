@@ -313,12 +313,12 @@ function selectBranch(libId, branchCode) {
       var holdsObj = (holdsData.entities || {}).holds || {};
       Object.keys(holdsObj).forEach(function(k) {
         var h = holdsObj[k];
-        if (h.metadata_id) __holdsByMid[h.metadata_id] = h;
+        if (h.metadataId) __holdsByMid[h.metadataId] = h;
       });
       var checkoutsObj = (checkoutsData.entities || {}).checkouts || {};
       Object.keys(checkoutsObj).forEach(function(k) {
         var c = checkoutsObj[k];
-        if (c.metadata_id) __checkedOutByMe.add(c.metadata_id);
+        if (c.metadataId) __checkedOutByMe.add(c.metadataId);
       });
       applyButtonStates();
       revealButtons();

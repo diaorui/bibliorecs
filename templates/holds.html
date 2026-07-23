@@ -114,7 +114,6 @@
           proxyFetch('/api/proxy/hold/cancel', {
             hold_id: holdId, metadata_id: mid
           })
-          .then(function(r) { return r.json(); })
           .then(function(data) {
             if (data.success) {
               var item = btn.closest('.history-item');
