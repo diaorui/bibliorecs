@@ -708,7 +708,101 @@ def history():
                            selected_library=lib_id, selected_branch=branch_code)
 
 
-# ── update ──
+# ── Proxy endpoints (stateless — tokens from frontend) ──
+
+@app.route("/api/proxy/login", methods=["POST"])
+def api_proxy_login():
+    body = request.get_json()
+    if not body or "library_id" not in body or "user" not in body or "password" not in body:
+        return jsonify({"error": "library_id, user, password required"}), 400
+    try:
+        bc_token, session_id, account_id = api.login(
+            body["library_id"], body["user"], body["password"]
+        )
+        return jsonify({"success": True, "bc_token": bc_token,
+                        "session_id": session_id, "account_id": account_id})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+
+@app.route("/api/proxy/holds", methods=["POST"])
+def api_proxy_holds():
+    body = request.get_json() or {}
+    for k in ("library_id", "bc_token", "session_id", "account_id"):
+        if k not in body:
+            return jsonify({"error": f"{k} required"}), 400
+    try:
+        data = api.proxy_fetch_holds(body["library_id"], body["bc_token"],
+                                      body["session_id"], body["account_id"])
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({"error": str(e)})
+
+
+@app.route("/api/proxy/checkouts", methods=["POST"])
+def api_proxy_checkouts():
+    body = request.get_json() or {}
+    for k in ("library_id", "bc_token", "session_id", "account_id"):
+        if k not in body:
+            return jsonify({"error": f"{k} required"}), 400
+    try:
+        data = api.proxy_fetch_checkouts(body["library_id"], body["bc_token"],
+                                          body["session_id"], body["account_id"])
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({"error": str(e)})
+
+
+@app.route("/api/proxy/history", methods=["POST"])
+def api_proxy_history():
+    body = request.get_json() or {}
+    for k in ("library_id", "bc_token", "session_id", "account_id"):
+        if k not in body:
+            return jsonify({"error": f"{k} required"}), 400
+    page = body.get("page", 0)
+    try:
+        data = api.proxy_fetch_history(body["library_id"], body["bc_token"],
+                                        body["session_id"], body["account_id"], page)
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({"error": str(e)})
+
+
+@app.route("/api/proxy/hold/place", methods=["POST"])
+def api_proxy_hold_place():
+    body = request.get_json() or {}
+    for k in ("library_id", "bc_token", "session_id", "account_id", "metadata_id", "branch_code"):
+        if k not in body:
+            return jsonify({"error": f"{k} required"}), 400
+    try:
+        data = api.proxy_place_hold(body["library_id"], body["bc_token"],
+                                     body["session_id"], body["account_id"],
+                                     body["metadata_id"], body["branch_code"])
+        holds = data.get("entities", {}).get("holds", {})
+        if holds:
+            hid = next(iter(holds))
+            h = holds[hid]
+            return jsonify({"success": True, "hold_id": hid,
+                            "position": h.get("holdsPosition"),
+                            "status": h.get("status")})
+        return jsonify({"success": False, "error": "no hold in response"})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+
+@app.route("/api/proxy/hold/cancel", methods=["POST"])
+def api_proxy_hold_cancel():
+    body = request.get_json() or {}
+    for k in ("library_id", "bc_token", "session_id", "account_id", "hold_id", "metadata_id"):
+        if k not in body:
+            return jsonify({"error": f"{k} required"}), 400
+    try:
+        data = api.proxy_cancel_hold(body["library_id"], body["bc_token"],
+                                      body["session_id"], body["account_id"],
+                                      body["hold_id"], body["metadata_id"])
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
 
 @app.route("/api/update", methods=["POST"])
 def trigger_update():
