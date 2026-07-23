@@ -212,6 +212,8 @@ function showNoCreds() {
   var creds = getCreds();
   var libCreds = creds[libId];
 
+  showLoading();
+
   if (!libCreds || !libCreds.bc_token) {
     showNoCreds();
   } else {
@@ -257,7 +259,6 @@ document.addEventListener('click', function(e) {
     showToast('Connect a library card in Settings to place holds', 4000);
     return;
   }
-  var orig = btn.textContent;
   btn.textContent = 'Placing...';
   btn.disabled = true;
   proxyFetch('/api/proxy/hold/place', {
