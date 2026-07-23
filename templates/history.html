@@ -369,9 +369,11 @@ var __catData = {{ chart_cats | tojson }};
 
     setIndicator('\u27F3 Syncing');
 
-    // Fetch all history pages recursively
+    // Fetch all history pages (BC starts at page 1, page 0 returns same data)
     var allHistoryEntries = {};
     var allBibs = {};
+    var sinceDate = null;
+    try { sinceDate = localStorage.getItem('bibliorecs_history_min_date_' + libId) || null; } catch(e) {}
 
     function fetchHistoryPage(page) {
       return fetch('/api/proxy/history', {
@@ -382,12 +384,22 @@ var __catData = {{ chart_cats | tojson }};
         var keys = Object.keys(entries);
         if (keys.length === 0) return;
         Object.assign(allBibs, data.entities.bibs || {});
-        keys.forEach(function(k) { allHistoryEntries[k] = entries[k]; });
+        // Add entries newer than since_date
+        var newCount = 0;
+        keys.forEach(function(k) {
+          var entry = entries[k];
+          if (!sinceDate || entry.checkedoutDate >= sinceDate) {
+            allHistoryEntries[k] = entry;
+            newCount++;
+          }
+        });
+        // If no new entries on this page, stop pagination
+        if (newCount === 0) return;
         return fetchHistoryPage(page + 1);
       });
     }
 
-    fetchHistoryPage(0).then(function() {
+    fetchHistoryPage(1).then(function() {
       return fetch('/api/proxy/checkouts', {
         method: 'POST', headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({library_id: libId, bc_token: libCreds.bc_token, session_id: libCreds.session_id, account_id: libCreds.account_id})
@@ -432,14 +444,38 @@ var __catData = {{ chart_cats | tojson }};
         });
       });
 
-      // Build borrowing history for recommendations
+      // Build borrowing history for recommendations (merge with existing)
       var borrowingHistory = past.map(function(p) {
         return {metadata_id: p.metadata_id, isbns: [], checkout_date: p.checkout_date, is_current: false};
+      });
+
+      // Merge with existing history if incremental
+      // New data takes precedence over existing for same key
+      if (sinceDate) {
+        var existing = [];
+        try { existing = JSON.parse(localStorage.getItem('bibliorecs_history_' + libId)) || []; } catch(e) {}
+        var seen = {};
+        // Collect all keys from new data (removing them from existing)
+        var newKeys = {};
+        borrowingHistory.forEach(function(e) { newKeys[e.metadata_id + '|' + (e.checkout_date || '')] = true; });
+        // Keep existing entries not in new data
+        var merged = borrowingHistory.slice();
+        existing.forEach(function(e) {
+          if (!newKeys[e.metadata_id + '|' + (e.checkout_date || '')]) merged.push(e);
+        });
+        borrowingHistory = merged;
+      }
+
+      // Compute min_date for next incremental sync
+      var minDate = null;
+      borrowingHistory.forEach(function(e) {
+        if (e.checkout_date && (!minDate || e.checkout_date < minDate)) minDate = e.checkout_date;
       });
 
       // Store in localStorage
       try {
         localStorage.setItem('bibliorecs_history_' + libId, JSON.stringify(borrowingHistory));
+        if (minDate) localStorage.setItem('bibliorecs_history_min_date_' + libId, minDate);
       } catch(e) {}
 
       // Update content
