@@ -419,6 +419,17 @@ def get_recommendations(library_id, borrowing_history):
         if not name:
             continue
 
+        if qt == "author":
+            qv_lower = qv.lower()
+            filtered = []
+            for r in results:
+                authors = json.loads(r.get("authors") or "[]")
+                if any(a.lower().strip() == qv_lower for a in authors):
+                    filtered.append(r)
+            results = filtered
+            if len(results) < config.RECS_PER_CAROUSEL:
+                continue
+
         results.sort(key=lambda r: -sims[pool_mid_to_idx.get(r["metadata_id"], 0)])
         top_n = min(config.TOP_CANDIDATES, len(results))
         selected = []
