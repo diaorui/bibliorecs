@@ -137,15 +137,16 @@ function renderBook(data) {
   }
 
   var seriesEl = document.getElementById('book-series');
-  var seriesName = data.series_name;
-  if (!seriesName) {
-    var seriesList = _json_list(data.series);
-    if (seriesList.length) {
-      seriesName = seriesList[0].name || seriesList[0];
-    }
+  var seriesList = _json_list(data.series);
+  if (!seriesList.length && data.series_name) {
+    seriesList = [{name: data.series_name}];
   }
-  if (seriesName) {
-    seriesEl.innerHTML = '<span class="series-label">Series</span><span class="series-pill">' + seriesName + '</span>';
+  if (seriesList.length) {
+    var names = seriesList.map(function(s) {
+      var n = s.name || s;
+      return '<span class="series-pill">' + n + '</span>';
+    }).join('');
+    seriesEl.innerHTML = '<span class="series-label">Series</span>' + names;
     seriesEl.style.display = '';
   }
 
