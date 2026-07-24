@@ -105,36 +105,36 @@ def book_detail(metadata_id):
         return render_template("not_found.html", metadata_id=metadata_id), 404
 
     isbn = request.args.get("isbn") or ""
+    img, fallback = _cover_large(isbn, lib_cfg["syndetics_client"])
 
-    book_data = None
-    if isbn:
-        try:
-            book_data = api.fetch_bib_by_isbn(lib_id, isbn)
-        except Exception:
-            pass
-
-    if not book_data:
-        return render_template("not_found.html", metadata_id=metadata_id,
-                               selected_library=lib_id, selected_branch=branch_code), 404
-
-    book = dict(book_data)
-    book["isbn"] = _first_isbn(book.get("isbns"))
-    book["author"] = ", ".join(json.loads(book.get("authors") or "[]"))
-
-    img, fallback = _cover_large(book["isbn"], lib_cfg["syndetics_client"])
     return render_template(
         "book.html",
         metadata_id=metadata_id,
-        book=book,
-        borrows=[],
-        subjects=_json_list(book.get("subjects")),
-        genres=_json_list(book.get("genres")),
-        series=_json_list(book.get("series")),
+        isbn=isbn,
         catalog_url=f"{lib_cfg['catalog_base']}/v2/record/{metadata_id}",
         img_url=img,
         fallback_url=fallback,
-        selected_library=lib_id, selected_branch=branch_code,
     )
+
+
+@app.route("/api/bib/<metadata_id>")
+def api_bib(metadata_id):
+    lib_id, _, lib_cfg = _lib_from_cookies()
+    if not lib_id:
+        return jsonify({"error": "no library"}), 400
+    isbn = request.args.get("isbn") or ""
+    if not isbn:
+        return jsonify({"error": "no isbn"}), 400
+    try:
+        book_data = api.fetch_bib_by_isbn(lib_id, isbn)
+        if not book_data:
+            return jsonify({"error": "not found"}), 404
+        full_desc = book_data.get("description", "")
+        book_data = _fmt_rec(book_data, lib_cfg["syndetics_client"], lib_id)
+        book_data["description"] = full_desc
+        return jsonify(book_data)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 # ── branches / library config ──

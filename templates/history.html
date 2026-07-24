@@ -435,6 +435,13 @@
 
   loadCached();
   doSync();
-})();
+
+  document.addEventListener('click', function(e) {
+    var link = e.target.closest('.history-item');
+    if (!link) return;
+    var mid = link.getAttribute('href').match(/\/book\/([^?]+)/);
+    if (!mid) return;
+    mid = mid[1];
+  })();
 </script>
 {% endblock %}

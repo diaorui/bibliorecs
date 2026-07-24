@@ -1,66 +1,31 @@
 {% extends "base.html" %}
-{% block title %}{{ book.title }} – Bibliorecs{% endblock %}
+{% block title %}<span id="book-title-el">{{ metadata_id }}</span> – Bibliorecs{% endblock %}
 
 {% block content %}
 <div class="book-detail">
   <div class="book-cover-large">
     <div class="book-cover-wrap">
       <img class="cover-img" src="{{ img_url }}"
-           alt="{{ book.title }}" loading="lazy"
+           alt="" loading="lazy"
            data-fallback="{{ fallback_url }}"
-           data-isbn="{{ book.isbn or '' }}">
-      <div class="cover-placeholder cover-placeholder-lg">📖<br>{{ book.title[:50] }}</div>
+           data-isbn="{{ isbn }}">
+      <div class="cover-placeholder cover-placeholder-lg">📖</div>
     </div>
-
   </div>
   <div class="book-info">
-    <h1>{{ book.title }}</h1>
-    {% if book.subtitle %}<p class="book-subtitle">{{ book.subtitle }}</p>{% endif %}
-    {% if book.author %}<p class="author">{{ book.author }}</p>{% endif %}
-
-    {% set best_series = series | best_series(book.title) %}
-    {% if best_series %}
-    <div class="series-row">
-      <span class="series-label">Series</span>
-      {% for s in best_series %}
-      <span class="series-pill">{{ s }}</span>
-      {% endfor %}
-    </div>
-    {% endif %}
-
-    <p class="metadata">
-      <span>{{ book.format | fmt_label }}</span>
-      {% if book.content_type %}<span>{{ book.content_type | content_type_label }}</span>{% endif %}
-      {% if book.publication_year %}<span>{{ book.publication_year }}</span>{% endif %}
-      {% if book.primary_language %}<span>{{ book.primary_language | lang_label }}</span>{% endif %}
-    </p>
-    {% if book.description %}
-    <p class="description">{{ book.description }}</p>
-    {% endif %}
-
-    {% set subjects_clean = subjects | map("clean_subject") | list | dedup %}
-    {% if subjects_clean %}
-    <div class="tag-section">
-      <div class="tag-list">
-        {% for s in subjects_clean %}<span class="tag">{{ s }}</span>{% endfor %}
-      </div>
-    </div>
-    {% endif %}
-
-    {% set clean_genres = genres | dedup_genres %}
-    {% if clean_genres %}
-    <div class="tag-section genre-section">
-      <div class="tag-list">
-        {% for g in clean_genres %}<span class="tag tag-genre">{{ g }}</span>{% endfor %}
-      </div>
-    </div>
-    {% endif %}
-
-    {% if debug %}<a href="{{ catalog_url }}" class="btn btn-primary" target="_blank" rel="noopener">Open in Catalog</a>{% endif %}
+    <h1 id="book-title"></h1>
+    <p class="book-subtitle" id="book-subtitle" style="display:none"></p>
+    <p class="author" id="book-author" style="display:none"></p>
+    <div class="series-row" id="book-series" style="display:none"></div>
+    <p class="metadata" id="book-metadata" style="display:none"></p>
+    <p class="description" id="book-description" style="display:none"></p>
+    <div class="tag-section" id="book-subjects" style="display:none"></div>
+    <div class="tag-section genre-section" id="book-genres" style="display:none"></div>
+    <a id="book-catalog-link" href="{{ catalog_url }}" class="btn btn-primary" style="display:none" target="_blank" rel="noopener">Open in Catalog</a>
   </div>
 </div>
 
-{% if book.isbn %}
+{% if isbn %}
 <div id="preview-overlay" class="preview-overlay">
   <div class="preview-modal">
     <div class="preview-header">
@@ -76,34 +41,13 @@
   <h2 class="section-title">Hold Status</h2>
   <div id="hold-content" class="hold-block"></div>
 </div>
-
-{% if borrows %}
-<div class="section">
-  <h2 class="section-title">Your Borrow History</h2>
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr><th>Date</th><th>Source</th></tr>
-      </thead>
-      <tbody>
-        {% for b in borrows %}
-        <tr>
-          <td><span class="{% if b.is_current %}due-date{% endif %}">{{ b.checkout_date | due_info(b.is_current) or b.checkout_date or '' }}</span></td>
-          <td>{% if b.is_current %}Current checkout{% else %}History{% endif %}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</div>
-{% endif %}
 {% endblock %}
 
 {% block scripts %}
-{% if book.isbn %}
+{% if isbn %}
 <script>
 (function() {
-  var isbn = '{{ book.isbn }}';
+  var isbn = '{{ isbn }}';
   var overlay = document.getElementById('preview-overlay');
   var canvas = document.getElementById('viewerCanvas');
   var slot = document.querySelector('.book-cover-wrap');
@@ -154,6 +98,119 @@
 {% endif %}
 <script>
 var mid = '{{ metadata_id }}';
+var isbn = '{{ isbn }}';
+
+function _json_list(v) {
+  try { return JSON.parse(v) || []; } catch(e) { return []; }
+}
+
+function _clean_subject(s) {
+  return s.replace(/ -- /g, ' ').replace(/<delimit>/g, '');
+}
+
+function _dedup(arr) {
+  var seen = {}, out = [];
+  arr.forEach(function(v) { var k = v.toLowerCase().trim(); if (!seen[k]) { seen[k] = true; out.push(v); } });
+  return out;
+}
+
+function renderBook(data) {
+  var title = data.title || mid;
+  document.getElementById('book-title-el').textContent = title;
+  document.getElementById('book-title').textContent = title;
+  document.title = title + ' – Bibliorecs';
+
+  var authorEl = document.getElementById('book-author');
+  var author = data.author;
+  if (!author) {
+    var authors = _json_list(data.authors);
+    author = authors.join(', ');
+  }
+  if (author) {
+    authorEl.textContent = author;
+    authorEl.style.display = '';
+  }
+
+  var subEl = document.getElementById('book-subtitle');
+  if (data.subtitle) {
+    subEl.textContent = data.subtitle;
+    subEl.style.display = '';
+  }
+
+  var seriesEl = document.getElementById('book-series');
+  var seriesName = data.series_name;
+  if (!seriesName) {
+    var seriesList = _json_list(data.series);
+    if (seriesList.length) {
+      seriesName = seriesList[0].name || seriesList[0];
+    }
+  }
+  if (seriesName) {
+    seriesEl.innerHTML = '<span class="series-label">Series</span><span class="series-pill">' + seriesName + '</span>';
+    seriesEl.style.display = '';
+  }
+
+  var metaEl = document.getElementById('book-metadata');
+  var parts = [];
+  var fmt = data.format_label || data.format;
+  if (fmt) parts.push(fmt.replace(/_/g, ' ').replace(/\b\w/g, function(c) { return c.toUpperCase(); }));
+  var ct = data.content_type;
+  if (ct) {
+    var ctMap = {FICTION: 'Fiction', NON_FICTION: 'Non-Fiction'};
+    parts.push(ctMap[ct] || ct);
+  }
+  if (data.publication_year) parts.push(data.publication_year);
+  if (data.primary_language) {
+    var langMap = {eng: 'English', spa: 'Spanish', chi: 'Chinese'};
+    parts.push(langMap[data.primary_language] || data.primary_language);
+  }
+  if (parts.length) {
+    metaEl.innerHTML = parts.map(function(p) { return '<span>' + p + '</span>'; }).join('');
+    metaEl.style.display = '';
+  }
+
+  var descEl = document.getElementById('book-description');
+  if (data.description) {
+    descEl.textContent = data.description;
+    descEl.style.display = '';
+  }
+
+  var subjectsEl = document.getElementById('book-subjects');
+  var subjects = _json_list(data.subjects);
+  if (subjects.length) {
+    var clean = _dedup(subjects.map(_clean_subject).filter(function(s) { return s; }));
+    if (clean.length) {
+      subjectsEl.innerHTML = '<div class="tag-list">' + clean.map(function(s) { return '<span class="tag">' + s + '</span>'; }).join('') + '</div>';
+      subjectsEl.style.display = '';
+    }
+  }
+
+  var genresEl = document.getElementById('book-genres');
+  var genres = _json_list(data.genres);
+  if (genres.length) {
+    var cleanG = _dedup(genres.map(function(g) { return g.replace(/<delimit>/g, ' ').replace(/\|/g, ' ').trim(); }).filter(function(g) { return g; }));
+    if (cleanG.length) {
+      genresEl.innerHTML = '<div class="tag-list">' + cleanG.map(function(g) { return '<span class="tag tag-genre">' + g + '</span>'; }).join('') + '</div>';
+      genresEl.style.display = '';
+    }
+  }
+
+  document.getElementById('book-catalog-link').style.display = '';
+}
+
+// Async fetch full data
+if (isbn) {
+  fetch('/api/bib/' + mid + '?isbn=' + encodeURIComponent(isbn))
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data && !data.error) {
+        renderBook(data);
+      }
+    })
+    .catch(function() {});
+}
+
+// ── Hold status (unchanged) ──
 var holdSection = document.getElementById('hold-section');
 var holdContent = document.getElementById('hold-content');
 
@@ -224,7 +281,6 @@ function showNoCreds() {
     ]).then(function(results) {
       var holdsData = results[0], checkoutsData = results[1];
 
-    // Check if checked out
     var checkoutsObj = (checkoutsData.entities || {}).checkouts || {};
     var isCheckedOut = false;
     Object.keys(checkoutsObj).forEach(function(k) {
@@ -232,7 +288,6 @@ function showNoCreds() {
     });
     if (isCheckedOut) { showCheckedOut(); return; }
 
-    // Check if on hold
     var holdsObj = (holdsData.entities || {}).holds || {};
     var myHold = null;
     Object.keys(holdsObj).forEach(function(k) {
