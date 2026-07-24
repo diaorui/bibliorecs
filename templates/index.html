@@ -223,6 +223,11 @@ function selectBranch(libId, branchCode) {
         document.querySelectorAll('img.cover-img').forEach(function(img) {
           if (typeof initCoverFallback === 'function') initCoverFallback(img);
         });
+        if (!libCreds || !libCreds.bc_token) {
+          if (!localStorage.getItem('bibliorecs_skip_creds')) {
+            showCredsBanner();
+          }
+        }
       })
       .catch(function() {
         showToast('Could not load recommendations', 6000);
@@ -239,6 +244,7 @@ function selectBranch(libId, branchCode) {
   }
 
   function showCredsBanner() {
+    if (document.getElementById('creds-banner')) return;
     var banner = document.createElement('div');
     banner.className = 'creds-banner';
     banner.id = 'creds-banner';
