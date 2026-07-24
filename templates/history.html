@@ -127,14 +127,9 @@
 
     var chartData = [];
     var cumulative = 0;
-    var monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     months.forEach(function(m) {
       cumulative += dateCounts[m];
-      var parts = m.split('-');
-      var label = monthNames[parseInt(parts[1], 10) - 1];
-      var currentYear = new Date().getFullYear().toString();
-      if (parts[0] !== currentYear) label += " '" + parts[0].slice(2);
-      chartData.push({m: label, b: dateCounts[m], c: cumulative});
+      chartData.push({m: m, b: dateCounts[m], c: cumulative});
     });
 
     drawChart(chartData);
