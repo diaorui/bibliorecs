@@ -257,22 +257,50 @@
     }
   }
 
+  function buildRenderData(history, syndeticsClient) {
+    var current = [], past = [];
+    history.forEach(function(b) {
+      var isbn = (b.isbns || [])[0] || '';
+      var item = {
+        metadata_id: b.metadata_id,
+        checkout_date: b.checkout_date,
+        title: b.title || '',
+        subtitle: b.subtitle || '',
+        author: (b.authors || []).join(', '),
+        isbn: isbn,
+        _format: b.format || '',
+        img_url: isbn ? 'https://secure.syndetics.com/index.aspx?isbn=' + isbn + '/LC.GIF&client=' + syndeticsClient + '&type=xw12&oclc=' : '',
+        fallback_url: isbn ? 'https://covers.openlibrary.org/b/isbn/' + isbn + '-L.jpg' : ''
+      };
+      if (b.is_current) {
+        var dl = fmtDueLabel(b.checkout_date);
+        if (dl) { item.due_label_compact = dl.label; item.due_remaining = dl.remain; }
+        current.push(item);
+      } else {
+        past.push(item);
+      }
+    });
+    current.sort(function(a, b) {
+      if (!a.checkout_date) return 1;
+      if (!b.checkout_date) return -1;
+      return a.checkout_date.localeCompare(b.checkout_date);
+    });
+    past.sort(function(a, b) {
+      if (!a.checkout_date) return 1;
+      if (!b.checkout_date) return -1;
+      return b.checkout_date.localeCompare(a.checkout_date);
+    });
+    return {current: current, past: past};
+  }
+
   function loadCached() {
     var libId = document.body.getAttribute('data-lib');
+    var syndeticsClient = document.body.getAttribute('data-syndetics') || 'sepup';
     try {
-      var cached = JSON.parse(localStorage.getItem('bibliorecs_history_render_' + libId));
-      if (cached && cached.current && cached.past) {
-        cached.current.sort(function(a, b) {
-          if (!a.checkout_date) return 1;
-          if (!b.checkout_date) return -1;
-          return a.checkout_date.localeCompare(b.checkout_date);
-        });
-        cached.past.sort(function(a, b) {
-          if (!a.checkout_date) return 1;
-          if (!b.checkout_date) return -1;
-          return b.checkout_date.localeCompare(a.checkout_date);
-        });
-        updateContent(cached, true);
+      var all = JSON.parse(localStorage.getItem('bibliorecs_history_' + libId));
+      if (all && all.length) {
+        var renderData = buildRenderData(all, syndeticsClient);
+        updateContent(renderData, true);
         return;
       }
     } catch(e) {}
@@ -333,6 +361,7 @@
             subjects: bib.subjectHeadings || [],
             genres: bib.genreForm || [],
             content_type: bib.contentType || '',
+            format: bib.format || '',
             checkout_date: entry.checkedoutDate,
             is_current: false
           });
@@ -341,76 +370,36 @@
       return borrowingHistory;
     }
 
-    function buildRenderItems(entries, bibs, checkoutsObj) {
-      var past = [];
-      Object.keys(entries).forEach(function(k) {
-        var entry = entries[k];
-        var bib = (bibs[entry.metadataId] || {}).briefInfo || {};
-        var isbn = (bib.isbns || [])[0] || '';
-        past.push({
-          metadata_id: entry.metadataId,
-          checkout_date: entry.checkedoutDate,
-          title: bib.title || '',
-          subtitle: bib.subtitle || '',
-          author: (bib.authors || []).join(', '),
-          isbn: isbn,
-          _format: bib.format || '',
-          img_url: isbn ? 'https://secure.syndetics.com/index.aspx?isbn=' + isbn + '/LC.GIF&client=' + syndeticsClient + '&type=xw12&oclc=' : '',
-          fallback_url: isbn ? 'https://covers.openlibrary.org/b/isbn/' + isbn + '-L.jpg' : ''
-        });
-      });
-
-      var current = [];
-      Object.keys(checkoutsObj).forEach(function(k) {
-        var co = checkoutsObj[k];
-        var bib = (allBibs[co.metadataId] || {}).briefInfo || {};
-        var isbn = (bib.isbns || [])[0] || '';
-        current.push({
-          metadata_id: co.metadataId,
-          checkout_date: co.dueDate,
-          title: bib.title || co.bibTitle || '',
-          subtitle: bib.subtitle || '',
-          author: (bib.authors || []).join(', '),
-          isbn: isbn,
-          _format: bib.format || '',
-          img_url: isbn ? 'https://secure.syndetics.com/index.aspx?isbn=' + isbn + '/LC.GIF&client=' + syndeticsClient + '&type=xw12&oclc=' : '',
-          fallback_url: isbn ? 'https://covers.openlibrary.org/b/isbn/' + isbn + '-L.jpg' : ''
-        });
-        var dl = fmtDueLabel(co.dueDate);
-        if (dl) {
-          current[current.length - 1].due_label_compact = dl.label;
-          current[current.length - 1].due_remaining = dl.remain;
-        }
-      });
-
-      current.sort(function(a, b) {
-        if (!a.checkout_date) return 1;
-        if (!b.checkout_date) return -1;
-        return a.checkout_date.localeCompare(b.checkout_date);
-      });
-
-      past.sort(function(a, b) {
-        if (!a.checkout_date) return 1;
-        if (!b.checkout_date) return -1;
-        return b.checkout_date.localeCompare(a.checkout_date);
-      });
-
-      return {current: current, past: past};
-    }
-
     fetchHistoryPage(1).then(function() {
       return proxyFetch('/api/proxy/checkouts', {});
     }).then(function(checkoutsData) {
       Object.assign(allBibs, checkoutsData.entities.bibs || {});
       var checkoutsObj = (checkoutsData.entities || {}).checkouts || {};
 
-      // Build rich borrowing history for recommendations
+      // Build unified borrowing history (past + current)
       var borrowingHistory = buildBorrowingHistory(allEntries, allBibs);
+      Object.keys(checkoutsObj).forEach(function(k) {
+        var co = checkoutsObj[k];
+        var bib = (allBibs[co.metadataId] || {}).briefInfo || {};
+        borrowingHistory.push({
+          metadata_id: co.metadataId,
+          title: bib.title || co.bibTitle || '',
+          subtitle: bib.subtitle || '',
+          authors: bib.authors || [],
+          series: bib.series || [],
+          isbns: bib.isbns || [],
+          subjects: bib.subjectHeadings || [],
+          genres: bib.genreForm || [],
+          content_type: bib.contentType || '',
+          format: bib.format || '',
+          checkout_date: co.dueDate,
+          is_current: true
+        });
+      });
       try { localStorage.setItem('bibliorecs_history_' + libId, JSON.stringify(borrowingHistory)); } catch(e) {}
 
-      // Build render items
-      var renderData = buildRenderItems(allEntries, allBibs, checkoutsObj);
-      try { localStorage.setItem('bibliorecs_history_render_' + libId, JSON.stringify(renderData)); } catch(e) {}
+      // Build render data
+      var renderData = buildRenderData(borrowingHistory, syndeticsClient);
 
       // Update content
       updateContent(renderData, true);
