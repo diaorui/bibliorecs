@@ -18,7 +18,7 @@
 
   <div class="empty-state" id="history-empty" style="display:none">
     <h2>No borrowing history</h2>
-    <p id="history-empty-msg">Connect your library card in Settings to sync your borrowing history.</p>
+    <p id="history-empty-msg"></p>
     <a id="history-empty-btn" href="/settings" class="btn btn-primary" style="margin-top:12px;display:inline-block;text-decoration:none">Go to Settings</a>
   </div>
 </div>
@@ -78,20 +78,25 @@
     container.style.display = '';
   }
 
-  function updateContent(data) {
+  function updateContent(data, hasCard) {
     renderItems(data.current || [], 'section-current', true);
     renderItems(data.past || [], 'section-past', false);
 
     var emptyState = document.getElementById('history-empty');
     var emptyMsg = document.getElementById('history-empty-msg');
+    var emptyBtn = document.getElementById('history-empty-btn');
     if (!emptyState) return;
 
     var hasData = (data.current && data.current.length) || (data.past && data.past.length);
     if (hasData) {
       emptyState.style.display = 'none';
-    } else {
+    } else if (hasCard) {
       emptyMsg.textContent = 'No borrowing history — borrow some books and they\'ll show up here.';
-      document.getElementById('history-empty-btn').style.display = '';
+      emptyBtn.style.display = 'none';
+      emptyState.style.display = '';
+    } else {
+      emptyMsg.textContent = 'Connect a library card in Settings to sync your borrowing history.';
+      emptyBtn.style.display = '';
       emptyState.style.display = '';
     }
   }
@@ -267,7 +272,7 @@
           if (!b.checkout_date) return -1;
           return b.checkout_date.localeCompare(a.checkout_date);
         });
-        updateContent(cached);
+        updateContent(cached, true);
         return;
       }
     } catch(e) {}
@@ -275,6 +280,9 @@
     if (creds[libId] && creds[libId].bc_token) {
       document.getElementById('history-empty-msg').textContent = 'Syncing your borrowing history...';
       document.getElementById('history-empty-btn').style.display = 'none';
+      document.getElementById('history-empty').style.display = '';
+    } else {
+      updateContent({current: [], past: []}, false);
     }
   }
 
@@ -405,7 +413,7 @@
       try { localStorage.setItem('bibliorecs_history_render_' + libId, JSON.stringify(renderData)); } catch(e) {}
 
       // Update content
-      updateContent(renderData);
+      updateContent(renderData, true);
       document.querySelectorAll('img.cover-img').forEach(function(img) {
         if (typeof initCoverFallback === 'function') initCoverFallback(img);
       });
@@ -414,7 +422,10 @@
       computeCharts(allEntries, allBibs);
 
       hideIndicator();
-      setIndicator('\u2713 Updated (' + renderData.past.length + ' items)', 'sync-done');
+      var itemCount = renderData.past.length;
+      if (itemCount > 0) {
+        setIndicator('\u2713 Updated (' + itemCount + ' items)', 'sync-done');
+      }
       setTimeout(hideIndicator, 3000);
     })
     .catch(function() {
