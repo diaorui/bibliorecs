@@ -275,9 +275,9 @@ def _carousel_name(qtype, query_str):
     if not val:
         return None
     if qtype == "author":
-        return f"More by {val}"
+        return f"Books by {val}"
     elif qtype == "series":
-        return f"More {val}"
+        return f"{val}"
     elif qtype == "title":
         return f"If you liked {val}"
     return None
