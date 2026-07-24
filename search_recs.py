@@ -391,8 +391,6 @@ def get_recommendations(library_id, borrowing_history):
     # MaxSim
     sims = _maxsim_scores(pool_norm, emb_norm, weights)
 
-    current_year = date.today().year
-
     # Top Picks (global MMR)
     top_k = min(config.MMR_TOP_K, len(pool))
     global_order = np.argsort(sims)[::-1][:top_k]
@@ -409,17 +407,6 @@ def get_recommendations(library_id, borrowing_history):
         info["category_rank"] = rank
         rank += 1
         top_picks.append(info)
-
-    # New Books
-    min_year = current_year - config.NEW_BOOK_MAX_AGE_YEARS
-    new_books = []
-    for i, info in enumerate(pool):
-        year = info.get("publication_year")
-        if year and min_year <= year <= current_year:
-            new_books.append((i, info))
-
-    new_books.sort(key=lambda x: -x[1].get("publication_year", 0))
-    new_books = new_books[:config.TOP_CANDIDATES]
 
     # Per-query carousels
     per_query_carousels = []
@@ -451,14 +438,6 @@ def get_recommendations(library_id, borrowing_history):
 
     carousels.append({"name": "Top Picks", "books": top_picks,
                        "description": "Best matches across all borrowed books"})
-
-    if new_books:
-        new_list = []
-        for idx, info in new_books:
-            r = dict(info)
-            r["score"] = float(sims[idx])
-            new_list.append(r)
-        carousels.append({"name": "New Books", "books": new_list})
 
     carousels.extend(per_query_carousels)
 
