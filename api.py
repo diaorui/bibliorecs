@@ -364,7 +364,8 @@ def fetch_novelist(library_id, metadata_id):
         rid = item.get("id")
         if not rid or rid not in eb:
             continue
-        bi = eb[rid].get("briefInfo", {})
+        bib = eb[rid]
+        bi = bib.get("briefInfo", {})
         if not bi:
             continue
         lang = (bi.get("primaryLanguage") or "").lower()
@@ -375,7 +376,10 @@ def fetch_novelist(library_id, metadata_id):
             continue
         if not bi.get("isbns"):
             continue
-        results.append(extract_book_info(rid, eb[rid]))
+        a = bib.get("availability", {})
+        if a.get("status") == "ON_ORDER" or a.get("circulationType") == "NON_CIRCULATING":
+            continue
+        results.append(extract_book_info(rid, bib))
     return results
 
 
