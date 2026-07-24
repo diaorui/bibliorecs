@@ -157,7 +157,7 @@ function selectBranch(libId, branchCode) {
   var __holdsByMid = {};
   var __checkedOutByMe = new Set();
 
-  function renderCarousels(carousels) {
+  function renderCarousels(carousels, hasProfile) {
     skeleton.style.display = 'none';
     var html = '<h1 class="page-title">Your Recommendations</h1>';
 
@@ -188,8 +188,13 @@ function selectBranch(libId, branchCode) {
     });
 
     if (!carousels.length) {
-      html += '<div class="empty-state"><h2>No recommendations yet</h2>'
-        + '<p>Visit the <a href="/history">History</a> page to sync your borrowing history.</p></div>';
+      var msg;
+      if (hasProfile === false) {
+        msg = 'Visit the <a href="/history">History</a> page to sync your borrowing history.';
+      } else {
+        msg = 'Not enough books match your reading history. Borrow more to get better recommendations.';
+      }
+      html += '<div class="empty-state"><h2>No recommendations yet</h2><p>' + msg + '</p></div>';
     }
 
     container.innerHTML = html;
@@ -217,7 +222,7 @@ function selectBranch(libId, branchCode) {
     })
       .then(function(r) { return r.json(); })
       .then(function(data) {
-        renderCarousels(data.carousels || []);
+        renderCarousels(data.carousels || [], data.has_profile);
         applyButtonStates();
         revealButtons();
         document.querySelectorAll('img.cover-img').forEach(function(img) {
