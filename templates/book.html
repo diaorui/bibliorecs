@@ -169,7 +169,7 @@ function renderBook(data) {
     var s = Math.round(avg / 20);
     var stars = '';
     for (var ri = 0; ri < 5; ri++) stars += ri < s ? '★' : '☆';
-    parts.push(stars + ' (' + cnt + ')');
+    parts.push(stars + ' (' + cnt.toLocaleString() + ' ratings)');
   }
   if (parts.length) {
     metaEl.innerHTML = parts.map(function(p) { return '<span>' + p + '</span>'; }).join('');
