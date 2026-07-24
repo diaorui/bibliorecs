@@ -200,7 +200,15 @@ function selectBranch(libId, branchCode) {
     var creds = getCreds();
     var libCreds = creds[libId];
     var history = [];
-    try { history = JSON.parse(localStorage.getItem('bibliorecs_history_' + libId)) || []; } catch(e) {}
+    try {
+      var prefix = 'bibliorecs_history_';
+      Object.keys(localStorage).forEach(function(k) {
+        if (k.startsWith(prefix)) {
+          var h = JSON.parse(localStorage.getItem(k)) || [];
+          history = history.concat(h);
+        }
+      });
+    } catch(e) {}
 
     fetch('/api/recommendations', {
       method: 'POST',

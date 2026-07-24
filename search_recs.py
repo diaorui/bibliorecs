@@ -358,7 +358,7 @@ def get_recommendations(library_id, borrowing_history):
                 if any(i in borrowed_isbns for i in info_isbns):
                     continue
                 with pool_lock:
-                    if mid not in pool_mids:
+                    if mid not in pool_mids and not any(i in pool_isbns for i in info_isbns):
                         pool_mids.add(mid)
                         for i_isbn in info_isbns:
                             pool_isbns.add(i_isbn)
