@@ -345,6 +345,40 @@ def fetch_bib_by_isbn(library_id, isbn):
         return None
 
 
+def fetch_novelist(library_id, metadata_id):
+    cfg = _lib_cfg(library_id)
+    url = f"{cfg['gateway_base']}/bibs/{metadata_id}/discovery?locale=en-US"
+    headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read().decode())
+    except Exception:
+        return []
+
+    results = []
+    eb = data.get("entities", {}).get("bibs", {})
+    for item in data.get("recommendations", {}).get("items", []):
+        if item.get("providerName") != "NOVELIST":
+            continue
+        rid = item.get("id")
+        if not rid or rid not in eb:
+            continue
+        bi = eb[rid].get("briefInfo", {})
+        if not bi:
+            continue
+        lang = (bi.get("primaryLanguage") or "").lower()
+        if lang and lang != "eng":
+            continue
+        super_fmts = bi.get("superFormats", [])
+        if "BOOKS" not in super_fmts or "ELECTRONIC_FORMATS" in super_fmts:
+            continue
+        if not bi.get("isbns"):
+            continue
+        results.append(extract_book_info(rid, eb[rid]))
+    return results
+
+
 def proxy_cancel_hold(library_id, bc_token, session_id, account_id, hold_id, metadata_id):
     return _gateway_delete(library_id, "/holds", bc_token, session_id, {
         "accountId": account_id,

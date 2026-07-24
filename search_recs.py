@@ -340,29 +340,57 @@ def get_recommendations(library_id, borrowing_history):
 
     formats = _discover_physical_formats(library_id)
 
+    # Select diverse seeds for NOVELIST discovery via MMR
+    sim_matrix = emb_norm @ emb_norm.T
+    np.clip(sim_matrix, 0, 1, out=sim_matrix)
+    seed_indices = _mmr(weights, sim_matrix, 0.5, min(config.DISCOVERY_SEEDS, len(books)))
+
     pool = []
     pool_mids = set()
     pool_isbns = set()
     query_to_results = defaultdict(list)
+    pool_lock = threading.Lock()
+
+    def _add_to_pool(info):
+        mid = info["metadata_id"]
+        if mid in borrowed_mids:
+            return
+        info_isbns = json.loads(info.get("isbns") or "[]")
+        if any(i in borrowed_isbns for i in info_isbns):
+            return
+        with pool_lock:
+            if mid not in pool_mids and not any(i in pool_isbns for i in info_isbns):
+                pool_mids.add(mid)
+                for i_isbn in info_isbns:
+                    pool_isbns.add(i_isbn)
+                pool.append(info)
+                return True
+        return False
+
+    def _do_discovery(metadata_id):
+        try:
+            results = api.fetch_novelist(library_id, metadata_id)
+            added = 0
+            for info in results:
+                if _add_to_pool(info):
+                    added += 1
+            return added
+        except Exception:
+            return 0
 
     with ThreadPoolExecutor(max_workers=10) as executor:
-        futures = {executor.submit(_search_one, q, library_id, formats): q
-                   for _, _, q in fmt_queries}
-        for fut in as_completed(futures):
-            results, query = fut.result()
-            for info in results:
-                mid = info["metadata_id"]
-                if mid in borrowed_mids:
-                    continue
-                info_isbns = json.loads(info.get("isbns") or "[]")
-                if any(i in borrowed_isbns for i in info_isbns):
-                    continue
-                with pool_lock:
-                    if mid not in pool_mids and not any(i in pool_isbns for i in info_isbns):
-                        pool_mids.add(mid)
-                        for i_isbn in info_isbns:
-                            pool_isbns.add(i_isbn)
-                        pool.append(info)
+        search_futs = {executor.submit(_search_one, q, library_id, formats): q
+                       for _, _, q in fmt_queries}
+        discovery_futs = {executor.submit(_do_discovery, books[i]["metadata_id"]): i
+                          for i in seed_indices}
+
+        all_futs = list(search_futs.keys()) + list(discovery_futs.keys())
+
+        for fut in as_completed(all_futs):
+            if fut in search_futs:
+                results, query = fut.result()
+                for info in results:
+                    if _add_to_pool(info):
                         query_to_results[query].append(info)
 
     if not pool:
