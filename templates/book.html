@@ -115,10 +115,10 @@ function _dedup(arr) {
 }
 
 function _star(fill) {
-  if (fill === 1) return '<span style="color:#f59e0b">★</span>';
-  if (fill === 0) return '<span style="color:#d1d5db">★</span>';
-  return '<span style="position:relative;display:inline-block">' +
-    '<span style="color:#d1d5db">★</span>' +
+  if (fill === 1) return '<span style="color:#f59e0b;vertical-align:top">★</span>';
+  if (fill === 0) return '<span style="color:#d1d5db;vertical-align:top">★</span>';
+  return '<span style="position:relative;display:inline-block;vertical-align:top;width:1em;height:1em">' +
+    '<span style="color:#d1d5db;position:absolute;left:0;top:0">★</span>' +
     '<span style="color:#f59e0b;position:absolute;left:0;top:0;overflow:hidden;width:50%">★</span>' +
     '</span>';
 }
