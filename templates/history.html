@@ -11,10 +11,6 @@
   <canvas id="history-chart"></canvas>
 </div>
 
-<div id="cat-chart-section" class="section chart-section" style="display:none">
-  <h2 class="section-title">Borrows by Category</h2>
-  <canvas id="history-cat-chart"></canvas>
-</div>
 
 <div id="history-content">
   <div class="section" id="section-current" style="display:none"></div>
@@ -115,7 +111,7 @@
     } catch(e) { return null; }
   }
 
-  function computeCharts(allEntries, allBibs, pastItems) {
+  function computeCharts(allEntries, allBibs) {
     // Monthly borrow chart
     var dateCounts = {};
     Object.keys(allEntries).forEach(function(k) {
@@ -131,53 +127,17 @@
 
     var chartData = [];
     var cumulative = 0;
+    var monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     months.forEach(function(m) {
       cumulative += dateCounts[m];
-      chartData.push({m: m, b: dateCounts[m], c: cumulative});
+      var parts = m.split('-');
+      var label = monthNames[parseInt(parts[1], 10) - 1];
+      var currentYear = new Date().getFullYear().toString();
+      if (parts[0] !== currentYear) label += " '" + parts[0].slice(2);
+      chartData.push({m: label, b: dateCounts[m], c: cumulative});
     });
 
     drawChart(chartData);
-
-    // Category chart from bib data
-    var catCounts = {};
-    var formatMap = {
-      'GRAPHIC_NOVEL': 'Graphic Novels',
-      'PICTURE_BOOK': 'Picture Books',
-      'BOARD_BK': 'Picture Books',
-      'EASY_READER': 'Easy Readers',
-    };
-
-    Object.keys(allEntries).forEach(function(k) {
-      var entry = allEntries[k];
-      var bib = (allBibs[entry.metadataId] || {}).briefInfo || {};
-      if (!bib) return;
-      var format = bib.format || '';
-      if (formatMap[format]) {
-        catCounts[formatMap[format]] = (catCounts[formatMap[format]] || 0) + 1;
-      } else {
-        catCounts['Other'] = (catCounts['Other'] || 0) + 1;
-      }
-    });
-
-    // Also count from past items
-    pastItems.forEach(function(item) {
-      var format = item._format || '';
-      if (formatMap[format]) {
-        catCounts[formatMap[format]] = (catCounts[formatMap[format]] || 0) + 1;
-      } else {
-        catCounts['Other'] = (catCounts['Other'] || 0) + 1;
-      }
-    });
-
-    var catData = Object.keys(catCounts).map(function(label) {
-      return {label: label, count: catCounts[label]};
-    }).sort(function(a, b) {
-      if (a.label === 'Other') return 1;
-      if (b.label === 'Other') return -1;
-      return b.count - a.count;
-    });
-
-    if (catData.length) drawCatBars(catData);
   }
 
   function drawChart(months) {
@@ -294,81 +254,6 @@
     var step = Math.max(1, Math.ceil((maxLabelW + 6) / (plotW / n)));
     for (var i = 0; i < n; i += step) {
       ctx.fillText(months[i].m, xPos(i), PAD.top + plotH + 6);
-    }
-  }
-
-  function drawCatBars(catData) {
-    var canvas = document.getElementById('history-cat-chart');
-    if (!canvas || !catData.length) return;
-    document.getElementById('cat-chart-section').style.display = '';
-
-    var wrap = canvas.parentElement;
-    var dpr = window.devicePixelRatio || 1;
-    var W = wrap.clientWidth;
-    var H = Math.max(100, catData.length * 28 + 20);
-    canvas.width = W * dpr;
-    canvas.height = H * dpr;
-    canvas.style.width = W + 'px';
-    canvas.style.height = H + 'px';
-
-    var ctx = canvas.getContext('2d');
-    ctx.scale(dpr, dpr);
-
-    var maxVal = 0;
-    catData.forEach(function(it) { if (it.count > maxVal) maxVal = it.count; });
-    if (maxVal === 0) return;
-
-    var maxLabelW = 0;
-    ctx.font = '12px -apple-system, sans-serif';
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'middle';
-    catData.forEach(function(it) {
-      var w = ctx.measureText(it.label).width;
-      if (w > maxLabelW) maxLabelW = w;
-    });
-
-    var padL = maxLabelW + 14;
-    var padR = 56;
-    var barL = padL;
-    var barR = W - padR;
-    var barArea = barR - barL;
-    var rowH = Math.min(20, (H - 20) / catData.length);
-    var gap = (H - 20 - rowH * catData.length) / (catData.length - 1) || 0;
-
-    ctx.clearRect(0, 0, W, H);
-
-    ctx.textBaseline = 'middle';
-    for (var i = 0; i < catData.length; i++) {
-      var y = 10 + i * (rowH + gap) + rowH / 2;
-      var barW = (catData[i].count / maxVal) * barArea;
-
-      ctx.fillStyle = '#515154';
-      ctx.font = '12px -apple-system, sans-serif';
-      ctx.textAlign = 'right';
-      ctx.fillText(catData[i].label, padL - 8, y);
-
-      ctx.fillStyle = '#c7d2fe';
-      ctx.beginPath();
-      var bx = barL;
-      var by = y - rowH / 2;
-      var bw = Math.max(barW, 2);
-      var br = Math.min(rowH / 2, 4);
-      ctx.moveTo(bx + br, by);
-      ctx.lineTo(bx + bw - br, by);
-      ctx.quadraticCurveTo(bx + bw, by, bx + bw, by + br);
-      ctx.lineTo(bx + bw, by + rowH - br);
-      ctx.quadraticCurveTo(bx + bw, by + rowH, bx + bw - br, by + rowH);
-      ctx.lineTo(bx + br, by + rowH);
-      ctx.quadraticCurveTo(bx, by + rowH, bx, by + rowH - br);
-      ctx.lineTo(bx, by + br);
-      ctx.quadraticCurveTo(bx, by, bx + br, by);
-      ctx.closePath();
-      ctx.fill();
-
-      ctx.fillStyle = '#86868b';
-      ctx.font = '12px -apple-system, sans-serif';
-      ctx.textAlign = 'left';
-      ctx.fillText(catData[i].count.toLocaleString(), barR + 8, y);
     }
   }
 
@@ -520,7 +405,7 @@
       });
 
       // Compute charts client-side
-      computeCharts(allEntries, allBibs, renderData.past);
+      computeCharts(allEntries, allBibs);
 
       hideIndicator();
       setIndicator('\u2713 Updated (' + renderData.past.length + ' items)', 'sync-done');
@@ -536,8 +421,6 @@
   var onResize = function() {
     var canvas = document.getElementById('history-chart');
     if (canvas && canvas.chartData) drawChart(canvas.chartData);
-    var catCanvas = document.getElementById('history-cat-chart');
-    if (catCanvas && catCanvas.catData) drawCatBars(catCanvas.catData);
   };
   window.addEventListener('resize', function() {
     clearTimeout(resizeTimer);
