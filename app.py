@@ -619,7 +619,7 @@ def inject_globals():
         "selected_library_name": lib_name,
         "selected_branch_name": branch_name,
         "libraries": config.LIBRARIES,
-        "branches": branches,
+        "branches": _BRANCHES,
     }
 
 
