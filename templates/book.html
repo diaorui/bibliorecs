@@ -21,7 +21,6 @@
     <p class="description" id="book-description" style="display:none"></p>
     <div class="tag-section" id="book-subjects" style="display:none"></div>
     <div class="tag-section genre-section" id="book-genres" style="display:none"></div>
-    <a id="book-catalog-link" href="{{ catalog_url }}" class="btn btn-primary" style="display:none" target="_blank" rel="noopener">Open in Catalog</a>
   </div>
 </div>
 
@@ -194,9 +193,6 @@ function renderBook(data) {
       genresEl.style.display = '';
     }
   }
-
-  document.getElementById('book-catalog-link').style.display = '';
-}
 
 // Async fetch full data
 if (isbn) {
