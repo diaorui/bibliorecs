@@ -218,6 +218,11 @@ function selectBranch(libId, branchCode) {
       .then(function(r) { return r.json(); })
       .then(function(data) {
         renderCarousels(data.carousels || []);
+        applyButtonStates();
+        revealButtons();
+        document.querySelectorAll('img.cover-img').forEach(function(img) {
+          if (typeof initCoverFallback === 'function') initCoverFallback(img);
+        });
       })
       .catch(function() {
         showToast('Could not load recommendations', 6000);
@@ -316,7 +321,6 @@ function selectBranch(libId, branchCode) {
     ]).then(function(results) {
       var holdsData = results[0];
       var checkoutsData = results[1];
-      // Proxy returns raw BC data: entities.holds = {id: hold}, entities.checkouts = {id: checkout}
       var holdsObj = (holdsData.entities || {}).holds || {};
       Object.keys(holdsObj).forEach(function(k) {
         var h = holdsObj[k];
@@ -330,14 +334,9 @@ function selectBranch(libId, branchCode) {
       applyButtonStates();
       revealButtons();
       document.querySelectorAll('img.cover-img').forEach(function(img) {
-        initCoverFallback(img);
+        if (typeof initCoverFallback === 'function') initCoverFallback(img);
       });
-    }).catch(function() {
-      revealButtons();
-      document.querySelectorAll('img.cover-img').forEach(function(img) {
-        initCoverFallback(img);
-      });
-    });
+    }).catch(function() {});
   }
 
   function revealButtons() {
