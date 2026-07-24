@@ -14,6 +14,10 @@ import search_recs
 app = Flask(__name__)
 app.config["DEBUG_MODE"] = "--debug" in sys.argv or os.environ.get("BIBLIORECS_DEBUG") == "1"
 
+_BRANCHES = {}
+for lid, cfg in config.LIBRARIES.items():
+    _BRANCHES[lid] = api.fetch_branches(cfg["gateway_base"])
+
 OL_URL = "https://covers.openlibrary.org/b/isbn/{isbn}-{size}.jpg"
 PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='180' viewBox='0 0 120 180'%3E%3Crect width='120' height='180' fill='%23e8e8ed' rx='4'/%3E%3Cpath d='M45 55v70l15-8 15 8V55z' fill='%2386868b' opacity='.4'/%3E%3Crect x='48' y='65' width='24' height='2' fill='%2386868b' opacity='.3'/%3E%3C/svg%3E"
 
@@ -144,14 +148,10 @@ def api_bib(metadata_id):
 def api_branches():
     result = {}
     for lib_id, cfg in config.LIBRARIES.items():
-        try:
-            branches = api.fetch_branches(cfg["gateway_base"])
-        except Exception:
-            branches = []
         result[lib_id] = {
             "catalog_base": cfg["catalog_base"],
             "syndetics_client": cfg["syndetics_client"],
-            "branches": branches,
+            "branches": _BRANCHES.get(lib_id, []),
         }
     return jsonify(result)
 
@@ -605,15 +605,9 @@ def _fmt_rec(r, syndetics_client, library_id=None):
 def inject_globals():
     lib_id = request.cookies.get("selected_library") or ""
     branch_code = request.cookies.get("selected_branch") or ""
-    branches = {}
-    for lid, cfg in config.LIBRARIES.items():
-        try:
-            branches[lid] = api.fetch_branches(cfg["gateway_base"])
-        except Exception:
-            branches[lid] = []
     branch_name = ""
-    if lib_id in branches:
-        for b in branches[lib_id]:
+    if lib_id in _BRANCHES:
+        for b in _BRANCHES[lib_id]:
             if b["code"] == branch_code:
                 branch_name = b["name"]
                 break
