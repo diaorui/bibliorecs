@@ -161,7 +161,7 @@ function selectBranch(libId, branchCode) {
     skeleton.style.display = 'none';
     var html = '<h1 class="page-title">Your Recommendations</h1>';
 
-    carousels.forEach(function(carousel) {
+      carousels.forEach(function(carousel) {
       html += '<section class="carousel-section" data-category="' + carousel.name + '">'
         + '<h2 class="carousel-heading">' + carousel.name + '</h2>';
       if (carousel.description) {
@@ -169,13 +169,10 @@ function selectBranch(libId, branchCode) {
       }
       html += '<div class="carousel-track">';
       carousel.books.forEach(function(r) {
-        var showCat = carousel.name === 'Top Picks' || carousel.name === 'New';
-        var catLabel = showCat ? '<div class="carousel-cat-label">' + (r.book_category || '') + '</div>' : '';
         var subtitle = r.subtitle ? '<span class="carousel-subtitle">' + r.subtitle + '</span>' : '';
         html += '<div class="carousel-card" data-mid="' + r.metadata_id + '">'
-          + '<a href="/book/' + r.metadata_id + '" class="carousel-card-link">'
+          + '<a href="/book/' + r.metadata_id + '?isbn=' + (r.isbn || '') + '" class="carousel-card-link">'
           + '<div class="carousel-cover-wrap">'
-          + catLabel
           + '<img class="carousel-cover cover-img" src="' + r.img_url + '" alt="' + r.title + '" loading="lazy" data-fallback="' + r.fallback_url + '" data-isbn="' + (r.isbn || '') + '">'
           + '<div class="cover-placeholder">📖<br>' + (r.title ? r.title.slice(0, 30) : '') + '</div>'
           + '</div>'
@@ -192,7 +189,7 @@ function selectBranch(libId, branchCode) {
 
     if (!carousels.length) {
       html += '<div class="empty-state"><h2>No recommendations yet</h2>'
-        + '<p>Sync borrowing history first by running <code>python daily.py</code>.</p></div>';
+        + '<p>Visit the <a href="/history">History</a> page to sync your borrowing history.</p></div>';
     }
 
     container.innerHTML = html;

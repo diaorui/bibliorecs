@@ -1,7 +1,3 @@
-import os
-
-_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-
 LIBRARIES = {
     "sclibrary": {
         "name": "Santa Clara City Library",
@@ -35,18 +31,14 @@ LIBRARIES = {
     },
 }
 
-EMBEDDING_MODEL = "sentence-transformers/static-retrieval-mrl-en-v1"
-EMBEDDING_PATH = os.path.join(_SCRIPT_DIR, "embeddings.npy")
-EMBEDDING_IDS_PATH = os.path.join(_SCRIPT_DIR, "embedding_ids.json")
-
-TIME_DECAY_HALF_LIFE_DAYS = 90
+HALF_LIFE_DAYS = 90
+MAX_SEARCH_QUERIES = 10
+POOL_LIMIT = 100
 TOP_CANDIDATES = 15
 MMR_LAMBDA = 0.5
 MMR_TOP_K = 100
-FILTER_ENGLISH = True
-NEW_BOOK_MAX_AGE_YEARS = 1
+RECS_PER_CAROUSEL = 15
 
+NEW_BOOK_MAX_AGE_YEARS = 1
 UPDATE_WINDOW_START = 2
 UPDATE_WINDOW_END = 4
-AUTO_RENEW_DAYS_BEFORE_DUE = 3
-DEACTIVATE_MAX_RATIO = 0.2

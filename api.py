@@ -12,7 +12,7 @@ def _lib_cfg(library_id):
     return config.LIBRARIES[library_id]
 
 
-def search_bibs_json(query, library_id, formats=None, f_circ=None,
+def search_bibs_json(query, library_id, formats=None, f_circ=None, f_lang=None,
                      search_type="bl", page=1, sort=None, retries=3, limit=100):
     cfg = _lib_cfg(library_id)
     gateway_base = cfg["gateway_base"]
@@ -29,6 +29,8 @@ def search_bibs_json(query, library_id, formats=None, f_circ=None,
         body["f_FORMAT"] = "|".join(formats)
     if f_circ:
         body["f_CIRC"] = f_circ
+    if f_lang:
+        body["f_PRIMARY_LANGUAGE"] = f_lang
     if sort:
         body["sort"] = sort
     if limit:
@@ -323,6 +325,24 @@ def proxy_place_hold(library_id, bc_token, session_id, account_id, metadata_id, 
             "errorMessageLocale": "en-US",
         },
     })
+
+
+def proxy_fetch_bib(library_id, bc_token, session_id, metadata_id):
+    return _gateway_get(library_id, f"/bibs/{metadata_id}", bc_token, session_id)
+
+
+def fetch_bib_by_isbn(library_id, isbn):
+    try:
+        data = search_bibs_json(isbn, library_id, formats=None, limit=5)
+        bibs = parse_bib_entities(data)
+        for mid, bib in bibs.items():
+            bi = bib.get("briefInfo", {})
+            if isbn in (bi.get("isbns") or []):
+                return extract_book_info(mid, bib)
+        for mid, bib in bibs.items():
+            return extract_book_info(mid, bib)
+    except Exception:
+        return None
 
 
 def proxy_cancel_hold(library_id, bc_token, session_id, account_id, hold_id, metadata_id):

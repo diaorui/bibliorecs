@@ -72,45 +72,9 @@
     <div id="creds-form-status" style="display:none;margin-top:8px;font-size:0.85rem"></div>
   </div>
 </div>
-<div class="section" style="margin-top:2rem">
-  <h2 class="section-title">Auto-Update</h2>
-  <table>
-    <thead><tr><th>Task</th><th>Schedule</th><th>Last Run</th><th>Duration</th><th>State</th><th></th></tr></thead>
-    <tbody>
-      {% for task, label, schedule, api in [
-        ('daily', 'Daily', 'every day', '/api/update'),
-      ] %}
-      {% set t = update_status.get(task, {}) %}
-      <tr>
-        <td><strong>{{ label }}</strong></td>
-        <td style="font-size:0.82rem;color:#86868b">{{ schedule }}</td>
-        <td>{% set ts = t.get('last_ok') or t.get('last_run') %}{% if ts %}<time class="local-time" datetime="{{ ts }}">{{ ts }}</time>{% else %}never{% endif %}</td>
-        <td>{{ t.get('duration_sec') | duration_format }}</td>
-        <td>{{ t.get('state', '—') }}{% if t.get('error') %} — {{ t.error }}{% endif %}</td>
-        <td><button onclick="triggerNamed(this, '{{ api }}')" style="padding:2px 8px;font-size:0.75rem;border-radius:5px;border:1px solid #2563eb;background:#fff;color:#2563eb;cursor:pointer;font-weight:500">Run</button></td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  <p style="font-size:0.82rem;color:#86868b;margin-top:8px">
-    {% if update_status.now == 'idle' %}
-      Idle. Next window: {{ update_window_start }}:00–{{ update_window_end }}:00
-    {% else %}
-      <strong style="color:#2563eb">{{ update_status.now }}</strong>
-      <button onclick="triggerStop(this)"
-        style="margin-left:10px;padding:4px 10px;font-size:0.78rem;border-radius:6px;border:1px solid #dc2626;background:#fff;color:#dc2626;cursor:pointer;font-weight:500;vertical-align:middle">Stop</button>
-    {% endif %}
-  </p>
-</div>
-
-<div class="section" style="margin-top:2rem">
-  <h2 class="section-title">Server</h2>
-  <button onclick="restartServer()" class="btn btn-restart" style="background:#dc2626;color:#fff;border:none;padding:8px 16px;border-radius:6px;font-size:0.9rem;cursor:pointer">Restart Server</button>
-</div>
 
 <div class="section" style="margin-top:2rem">
   <h2 class="section-title section-title-danger">Danger Zone</h2>
-
   <button class="btn btn-danger" onclick="resetOnboarding()">Reset Onboarding</button>
   <p class="section-desc" style="margin-top:4px">Clears your library and branch selection, then restarts the setup process.</p>
 </div>
@@ -192,43 +156,12 @@ function selectBranch(libId, branchCode) {
 
 function resetOnboarding() {
   if (!confirm('Reset your library and branch selection? You will need to set them again.')) return;
-  // Clear all localStorage data
   Object.keys(localStorage).forEach(function(k) {
     if (k.startsWith('bibliorecs_')) localStorage.removeItem(k);
   });
-  fetch('/api/reset-onboarding', { method: 'POST' })
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-      if (data.success) location.href = '/';
-    });
-}
-
-function triggerNamed(btn, url) {
-  btn.textContent = 'Running...';
-  btn.disabled = true;
-  fetch(url, { method: 'POST' }).then(function(r) { return r.json(); }).then(function(d) {
-    if (d.success) { btn.textContent = 'Done'; setTimeout(function() { location.reload(); }, 2000); }
-    else { btn.textContent = 'Failed'; btn.disabled = false; }
-  }).catch(function() { btn.textContent = 'Error'; btn.disabled = false; });
-}
-
-function triggerStop(btn) {
-  btn.textContent = 'Stopping...';
-  btn.disabled = true;
-  fetch('/api/stop-update', { method: 'POST' }).then(function(r) { return r.json(); }).then(function(d) {
-    if (d.success) location.reload();
-    else { btn.textContent = 'Failed'; btn.disabled = false; }
-  }).catch(function() { btn.textContent = 'Error'; btn.disabled = false; });
-}
-
-function restartServer() {
-  if (!confirm('Restart the server now?')) return;
-  var btns = document.querySelectorAll('.btn-restart');
-  btns.forEach(function(b) { b.textContent = 'Restarting...'; b.disabled = true; });
-  fetch('/api/restart', { method: 'POST' }).then(function() {
-    showToast('Server restarting...', 4000);
-    setTimeout(function() { location.reload(); }, 3000);
-  });
+  document.cookie = 'selected_library=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+  document.cookie = 'selected_branch=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+  location.href = '/';
 }
 
 // ── creds management (localStorage) ──

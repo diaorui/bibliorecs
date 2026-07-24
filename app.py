@@ -2,28 +2,27 @@ import json
 import os
 import sys
 import re
-import time
-import urllib.error
 import urllib.request
 import urllib.parse
-from collections import defaultdict
-from datetime import date, datetime
 
-from flask import Flask, render_template, abort, jsonify, request, redirect
+from flask import Flask, render_template, jsonify, request
 import api
 import config
-import db
-import updater
-import recommend as recmod
-book_category = recmod.book_category
-
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+import search_recs
 
 app = Flask(__name__)
 app.config["DEBUG_MODE"] = "--debug" in sys.argv or os.environ.get("BIBLIORECS_DEBUG") == "1"
 
 OL_URL = "https://covers.openlibrary.org/b/isbn/{isbn}-{size}.jpg"
 PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='180' viewBox='0 0 120 180'%3E%3Crect width='120' height='180' fill='%23e8e8ed' rx='4'/%3E%3Cpath d='M45 55v70l15-8 15 8V55z' fill='%2386868b' opacity='.4'/%3E%3Crect x='48' y='65' width='24' height='2' fill='%2386868b' opacity='.3'/%3E%3C/svg%3E"
+
+
+def _lib_from_cookies():
+    lib = request.cookies.get("selected_library") or ""
+    branch = request.cookies.get("selected_branch") or ""
+    if lib not in config.LIBRARIES:
+        return "", branch, None
+    return lib, branch, config.LIBRARIES[lib]
 
 
 def _first_isbn(isbns_json):
@@ -34,18 +33,6 @@ def _first_isbn(isbns_json):
         return lst[0] if lst else None
     except (json.JSONDecodeError, TypeError, IndexError):
         return None
-
-
-def _lib_from_cookies():
-    conn = db.get_conn()
-    try:
-        lib = request.cookies.get("selected_library")
-        branch = request.cookies.get("selected_branch") or ""
-        if lib not in config.LIBRARIES or not db.validate_branch(conn, lib, branch):
-            return None, None, None
-        return lib, branch, config.LIBRARIES[lib]
-    finally:
-        conn.close()
 
 
 def _syn_url(isbn, size, syndetics_client):
@@ -93,112 +80,53 @@ def api_recommendations():
         return jsonify({"carousels": [], "has_profile": False})
 
     borrowing_history = body.get("borrowing_history", [])
-    conn = db.get_conn()
+
     try:
-        recs = recmod.get_recommendations(conn, lib_id, borrowing_history=borrowing_history)
-        by_cat = recs["by_cat"]
-        has_profile = recs["has_profile"]
+        result = search_recs.get_recommendations(lib_id, borrowing_history)
+        carousels = result.get("carousels", [])
+        has_profile = result.get("has_profile", False)
 
-        if not by_cat:
-            return jsonify({"carousels": [], "has_profile": has_profile})
-
-        for items in by_cat.values():
-            for r in items:
-                _fmt_rec(r, lib_cfg["syndetics_client"], lib_id)
-
-        # Category ordering from borrowing history
-        cat_counts = defaultdict(float)
-        if borrowing_history:
-            mids = [b["metadata_id"] for b in borrowing_history if b.get("metadata_id")]
-            placeholders = ",".join("?" for _ in mids)
-            if mids:
-                for row in conn.execute(f"""
-                    SELECT call_number, format, content_type, genres
-                    FROM books_in_library
-                    WHERE metadata_id IN ({placeholders})
-                """, mids).fetchall():
-                    cat = recmod.book_category(row["call_number"], lib_id,
-                                                  json.loads(row["genres"]) if row["genres"] else None,
-                                                  books_format=row["format"],
-                                                  content_type=row["content_type"])
-                    cat_counts[cat] += 1
-
-        cat_order = sorted(
-            (c for c in by_cat if c != "Other" and c != "Top Picks" and c != "New"),
-            key=lambda c: (-cat_counts.get(c, 0), -sum(r["score"] for r in by_cat[c]) / len(by_cat[c])),
-        )
-        if "Other" in by_cat:
-            cat_order.append("Other")
-
-        ROW_DESCRIPTIONS = {
-            "Top Picks": "Best matches across all categories",
-            "Graphic Novels": "Comics and illustrated stories",
-            "Picture Books": "Stories told with full-page art",
-            "Easy Readers": "Beginning and early chapter books",
-            "Fiction": "Chapter books and novels",
-            "Science": "Animals, space, earth & experiments",
-            "History": "Countries, places & the past",
-            "Technology": "Vehicles, pets, cooking & the human body",
-            "Arts & Recreation": "Sports, drawing, crafts, games & music",
-            "Social Sciences": "Folktales, holidays & how we live together",
-            "Other": "Poetry, languages, coding & more",
-        }
-
-        new_year_cutoff = date.today().year - config.NEW_BOOK_MAX_AGE_YEARS
-        new_desc = f"Published {new_year_cutoff}–{date.today().year}"
-
-        carousels = []
-        if "Top Picks" in by_cat:
-            carousels.append({"name": "Top Picks", "books": by_cat["Top Picks"],
-                              "description": ROW_DESCRIPTIONS["Top Picks"]})
-        if "New" in by_cat:
-            carousels.append({"name": "New", "books": by_cat["New"],
-                              "description": new_desc})
-        for c in cat_order:
-            entry = {"name": c, "books": by_cat[c]}
-            if c in ROW_DESCRIPTIONS:
-                entry["description"] = ROW_DESCRIPTIONS[c]
-            carousels.append(entry)
+        syndetics = lib_cfg["syndetics_client"]
+        for carousel in carousels:
+            for r in carousel.get("books", []):
+                _fmt_rec(r, syndetics, lib_id)
 
         return jsonify({"carousels": carousels, "has_profile": has_profile})
-    finally:
-        conn.close()
+    except Exception as e:
+        if app.config.get("DEBUG_MODE"):
+            raise
+        return jsonify({"carousels": [], "has_profile": False})
 
 
 @app.route("/book/<metadata_id>")
 def book_detail(metadata_id):
-    conn = db.get_conn()
     lib_id, branch_code, lib_cfg = _lib_from_cookies()
     if not lib_id:
-        conn.close()
         return render_template("not_found.html", metadata_id=metadata_id), 404
 
-    row = conn.execute("""
-        SELECT *
-        FROM books_in_library
-        WHERE metadata_id = ? AND library_id = ?
-    """, (metadata_id, lib_id)).fetchone()
-    if not row:
-        conn.close()
+    isbn = request.args.get("isbn") or ""
+
+    book_data = None
+    if isbn:
+        try:
+            book_data = api.fetch_bib_by_isbn(lib_id, isbn)
+        except Exception:
+            pass
+
+    if not book_data:
         return render_template("not_found.html", metadata_id=metadata_id,
                                selected_library=lib_id, selected_branch=branch_code), 404
-    book = dict(row)
+
+    book = dict(book_data)
     book["isbn"] = _first_isbn(book.get("isbns"))
     book["author"] = ", ".join(json.loads(book.get("authors") or "[]"))
 
-    borrows = conn.execute("""
-        SELECT * FROM borrow_events
-        WHERE metadata_id = ? AND library_id = ?
-        ORDER BY checkout_date DESC
-    """, (metadata_id, lib_id)).fetchall()
-
     img, fallback = _cover_large(book["isbn"], lib_cfg["syndetics_client"])
-    conn.close()
     return render_template(
         "book.html",
         metadata_id=metadata_id,
         book=book,
-        borrows=[dict(b) for b in borrows],
+        borrows=[],
         subjects=_json_list(book.get("subjects")),
         genres=_json_list(book.get("genres")),
         series=_json_list(book.get("series")),
@@ -213,21 +141,6 @@ def book_detail(metadata_id):
 
 @app.route("/api/branches")
 def api_branches():
-    conn = db.get_conn()
-    try:
-        rows = conn.execute("SELECT * FROM branches ORDER BY branch_name").fetchall()
-        result = {lib_id: {"catalog_base": cfg["catalog_base"],
-                           "syndetics_client": cfg["syndetics_client"],
-                           "branches": []}
-                  for lib_id, cfg in config.LIBRARIES.items()}
-        if rows:
-            for r in rows:
-                result[r["library_id"]]["branches"].append({"code": r["branch_code"], "name": r["branch_name"]})
-            return jsonify(result)
-    finally:
-        conn.close()
-
-    # Fallback: fetch from BC API directly
     result = {}
     for lib_id, cfg in config.LIBRARIES.items():
         try:
@@ -246,112 +159,13 @@ def api_branches():
 
 # ── misc ──
 
-@app.route("/api/restart", methods=["POST"])
-def api_restart():
-    def _do_restart():
-        import time, subprocess
-
-        time.sleep(0.5)
-
-        env = os.environ.copy()
-        env["BIBLIORECS_RESTARTING"] = "1"
-        subprocess.Popen(
-            [sys.executable, __file__] + sys.argv[1:],
-            cwd=SCRIPT_DIR,
-            start_new_session=True,
-            env=env,
-            stdout=open(os.devnull, 'w'),
-            stderr=open(os.devnull, 'w'),
-        )
-
-        time.sleep(2.5)
-        os._exit(0)
-
-    import threading
-    threading.Thread(target=_do_restart, daemon=True).start()
-    return jsonify({"ok": True})
-
-
 # ── sync history ──
 
 @app.route("/settings")
 def settings():
     lib_id, branch_code, lib_cfg = _lib_from_cookies()
-    if not lib_id:
-        lib_id = ""
     return render_template("settings.html",
-                           selected_library=lib_id, selected_branch=branch_code,
-                           update_status=updater.status(),
-                           update_window_start=config.UPDATE_WINDOW_START,
-                           update_window_end=config.UPDATE_WINDOW_END)
-
-
-@app.route("/api/reset-onboarding", methods=["POST"])
-def api_reset_onboarding():
-    conn = db.get_conn()
-    conn.execute("DELETE FROM borrow_events")
-    conn.commit()
-    conn.close()
-    resp = jsonify({"success": True})
-    resp.set_cookie("selected_library", "", expires=0, path="/")
-    resp.set_cookie("selected_branch", "", expires=0, path="/")
-    return resp
-
-
-@app.route("/api/history/chart-data")
-def api_history_chart_data():
-    conn = db.get_conn()
-    lib_id, _, _ = _lib_from_cookies()
-    try:
-        rows = conn.execute("""
-            SELECT strftime('%Y-%m', checkout_date) AS month,
-                   COUNT(*) AS borrowed
-            FROM borrow_events
-            WHERE checkout_date IS NOT NULL
-              AND source != 'checkout'
-              AND library_id = ?
-            GROUP BY month
-            ORDER BY month
-        """, (lib_id,)).fetchall()
-        cumulative = 0
-        result = []
-        for r in rows:
-            cumulative += r["borrowed"]
-            result.append({"m": r["month"], "b": r["borrowed"], "c": cumulative})
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({"error": str(e)})
-    finally:
-        conn.close()
-
-
-@app.route("/api/history/category-data")
-def api_history_category_data():
-    conn = db.get_conn()
-    lib_id, _, _ = _lib_from_cookies()
-    try:
-        rows = conn.execute("""
-            SELECT bk.call_number, bk.format, bk.content_type, bk.genres
-            FROM borrow_events be
-            LEFT JOIN books_in_library bk
-                ON bk.metadata_id = be.metadata_id AND bk.library_id = be.library_id
-            WHERE be.checkout_date IS NOT NULL
-              AND be.source != 'checkout'
-              AND be.library_id = ?
-        """, (lib_id,)).fetchall()
-        cat_counts = defaultdict(int)
-        for r in rows:
-            genres = json.loads(r["genres"]) if r["genres"] and r["genres"] != "[]" else None
-            cat_counts[book_category(r["call_number"], lib_id, genres=genres,
-                                       books_format=r["format"],
-                                       content_type=r["content_type"])] += 1
-        result = [{"label": k, "count": v}
-                  for k, v in sorted(cat_counts.items(), key=lambda x: (x[0] == "Other", -x[1]))]
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({"error": str(e)})
-    finally:
-        conn.close()
+                           selected_library=lib_id, selected_branch=branch_code)
 
 
 _ol_cover_cache = {}
@@ -388,93 +202,8 @@ def holds_page():
 
 @app.route("/history")
 def history():
-    conn = db.get_conn()
     lib_id, branch_code, lib_cfg = _lib_from_cookies()
-    syndetics = lib_cfg["syndetics_client"]
-
-    current = conn.execute("""
-        SELECT b.*, bk.title, bk.subtitle, bk.authors, bk.isbns, bk.metadata_id
-        FROM borrow_events b
-        LEFT JOIN books_in_library bk
-            ON bk.metadata_id = b.metadata_id AND bk.library_id = b.library_id
-        WHERE b.is_current = 1 AND b.library_id = ?
-        ORDER BY COALESCE(b.checkout_date, '9999-12-31') ASC
-    """, (lib_id,)).fetchall()
-
-    past = conn.execute("""
-        SELECT b.*, bk.title, bk.subtitle, bk.authors, bk.isbns, bk.metadata_id
-        FROM borrow_events b
-        LEFT JOIN books_in_library bk
-            ON bk.metadata_id = b.metadata_id AND bk.library_id = b.library_id
-        WHERE b.source = 'history' AND b.library_id = ?
-        ORDER BY b.checkout_date DESC
-    """, (lib_id,)).fetchall()
-
-    current_list = []
-    for c in current:
-        c = dict(c)
-        c["isbn"] = _first_isbn(c.get("isbns"))
-        c["author"] = ", ".join(json.loads(c.get("authors") or "[]"))
-        img, fallback = _cover(c["isbn"], syndetics)
-        c["img_url"] = img
-        c["fallback_url"] = fallback
-        current_list.append(c)
-
-    past_list = []
-    for p in past:
-        p = dict(p)
-        p["isbn"] = _first_isbn(p.get("isbns"))
-        p["author"] = ", ".join(json.loads(p.get("authors") or "[]"))
-        img, fallback = _cover(p["isbn"], syndetics)
-        p["img_url"] = img
-        p["fallback_url"] = fallback
-        past_list.append(p)
-
-    chart_data = conn.execute("""
-        SELECT strftime('%Y-%m', checkout_date) AS month,
-               COUNT(*) AS borrowed
-        FROM borrow_events
-        WHERE checkout_date IS NOT NULL
-          AND source != 'checkout'
-          AND library_id = ?
-        GROUP BY month
-        ORDER BY month
-    """, (lib_id,)).fetchall()
-
-    cumulative = 0
-    chart_months = []
-    for row in chart_data:
-        cumulative += row["borrowed"]
-        chart_months.append({
-            "m": row["month"],
-            "b": row["borrowed"],
-            "c": cumulative,
-        })
-
-    cat_rows = conn.execute("""
-        SELECT bk.call_number, bk.format, bk.content_type, bk.genres
-        FROM borrow_events be
-        LEFT JOIN books_in_library bk
-            ON bk.metadata_id = be.metadata_id AND bk.library_id = be.library_id
-        WHERE be.checkout_date IS NOT NULL
-          AND be.source != 'checkout'
-          AND be.library_id = ?
-    """, (lib_id,)).fetchall()
-    cat_counts = defaultdict(int)
-    for r in cat_rows:
-        genres = json.loads(r["genres"]) if r["genres"] and r["genres"] != "[]" else None
-        cat_counts[book_category(r["call_number"], lib_id, genres=genres,
-                                  books_format=r["format"],
-                                  content_type=r["content_type"])] += 1
-    chart_cats = [{"label": k, "count": v}
-                  for k, v in sorted(cat_counts.items(), key=lambda x: (x[0] == "Other", -x[1]))]
-
-    conn.close()
     return render_template("history.html",
-                           current=current_list,
-                           past=past_list,
-                           chart_data=chart_months,
-                           chart_cats=chart_cats,
                            selected_library=lib_id, selected_branch=branch_code)
 
 
@@ -538,6 +267,43 @@ def api_proxy_history():
         return jsonify({"error": str(e)})
 
 
+@app.route("/api/proxy/bib/<metadata_id>", methods=["POST"])
+def api_proxy_bib(metadata_id):
+    body = request.get_json() or {}
+    for k in ("library_id", "bc_token", "session_id"):
+        if k not in body:
+            return jsonify({"error": f"{k} required"}), 400
+    try:
+        data = api.proxy_fetch_bib(body["library_id"], body["bc_token"],
+                                    body["session_id"], metadata_id)
+        bib = data.get("entities", {}).get("bibs", {}).get(metadata_id)
+        if not bib:
+            return jsonify({"error": "not found"}), 404
+        bi = bib.get("briefInfo", {})
+        isbns = bi.get("isbns", [])
+        isbn = isbns[0] if isbns else ""
+        syndetics = config.LIBRARIES.get(body["library_id"], {}).get("syndetics_client", "sepup")
+        img, fallback = _cover(isbn, syndetics)
+        return jsonify({
+            "metadata_id": metadata_id,
+            "title": bi.get("title"),
+            "subtitle": bi.get("subtitle"),
+            "author": ", ".join(bi.get("authors") or []),
+            "isbn": isbn,
+            "isbns": isbns,
+            "img_url": img,
+            "fallback_url": fallback,
+            "format": bi.get("format"),
+            "description": bi.get("description"),
+            "publication_year": api._parse_year(bi.get("publicationDate", "")),
+            "series": bi.get("series", []),
+            "subjects": bi.get("subjectHeadings", []),
+            "genres": bi.get("genreForm", []),
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)})
+
+
 @app.route("/api/proxy/hold/place", methods=["POST"])
 def api_proxy_hold_place():
     body = request.get_json() or {}
@@ -573,63 +339,6 @@ def api_proxy_hold_cancel():
         return jsonify({"success": True})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
-
-@app.route("/api/update", methods=["POST"])
-def trigger_update():
-    ok = updater.run_manual()
-    return jsonify({"success": ok})
-
-
-
-
-
-@app.route("/api/stop-update", methods=["POST"])
-def trigger_stop_update():
-    updater.stop()
-    return jsonify({"success": True})
-
-
-@app.route("/stats")
-def stats():
-    conn = db.get_conn()
-    lib_id, branch_code, _ = _lib_from_cookies()
-    s = db.get_stats(conn, lib_id)
-    formats = db.get_format_distribution(conn, lib_id)
-    languages = db.get_language_distribution(conn, lib_id)
-    years = db.get_year_distribution(conn, lib_id)
-    cat_rows = conn.execute("""
-        SELECT call_number, format, content_type, genres FROM books_in_library WHERE active = 1 AND library_id = ?
-    """, (lib_id,)).fetchall()
-    cat_counts = defaultdict(int)
-    for r in cat_rows:
-        genres = json.loads(r["genres"]) if r["genres"] and r["genres"] != "[]" else None
-        cat_counts[book_category(r["call_number"], lib_id, genres=genres,
-                                  books_format=r["format"],
-                                  content_type=r["content_type"])] += 1
-    chart_cats = [{"label": k, "count": v}
-                  for k, v in sorted(cat_counts.items(), key=lambda x: (x[0] == "Other", -x[1]))]
-
-    conn.close()
-
-    chart_formats = [{"label": f["format"].replace("_", " ").title().strip(),
-                       "count": f["count"]} for f in formats]
-
-    top_langs = languages[:10]
-    other_count = sum(l["count"] for l in languages[10:])
-    chart_langs = [{"label": l["primary_language"], "count": l["count"]} for l in top_langs]
-    if other_count > 0:
-        chart_langs.append({"label": "Other", "count": other_count})
-
-    chart_years = [{"label": str(y["publication_year"]), "count": y["count"]} for y in reversed(years)]
-
-    return render_template("stats.html", stats=s, formats=formats,
-                           languages=languages,
-                           years=years,
-                           chart_formats=chart_formats,
-                           chart_langs=chart_langs,
-                           chart_years=chart_years,
-                           chart_cats=chart_cats,
-                           selected_library=lib_id, selected_branch=branch_code)
 
 
 # ── template filters ──
@@ -834,13 +543,6 @@ def _json_list(val):
         return []
 
 
-@app.template_filter("fmt_label")
-def _fmt_label_filter(val):
-    if not val:
-        return ""
-    return val.replace("_", " ").title().strip()
-
-
 def _clean_genre(raw):
     parts = re.split(r"<delimit>\s*", raw)
     candidates = []
@@ -881,10 +583,6 @@ def _fmt_rec(r, syndetics_client, library_id=None):
     else:
         r["series_name"] = None
 
-    r["book_category"] = book_category(r.get("call_number"), library_id, genres,
-                                         books_format=r.get("format"),
-                                         content_type=r.get("content_type"))
-
     return r
 
 
@@ -892,24 +590,18 @@ def _fmt_rec(r, syndetics_client, library_id=None):
 def inject_globals():
     lib_id = request.cookies.get("selected_library") or ""
     branch_code = request.cookies.get("selected_branch") or ""
-    conn = db.get_conn()
-    try:
-        rows = conn.execute("SELECT * FROM branches ORDER BY branch_name").fetchall()
-    finally:
-        conn.close()
-    branches = {lid: [] for lid in config.LIBRARIES}
+    branches = {}
+    for lid, cfg in config.LIBRARIES.items():
+        try:
+            branches[lid] = api.fetch_branches(cfg["gateway_base"])
+        except Exception:
+            branches[lid] = []
     branch_name = ""
-    if rows:
-        for r in rows:
-            branches[r["library_id"]].append({"code": r["branch_code"], "name": r["branch_name"]})
-            if r["library_id"] == lib_id and r["branch_code"] == branch_code:
-                branch_name = r["branch_name"]
-    else:
-        for lid, cfg in config.LIBRARIES.items():
-            try:
-                branches[lid] = api.fetch_branches(cfg["gateway_base"])
-            except Exception:
-                branches[lid] = []
+    if lib_id in branches:
+        for b in branches[lib_id]:
+            if b["code"] == branch_code:
+                branch_name = b["name"]
+                break
     lib_name = config.LIBRARIES[lib_id]["name"] if lib_id in config.LIBRARIES else ""
     return {
         "debug": app.config.get("DEBUG_MODE", False),
@@ -923,12 +615,5 @@ def inject_globals():
 
 
 if __name__ == "__main__":
-    if os.environ.get("BIBLIORECS_RESTARTING"):
-        import time
-        print("Restart: waiting for previous server to release port 5050...")
-        time.sleep(5)
-
     debug_mode = app.config["DEBUG_MODE"]
-    if not debug_mode:
-        updater.start()
     app.run(host="0.0.0.0", port=5050, debug=debug_mode)

@@ -7,46 +7,183 @@
   <span id="sync-indicator" class="sync-indicator" style="display:none"></span>
 </h1>
 
-{% if chart_data %}
-<div id="chart-wrap">
+<div id="chart-wrap" style="display:none">
   <canvas id="history-chart"></canvas>
 </div>
-{% endif %}
 
-{% if chart_cats %}
-<div class="section chart-section">
+<div id="cat-chart-section" class="section chart-section" style="display:none">
   <h2 class="section-title">Borrows by Category</h2>
   <canvas id="history-cat-chart"></canvas>
 </div>
-{% endif %}
-
-<script>
-var __chartData = {{ chart_data | tojson }};
-var __catData = {{ chart_cats | tojson }};
-</script>
 
 <div id="history-content">
   <div class="section" id="section-current" style="display:none"></div>
   <div class="section" id="section-past" style="display:none"></div>
 
-  {% if not current and not past %}
-  <div class="empty-state" id="history-empty">
+  <div class="empty-state" id="history-empty" style="display:none">
     <h2>No borrowing history</h2>
     <p id="history-empty-msg">Connect your library card in Settings to sync your borrowing history.</p>
     <a id="history-empty-btn" href="/settings" class="btn btn-primary" style="margin-top:12px;display:inline-block;text-decoration:none">Go to Settings</a>
   </div>
-  {% endif %}
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
 (function() {
-  var chartData = window.__chartData || [];
+  var indicator = document.getElementById('sync-indicator');
 
-  function drawChart() {
+  function setIndicator(text, cls) {
+    indicator.style.display = '';
+    indicator.className = 'sync-indicator' + (cls ? ' ' + cls : '');
+    indicator.textContent = '';
+    indicator.appendChild(document.createTextNode(text));
+  }
+
+  function hideIndicator() {
+    indicator.style.display = 'none';
+  }
+
+  function renderItems(items, containerId, isCurrent) {
+    var container = document.getElementById(containerId);
+    if (!container) return;
+
+    if (!items.length) {
+      container.style.display = 'none';
+      return;
+    }
+
+    var label = isCurrent ? 'Currently Checked Out' : 'Past Borrows';
+    var html = '<h2 class="section-title">' + label + ' (' + items.length + ')</h2>';
+    items.forEach(function(item) {
+      var dateHtml;
+      if (isCurrent) {
+        var label = item.due_label_compact || item.checkout_date || '';
+        var remain = item.due_remaining || '';
+        dateHtml = '<span class="due-date">' + label + '</span>';
+        if (remain) dateHtml += '<span class="due-relative">' + remain + '</span>';
+      } else {
+        dateHtml = '<span class="due-date">' + (item.checkout_date || '') + '</span>';
+      }
+      html += '<a href="/book/' + item.metadata_id + '?isbn=' + (item.isbn || '') + '" class="history-item">'
+        + '<div class="history-cover-wrap">'
+        + '<img class="history-cover cover-img" src="' + item.img_url + '" alt="" loading="lazy" data-fallback="' + item.fallback_url + '" data-isbn="' + (item.isbn || '') + '">'
+        + '<div class="cover-placeholder cover-placeholder-sm">📖</div>'
+        + '</div>'
+        + '<div class="history-body">'
+        + '<div class="title">' + (item.title || item.metadata_id) + '</div>'
+        + (item.subtitle ? '<div class="sub">' + item.subtitle + '</div>' : '')
+        + '<div class="sub">' + (item.author || '') + '</div>'
+        + '</div>'
+        + '<span class="history-date">' + dateHtml + '</span>'
+        + '</a>';
+    });
+    container.innerHTML = html;
+    container.style.display = '';
+  }
+
+  function updateContent(data) {
+    renderItems(data.current || [], 'section-current', true);
+    renderItems(data.past || [], 'section-past', false);
+
+    var emptyState = document.getElementById('history-empty');
+    var emptyMsg = document.getElementById('history-empty-msg');
+    if (!emptyState) return;
+
+    var hasData = (data.current && data.current.length) || (data.past && data.past.length);
+    if (hasData) {
+      emptyState.style.display = 'none';
+    } else {
+      emptyMsg.textContent = 'No borrowing history — borrow some books and they\'ll show up here.';
+      document.getElementById('history-empty-btn').style.display = '';
+      emptyState.style.display = '';
+    }
+  }
+
+  function fmtDueLabel(dateStr) {
+    if (!dateStr) return null;
+    try {
+      var d = new Date(dateStr.slice(0,10));
+      var today = new Date(); today.setHours(0,0,0,0);
+      var delta = Math.round((d - today) / 86400000);
+      var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      var fmt = months[d.getMonth()] + ' ' + d.getDate();
+      if (delta < 0) return {label: 'Overdue ' + fmt, remain: (-delta) + ' days ago'};
+      if (delta === 0) return {label: 'Due today', remain: null};
+      if (delta === 1) return {label: 'Due ' + fmt, remain: '1 day left'};
+      return {label: 'Due ' + fmt, remain: delta + ' days left'};
+    } catch(e) { return null; }
+  }
+
+  function computeCharts(allEntries, allBibs, pastItems) {
+    // Monthly borrow chart
+    var dateCounts = {};
+    Object.keys(allEntries).forEach(function(k) {
+      var date = allEntries[k].checkedoutDate;
+      if (date) {
+        var month = date.slice(0, 7);
+        dateCounts[month] = (dateCounts[month] || 0) + 1;
+      }
+    });
+
+    var months = Object.keys(dateCounts).sort();
+    if (!months.length) return;
+
+    var chartData = [];
+    var cumulative = 0;
+    months.forEach(function(m) {
+      cumulative += dateCounts[m];
+      chartData.push({m: m, b: dateCounts[m], c: cumulative});
+    });
+
+    drawChart(chartData);
+
+    // Category chart from bib data
+    var catCounts = {};
+    var formatMap = {
+      'GRAPHIC_NOVEL': 'Graphic Novels',
+      'PICTURE_BOOK': 'Picture Books',
+      'BOARD_BK': 'Picture Books',
+      'EASY_READER': 'Easy Readers',
+    };
+
+    Object.keys(allEntries).forEach(function(k) {
+      var entry = allEntries[k];
+      var bib = (allBibs[entry.metadataId] || {}).briefInfo || {};
+      if (!bib) return;
+      var format = bib.format || '';
+      if (formatMap[format]) {
+        catCounts[formatMap[format]] = (catCounts[formatMap[format]] || 0) + 1;
+      } else {
+        catCounts['Other'] = (catCounts['Other'] || 0) + 1;
+      }
+    });
+
+    // Also count from past items
+    pastItems.forEach(function(item) {
+      var format = item._format || '';
+      if (formatMap[format]) {
+        catCounts[formatMap[format]] = (catCounts[formatMap[format]] || 0) + 1;
+      } else {
+        catCounts['Other'] = (catCounts['Other'] || 0) + 1;
+      }
+    });
+
+    var catData = Object.keys(catCounts).map(function(label) {
+      return {label: label, count: catCounts[label]};
+    }).sort(function(a, b) {
+      if (a.label === 'Other') return 1;
+      if (b.label === 'Other') return -1;
+      return b.count - a.count;
+    });
+
+    if (catData.length) drawCatBars(catData);
+  }
+
+  function drawChart(months) {
     var canvas = document.getElementById('history-chart');
-    if (!canvas || !chartData.length) return;
+    if (!canvas || !months.length) return;
+    document.getElementById('chart-wrap').style.display = '';
 
     var wrap = document.getElementById('chart-wrap');
     var rect = wrap.getBoundingClientRect();
@@ -66,7 +203,6 @@ var __catData = {{ chart_cats | tojson }};
     var plotH = H - PAD.top - PAD.bottom;
 
     var maxB = 0, maxC = 0;
-    var months = chartData;
     months.forEach(function(m) {
       if (m.b > maxB) maxB = m.b;
       if (m.c > maxC) maxC = m.c;
@@ -84,7 +220,6 @@ var __catData = {{ chart_cats | tojson }};
 
     ctx.clearRect(0, 0, W, H);
 
-    // light horizontal grid lines
     ctx.strokeStyle = '#f0f0f2';
     ctx.lineWidth = 1;
     for (var g = 0; g <= 4; g++) {
@@ -95,7 +230,6 @@ var __catData = {{ chart_cats | tojson }};
       ctx.stroke();
     }
 
-    // bars
     for (var i = 0; i < n; i++) {
       var x = xPos(i) - barW / 2;
       var y = yBar(months[i].b);
@@ -112,7 +246,6 @@ var __catData = {{ chart_cats | tojson }};
       ctx.fill();
     }
 
-    // cumulative line
     ctx.strokeStyle = '#2563eb';
     ctx.lineWidth = 2;
     ctx.lineJoin = 'round';
@@ -125,7 +258,6 @@ var __catData = {{ chart_cats | tojson }};
     }
     ctx.stroke();
 
-    // dots on line
     for (var i = 0; i < n; i++) {
       var xx = xPos(i);
       var yy = yLine(months[i].c);
@@ -135,7 +267,6 @@ var __catData = {{ chart_cats | tojson }};
       ctx.fill();
     }
 
-    // Y axis labels (left — monthly)
     ctx.fillStyle = '#86868b';
     ctx.font = '10px -apple-system, sans-serif';
     ctx.textAlign = 'right';
@@ -146,7 +277,6 @@ var __catData = {{ chart_cats | tojson }};
       ctx.fillText(v, PAD.left - 6, yy);
     }
 
-    // Y axis labels (right — cumulative)
     ctx.textAlign = 'left';
     for (var g = 0; g <= 4; g++) {
       var v = Math.round(maxC * g / 4);
@@ -154,7 +284,6 @@ var __catData = {{ chart_cats | tojson }};
       ctx.fillText(v, W - PAD.right + 6, yy);
     }
 
-    // X axis labels — skip to avoid overlap
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
     var maxLabelW = 0;
@@ -168,11 +297,10 @@ var __catData = {{ chart_cats | tojson }};
     }
   }
 
-  var catData = window.__catData || [];
-
-  function drawCatBars() {
+  function drawCatBars(catData) {
     var canvas = document.getElementById('history-cat-chart');
     if (!canvas || !catData.length) return;
+    document.getElementById('cat-chart-section').style.display = '';
 
     var wrap = canvas.parentElement;
     var dpr = window.devicePixelRatio || 1;
@@ -244,93 +372,6 @@ var __catData = {{ chart_cats | tojson }};
     }
   }
 
-  var indicator = document.getElementById('sync-indicator');
-
-  function setIndicator(text, cls) {
-    indicator.style.display = '';
-    indicator.className = 'sync-indicator' + (cls ? ' ' + cls : '');
-    indicator.textContent = '';
-    indicator.appendChild(document.createTextNode(text));
-  }
-
-  function hideIndicator() {
-    indicator.style.display = 'none';
-  }
-
-  function renderItems(items, containerId, isCurrent) {
-    var container = document.getElementById(containerId);
-    if (!container) return;
-
-    if (!items.length) {
-      container.style.display = 'none';
-      return;
-    }
-
-    var label = isCurrent ? 'Currently Checked Out' : 'Past Borrows';
-    var html = '<h2 class="section-title">' + label + ' (' + items.length + ')</h2>';
-    items.forEach(function(item) {
-      var dateHtml;
-      if (isCurrent) {
-        var label = item.due_label_compact || item.checkout_date || '';
-        var remain = item.due_remaining || '';
-        dateHtml = '<span class="due-date">' + label + '</span>';
-        if (remain) dateHtml += '<span class="due-relative">' + remain + '</span>';
-      } else {
-        dateHtml = '<span class="due-date">' + (item.checkout_date || '') + '</span>';
-      }
-      html += '<a href="/book/' + item.metadata_id + '" class="history-item">'
-        + '<div class="history-cover-wrap">'
-        + '<img class="history-cover cover-img" src="' + item.img_url + '" alt="" loading="lazy" data-fallback="' + item.fallback_url + '" data-isbn="' + (item.isbn || '') + '">'
-        + '<div class="cover-placeholder cover-placeholder-sm">📖</div>'
-        + '</div>'
-        + '<div class="history-body">'
-        + '<div class="title">' + (item.title || item.metadata_id) + '</div>'
-        + (item.subtitle ? '<div class="sub">' + item.subtitle + '</div>' : '')
-        + '<div class="sub">' + (item.author || '') + '</div>'
-        + '</div>'
-        + '<span class="history-date">' + dateHtml + '</span>'
-        + '</a>';
-    });
-    container.innerHTML = html;
-    container.style.display = '';
-  }
-
-  function updateContent(data, synced) {
-    renderItems(data.current || [], 'section-current', true);
-    renderItems(data.past || [], 'section-past', false);
-
-    var emptyState = document.getElementById('history-empty');
-    var emptyMsg = document.getElementById('history-empty-msg');
-    if (!emptyState) return;
-
-    if (!data.current || !data.current.length) {
-      if (!data.past || !data.past.length) {
-        if (synced) {
-          emptyMsg.textContent = 'No borrowing history — borrow some books and they\'ll show up here.';
-          document.getElementById('history-empty-btn').style.display = '';
-        }
-        emptyState.style.display = '';
-        return;
-      }
-    }
-    emptyState.style.display = 'none';
-  }
-
-  function fmtDueLabel(dateStr) {
-    if (!dateStr) return null;
-    try {
-      var d = new Date(dateStr.slice(0,10));
-      var today = new Date(); today.setHours(0,0,0,0);
-      var delta = Math.round((d - today) / 86400000);
-      var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-      var fmt = months[d.getMonth()] + ' ' + d.getDate();
-      if (delta < 0) return {label: 'Overdue ' + fmt, remain: (-delta) + ' days ago'};
-      if (delta === 0) return {label: 'Due today', remain: null};
-      if (delta === 1) return {label: 'Due ' + fmt, remain: '1 day left'};
-      return {label: 'Due ' + fmt, remain: delta + ' days left'};
-    } catch(e) { return null; }
-  }
-
   function loadCached() {
     var libId = document.body.getAttribute('data-lib');
     try {
@@ -366,7 +407,6 @@ var __catData = {{ chart_cats | tojson }};
 
     setIndicator('\u27F3 Syncing');
 
-    // Fetch ALL history pages (page 1 is first valid page)
     var allEntries = {};
     var allBibs = {};
 
@@ -381,16 +421,38 @@ var __catData = {{ chart_cats | tojson }};
       });
     }
 
-    fetchHistoryPage(1).then(function() {
-      return proxyFetch('/api/proxy/checkouts', {});
-    }).then(function(checkoutsData) {
-      Object.assign(allBibs, checkoutsData.entities.bibs || {});
+    function buildBorrowingHistory(entries, bibs) {
+      var seen = {};
+      var borrowingHistory = [];
+      Object.keys(entries).forEach(function(k) {
+        var entry = entries[k];
+        var bib = (bibs[entry.metadataId] || {}).briefInfo || {};
+        var key = entry.metadataId + '|' + (entry.checkedoutDate || '');
+        if (!seen[key]) {
+          seen[key] = true;
+          borrowingHistory.push({
+            metadata_id: entry.metadataId,
+            title: bib.title || '',
+            subtitle: bib.subtitle || '',
+            authors: bib.authors || [],
+            series: bib.series || [],
+            isbns: bib.isbns || [],
+            subjects: bib.subjectHeadings || [],
+            genres: bib.genreForm || [],
+            content_type: bib.contentType || '',
+            checkout_date: entry.checkedoutDate,
+            is_current: false
+          });
+        }
+      });
+      return borrowingHistory;
+    }
 
-      // Build past borrows list
+    function buildRenderItems(entries, bibs, checkoutsObj) {
       var past = [];
-      Object.keys(allEntries).forEach(function(k) {
-        var entry = allEntries[k];
-        var bib = (allBibs[entry.metadataId] || {}).briefInfo || {};
+      Object.keys(entries).forEach(function(k) {
+        var entry = entries[k];
+        var bib = (bibs[entry.metadataId] || {}).briefInfo || {};
         var isbn = (bib.isbns || [])[0] || '';
         past.push({
           metadata_id: entry.metadataId,
@@ -399,14 +461,13 @@ var __catData = {{ chart_cats | tojson }};
           subtitle: bib.subtitle || '',
           author: (bib.authors || []).join(', '),
           isbn: isbn,
+          _format: bib.format || '',
           img_url: isbn ? 'https://secure.syndetics.com/index.aspx?isbn=' + isbn + '/LC.GIF&client=' + syndeticsClient + '&type=xw12&oclc=' : '',
           fallback_url: isbn ? 'https://covers.openlibrary.org/b/isbn/' + isbn + '-L.jpg' : ''
         });
       });
 
-      // Build current checkouts list
       var current = [];
-      var checkoutsObj = (checkoutsData.entities || {}).checkouts || {};
       Object.keys(checkoutsObj).forEach(function(k) {
         var co = checkoutsObj[k];
         var bib = (allBibs[co.metadataId] || {}).briefInfo || {};
@@ -418,56 +479,52 @@ var __catData = {{ chart_cats | tojson }};
           subtitle: bib.subtitle || '',
           author: (bib.authors || []).join(', '),
           isbn: isbn,
+          _format: bib.format || '',
           img_url: isbn ? 'https://secure.syndetics.com/index.aspx?isbn=' + isbn + '/LC.GIF&client=' + syndeticsClient + '&type=xw12&oclc=' : '',
           fallback_url: isbn ? 'https://covers.openlibrary.org/b/isbn/' + isbn + '-L.jpg' : ''
         });
         var dl = fmtDueLabel(co.dueDate);
-        if (dl) { current[current.length-1].due_label_compact = dl.label; current[current.length-1].due_remaining = dl.remain; }
+        if (dl) {
+          current[current.length - 1].due_label_compact = dl.label;
+          current[current.length - 1].due_remaining = dl.remain;
+        }
       });
+
       current.sort(function(a, b) {
         if (!a.checkout_date) return 1;
         if (!b.checkout_date) return -1;
         return a.checkout_date.localeCompare(b.checkout_date);
       });
 
-      // Build borrowing history for recommendations (dedup by metadata_id+date)
-      var seen = {};
-      var borrowingHistory = [];
-      past.forEach(function(p) {
-        var key = p.metadata_id + '|' + (p.checkout_date || '');
-        if (!seen[key]) {
-          seen[key] = true;
-          borrowingHistory.push({
-            metadata_id: p.metadata_id,
-            isbns: [],
-            checkout_date: p.checkout_date,
-            is_current: false
-          });
-        }
-      });
+      return {current: current, past: past};
+    }
 
-      // Store in localStorage
+    fetchHistoryPage(1).then(function() {
+      return proxyFetch('/api/proxy/checkouts', {});
+    }).then(function(checkoutsData) {
+      Object.assign(allBibs, checkoutsData.entities.bibs || {});
+      var checkoutsObj = (checkoutsData.entities || {}).checkouts || {};
+
+      // Build rich borrowing history for recommendations
+      var borrowingHistory = buildBorrowingHistory(allEntries, allBibs);
       try { localStorage.setItem('bibliorecs_history_' + libId, JSON.stringify(borrowingHistory)); } catch(e) {}
-      try { localStorage.setItem('bibliorecs_history_render_' + libId, JSON.stringify({current: current, past: past})); } catch(e) {}
+
+      // Build render items
+      var renderData = buildRenderItems(allEntries, allBibs, checkoutsObj);
+      try { localStorage.setItem('bibliorecs_history_render_' + libId, JSON.stringify(renderData)); } catch(e) {}
 
       // Update content
-      updateContent({current: current, past: past}, true);
+      updateContent(renderData);
       document.querySelectorAll('img.cover-img').forEach(function(img) {
         if (typeof initCoverFallback === 'function') initCoverFallback(img);
       });
-      hideIndicator();
-      setIndicator('\u2713 Updated (' + past.length + ' items)', 'sync-done');
-      setTimeout(hideIndicator, 3000);
 
-      // Also fetch chart data from server (still reads from DB which may be empty)
-      fetch('/api/history/chart-data')
-        .then(function(r) { return r.json(); })
-        .then(function(d) { if (d && d.length) { chartData = d; drawChart(); } })
-        .catch(function() {});
-      fetch('/api/history/category-data')
-        .then(function(r) { return r.json(); })
-        .then(function(d) { if (d && d.length) { catData = d; drawCatBars(); } })
-        .catch(function() {});
+      // Compute charts client-side
+      computeCharts(allEntries, allBibs, renderData.past);
+
+      hideIndicator();
+      setIndicator('\u2713 Updated (' + renderData.past.length + ' items)', 'sync-done');
+      setTimeout(hideIndicator, 3000);
     })
     .catch(function() {
       hideIndicator();
@@ -475,10 +532,13 @@ var __catData = {{ chart_cats | tojson }};
     });
   }
 
-  drawChart();
-  drawCatBars();
   var resizeTimer;
-  var onResize = function() { drawChart(); drawCatBars(); };
+  var onResize = function() {
+    var canvas = document.getElementById('history-chart');
+    if (canvas && canvas.chartData) drawChart(canvas.chartData);
+    var catCanvas = document.getElementById('history-cat-chart');
+    if (catCanvas && catCanvas.catData) drawCatBars(catCanvas.catData);
+  };
   window.addEventListener('resize', function() {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(onResize, 200);
@@ -487,5 +547,5 @@ var __catData = {{ chart_cats | tojson }};
   loadCached();
   doSync();
 })();
-  </script>
-  {% endblock %}
+</script>
+{% endblock %}

@@ -45,7 +45,7 @@
       ? '<span class="hold-branch">📍 ' + h.pickup_branch + '</span>'
       : '';
 
-    return '<a href="/book/' + h.metadata_id + '" class="history-item">'
+    return '<a href="/book/' + h.metadata_id + '?isbn=' + (h.isbn || '') + '" class="history-item">'
       + '<div class="history-cover-wrap">'
       + '<img class="history-cover cover-img" src="' + syndetics + '" alt="" loading="lazy" data-fallback="' + openlibrary + '"' + dataIsbn + '>'
       + '<div class="cover-placeholder cover-placeholder-sm">📖</div>'
