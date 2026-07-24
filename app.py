@@ -616,12 +616,16 @@ def inject_globals():
 
 @app.route("/api/restart", methods=["POST"])
 def api_restart():
-    def _do_restart():
-        import time
-        time.sleep(0.3)
-        os.execv(sys.executable, [sys.executable, __file__] + sys.argv[1:])
-
     import threading
+
+    def _do_restart():
+        import subprocess, time
+        cmd = f"(sleep 2 && exec {sys.executable} '{__file__}' {' '.join(sys.argv[1:])})"
+        subprocess.Popen(['/bin/bash', '-c', cmd], start_new_session=True,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        time.sleep(0.5)
+        os._exit(0)
+
     threading.Thread(target=_do_restart, daemon=False).start()
     return jsonify({"ok": True})
 
