@@ -156,7 +156,7 @@
           return {
             hold_id: k,
             metadata_id: h.metadataId,
-            title: h.bibTitle || info.title || '',
+            title: info.title || h.bibTitle || '',
             subtitle: info.subtitle || '',
             author: (info.authors || []).join(', '),
             isbn: (info.isbns || [])[0] || '',
