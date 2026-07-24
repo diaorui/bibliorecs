@@ -4,6 +4,7 @@ import sys
 import re
 import urllib.request
 import urllib.parse
+import urllib.error
 
 from flask import Flask, render_template, jsonify, request
 import api
@@ -322,6 +323,13 @@ def api_proxy_hold_place():
                             "position": h.get("holdsPosition"),
                             "status": h.get("status")})
         return jsonify({"success": False, "error": "no hold in response"})
+    except urllib.error.HTTPError as e:
+        try:
+            detail = json.loads(e.read().decode())
+            msg = detail.get("error", {}).get("message", str(e))
+        except Exception:
+            msg = str(e)
+        return jsonify({"success": False, "error": msg})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
@@ -337,6 +345,13 @@ def api_proxy_hold_cancel():
                                       body["session_id"], body["account_id"],
                                       body["hold_id"], body["metadata_id"])
         return jsonify({"success": True})
+    except urllib.error.HTTPError as e:
+        try:
+            detail = json.loads(e.read().decode())
+            msg = detail.get("error", {}).get("message", str(e))
+        except Exception:
+            msg = str(e)
+        return jsonify({"success": False, "error": msg})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
