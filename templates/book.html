@@ -16,6 +16,7 @@
     <h1 id="book-title"></h1>
     <p class="book-subtitle" id="book-subtitle" style="display:none"></p>
     <p class="author" id="book-author" style="display:none"></p>
+    <p class="rating" id="book-rating" style="display:none"></p>
     <div class="series-row" id="book-series" style="display:none"></div>
     <p class="metadata" id="book-metadata" style="display:none"></p>
     <p class="description" id="book-description" style="display:none"></p>
@@ -129,6 +130,17 @@ function renderBook(data) {
     authorEl.style.display = '';
   }
 
+  var ratingEl = document.getElementById('book-rating');
+  var avg = data.rating_avg;
+  var cnt = data.rating_count;
+  if (avg && cnt) {
+    var s = Math.round(avg / 20);
+    var stars = '';
+    for (var ri = 0; ri < 5; ri++) stars += ri < s ? '<span style="color:#f59e0b">★</span>' : '<span style="color:#d1d5db">☆</span>';
+    ratingEl.innerHTML = stars + ' <span style="color:#86868b;font-size:0.8rem">' + cnt.toLocaleString() + ' ratings</span>';
+    ratingEl.style.display = '';
+  }
+
   var subEl = document.getElementById('book-subtitle');
   if (data.subtitle) {
     subEl.textContent = data.subtitle;
@@ -162,14 +174,6 @@ function renderBook(data) {
   if (data.primary_language) {
     var langMap = {eng: 'English', spa: 'Spanish', chi: 'Chinese'};
     parts.push(langMap[data.primary_language] || data.primary_language);
-  }
-  var avg = data.rating_avg;
-  var cnt = data.rating_count;
-  if (avg && cnt) {
-    var s = Math.round(avg / 20);
-    var stars = '';
-    for (var ri = 0; ri < 5; ri++) stars += ri < s ? '★' : '☆';
-    parts.push(stars + ' (' + cnt.toLocaleString() + ' ratings)');
   }
   if (parts.length) {
     metaEl.innerHTML = parts.map(function(p) { return '<span>' + p + '</span>'; }).join('');
