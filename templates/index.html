@@ -218,17 +218,19 @@ function selectBranch(libId, branchCode) {
       .then(function(r) { return r.json(); })
       .then(function(data) {
         renderCarousels(data.carousels || []);
-        if (!libCreds || !libCreds.bc_token) {
-          if (!localStorage.getItem('bibliorecs_skip_creds')) {
-            showCredsBanner();
-          }
-        } else {
-          fetchHoldsAndCheckouts();
-        }
       })
       .catch(function() {
         showToast('Could not load recommendations', 6000);
       });
+
+    if (!libCreds || !libCreds.bc_token) {
+      if (!localStorage.getItem('bibliorecs_skip_creds')) {
+        showCredsBanner();
+      }
+      return;
+    }
+
+    fetchHoldsAndCheckouts();
   }
 
   function showCredsBanner() {
