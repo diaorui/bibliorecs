@@ -616,26 +616,13 @@ def inject_globals():
 
 @app.route("/api/restart", methods=["POST"])
 def api_restart():
-    SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-
     def _do_restart():
-        import subprocess, time
-        time.sleep(0.5)
-        env = os.environ.copy()
-        env["BIBLIORECS_RESTARTING"] = "1"
-        subprocess.Popen(
-            [sys.executable, __file__] + sys.argv[1:],
-            cwd=SCRIPT_DIR,
-            start_new_session=True,
-            env=env,
-            stdout=open(os.devnull, 'w'),
-            stderr=open(os.devnull, 'w'),
-        )
-        time.sleep(2.5)
-        os._exit(0)
+        import time
+        time.sleep(0.3)
+        os.execv(sys.executable, [sys.executable, __file__] + sys.argv[1:])
 
     import threading
-    threading.Thread(target=_do_restart, daemon=True).start()
+    threading.Thread(target=_do_restart, daemon=False).start()
     return jsonify({"ok": True})
 
 

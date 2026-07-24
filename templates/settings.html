@@ -75,7 +75,7 @@
 
 <div class="section" style="margin-top:2rem">
   <h2 class="section-title">Server</h2>
-  <button onclick="restartServer(this)" class="btn btn-restart" style="background:#dc2626;color:#fff;border:none;padding:8px 16px;border-radius:6px;font-size:0.9rem;cursor:pointer">Restart Server</button>
+  <button onclick="restartServer()" class="btn btn-restart" style="background:#dc2626;color:#fff;border:none;padding:8px 16px;border-radius:6px;font-size:0.9rem;cursor:pointer">Restart Server</button>
 </div>
 
 <div class="section" style="margin-top:2rem">
@@ -169,10 +169,10 @@ function resetOnboarding() {
   location.href = '/';
 }
 
-function restartServer(btn) {
+function restartServer() {
   if (!confirm('Restart the server now?')) return;
-  btn.textContent = 'Restarting...';
-  btn.disabled = true;
+  var btns = document.querySelectorAll('.btn-restart');
+  btns.forEach(function(b) { b.textContent = 'Restarting...'; b.disabled = true; });
   fetch('/api/restart', { method: 'POST' }).then(function() {
     showToast('Server restarting...', 4000);
     setTimeout(function() { location.reload(); }, 3000);
