@@ -157,6 +157,15 @@ function selectBranch(libId, branchCode) {
   var __holdsByMid = {};
   var __checkedOutByMe = new Set();
 
+  function _ratingStars(avg) {
+    var s = Math.round(avg / 20);
+    var html = '';
+    for (var i = 0; i < 5; i++) {
+      html += i < s ? '<span style="color:#f59e0b">★</span>' : '<span style="color:#d1d5db">☆</span>';
+    }
+    return html;
+  }
+
   function renderCarousels(carousels, hasProfile) {
     skeleton.style.display = 'none';
     var html = '<h1 class="page-title">Your Recommendations</h1>';
@@ -179,6 +188,7 @@ function selectBranch(libId, branchCode) {
           + '<div class="carousel-body">'
           + '<div class="carousel-title"><span>' + r.title + '</span>' + subtitle + '</div>'
           + '<div class="carousel-author">' + (r.author || '') + '</div>'
+          + (r.rating_avg && r.rating_count ? '<div style="margin-top:3px;font-size:0.75rem">' + _ratingStars(r.rating_avg) + '</div>' : '')
           + '</div>'
           + '</a>'
           + '<button class="btn-card" data-mid="' + r.metadata_id + '">Hold</button>'
