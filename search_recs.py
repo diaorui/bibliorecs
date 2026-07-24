@@ -138,21 +138,6 @@ def _continuous_greedy(books, emb_norm, weights, max_queries=10):
                             for sn in _get_series_names(bb))}
             candidates.append(("series", name, exact))
 
-    title_counts = {}
-    for b in books:
-        t = (b.get("title") or "").strip().lower()
-        if t:
-            title_counts[t] = title_counts.get(t, 0) + 1
-
-    seen_titles = set()
-    for i, b in enumerate(books):
-        t = (b.get("title") or "").strip().lower()
-        if t and title_counts.get(t, 0) >= 2 and t not in seen_titles:
-            seen_titles.add(t)
-            candidates.append(("title", b.get("title", "").strip(),
-                               {j for j, bb in enumerate(books)
-                                if (bb.get("title") or "").strip().lower() == t}))
-
     valid = []
     for qt, qv, exact in candidates:
         if not exact:
