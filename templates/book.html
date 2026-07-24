@@ -114,6 +114,15 @@ function _dedup(arr) {
   return out;
 }
 
+function _star(fill) {
+  if (fill === 1) return '<span style="color:#f59e0b">★</span>';
+  if (fill === 0) return '<span style="color:#d1d5db">★</span>';
+  return '<span style="position:relative;display:inline-block">' +
+    '<span style="color:#d1d5db">★</span>' +
+    '<span style="color:#f59e0b;position:absolute;left:0;top:0;overflow:hidden;width:50%">★</span>' +
+    '</span>';
+}
+
 function renderBook(data) {
   var title = data.title || mid;
   document.getElementById('book-title').textContent = title;
@@ -134,9 +143,12 @@ function renderBook(data) {
   var avg = data.rating_avg;
   var cnt = data.rating_count;
   if (avg && cnt) {
-    var s = Math.round(avg / 20);
+    var val = avg / 20;
     var stars = '';
-    for (var ri = 0; ri < 5; ri++) stars += ri < s ? '<span style="color:#f59e0b">★</span>' : '<span style="color:#d1d5db">☆</span>';
+    for (var ri = 0; ri < 5; ri++) {
+      var diff = val - ri;
+      stars += diff >= 0.75 ? _star(1) : diff >= 0.25 ? _star(0.5) : _star(0);
+    }
     ratingEl.innerHTML = stars + ' <span style="color:#86868b;font-size:0.8rem">' + cnt.toLocaleString() + ' ratings</span>';
     ratingEl.style.display = '';
   }

@@ -158,10 +158,15 @@ function selectBranch(libId, branchCode) {
   var __checkedOutByMe = new Set();
 
   function _ratingStars(avg) {
-    var s = Math.round(avg / 20);
+    var val = avg / 20;
     var html = '';
     for (var i = 0; i < 5; i++) {
-      html += i < s ? '<span style="color:#f59e0b">★</span>' : '<span style="color:#d1d5db">☆</span>';
+      var diff = val - i;
+      if (diff >= 0.75) html += '<span style="color:#f59e0b">★</span>';
+      else if (diff >= 0.25) html += '<span style="position:relative;display:inline-block">' +
+        '<span style="color:#d1d5db">★</span>' +
+        '<span style="color:#f59e0b;position:absolute;left:0;top:0;overflow:hidden;width:50%">★</span></span>';
+      else html += '<span style="color:#d1d5db">★</span>';
     }
     return html;
   }
