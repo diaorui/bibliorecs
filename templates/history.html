@@ -411,7 +411,7 @@
       computeCharts(allEntries, allBibs);
 
       hideIndicator();
-      var itemCount = renderData.past.length;
+      var itemCount = renderData.past.length + renderData.current.length;
       if (itemCount > 0) {
         setIndicator('\u2713 Updated (' + itemCount + ' items)', 'sync-done');
       }
