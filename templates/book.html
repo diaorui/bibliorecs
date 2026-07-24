@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}<span id="book-title-el">{{ metadata_id }}</span> – Bibliorecs{% endblock %}
+{% block title %}{{ metadata_id }} – Bibliorecs{% endblock %}
 
 {% block content %}
 <div class="book-detail">
@@ -116,7 +116,6 @@ function _dedup(arr) {
 
 function renderBook(data) {
   var title = data.title || mid;
-  document.getElementById('book-title-el').textContent = title;
   document.getElementById('book-title').textContent = title;
   document.title = title + ' – Bibliorecs';
 
