@@ -436,8 +436,7 @@ def get_recommendations(library_id, borrowing_history):
 
     carousels = []
 
-    carousels.append({"name": "Top Picks", "books": top_picks,
-                       "description": "Best matches across all borrowed books"})
+    carousels.append({"name": "Top Picks", "books": top_picks})
 
     carousels.extend(per_query_carousels)
 
