@@ -128,20 +128,15 @@ function selectBranch(libId, branchCode) {
 <div id="recommendations-container">
   <h1 class="page-title">Your Recommendations</h1>
   <div id="rec-skeleton">
-    {% for _ in range(5) %}
-    <div class="skeleton-section">
-      <div class="skeleton-heading"></div>
-      <div class="skeleton-track">
-        {% for _ in range(6) %}
-        <div class="skeleton-card">
-          <div class="skeleton-cover"></div>
-          <div class="skeleton-line"></div>
-          <div class="skeleton-line skeleton-line-short"></div>
-        </div>
-        {% endfor %}
+    <div class="book-grid">
+      {% for _ in range(12) %}
+      <div class="skeleton-card">
+        <div class="skeleton-cover"></div>
+        <div class="skeleton-line"></div>
+        <div class="skeleton-line skeleton-line-short"></div>
       </div>
+      {% endfor %}
     </div>
-    {% endfor %}
   </div>
 </div>
 {% endif %}
@@ -176,13 +171,10 @@ function selectBranch(libId, branchCode) {
     var html = '<h1 class="page-title">Your Recommendations</h1>';
 
       carousels.forEach(function(carousel) {
-      html += '<section class="carousel-section" data-category="' + carousel.name + '">'
-        + '<h2 class="carousel-heading">' + carousel.name + '</h2>';
-      if (carousel.description) {
-        html += '<p class="carousel-desc">' + carousel.description + '</p>';
-      }
-      html += '<div class="carousel-track">';
-      carousel.books.forEach(function(r) {
+      var books = carousel.books || [];
+      if (!books.length) return;
+      html += '<div class="book-grid">';
+      books.forEach(function(r) {
         var subtitle = r.subtitle ? '<span class="carousel-subtitle">' + r.subtitle + '</span>' : '';
         html += '<div class="carousel-card" data-mid="' + r.metadata_id + '">'
           + '<a href="/book/' + r.metadata_id + '?isbn=' + (r.isbn || '') + '" class="carousel-card-link">'
@@ -201,7 +193,7 @@ function selectBranch(libId, branchCode) {
           + '<button class="btn-card" data-mid="' + r.metadata_id + '">Hold</button>'
           + '</div>';
       });
-      html += '</div></section>';
+      html += '</div>';
     });
 
     if (!carousels.length) {

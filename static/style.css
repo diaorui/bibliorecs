@@ -571,10 +571,19 @@ th {
 .skeleton-section { margin-bottom: 24px; }
 .skeleton-heading { width: 180px; height: 20px; background: #e8e8ed; border-radius: 4px; margin-bottom: 12px; }
 .skeleton-track { display: flex; gap: 12px; overflow: hidden; }
-.skeleton-card { flex-shrink: 0; width: 130px; }
-.skeleton-cover { width: 130px; height: 195px; background: #e8e8ed; border-radius: 6px; margin-bottom: 8px; }
+.skeleton-card { width: 100%; }
+.skeleton-cover { width: 100%; aspect-ratio: 2/3; background: #e8e8ed; border-radius: 6px; margin-bottom: 8px; }
 .skeleton-line { height: 12px; background: #e8e8ed; border-radius: 3px; margin-bottom: 6px; }
 .skeleton-line-short { width: 70%; }
+
+/* ── book grid ── */
+
+.book-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+  gap: 12px;
+  margin-bottom: 32px;
+}
 
 /* ── carousel ── */
 
@@ -616,10 +625,8 @@ th {
 }
 
 .carousel-card {
-  flex: 0 0 auto;
-  width: 140px;
+  width: 100%;
   color: inherit;
-  scroll-snap-align: start;
   transition: transform 0.15s;
   display: flex;
   flex-direction: column;
@@ -1396,6 +1403,11 @@ th {
 
 @media (max-width: 640px) {
   .container { padding: 16px 12px; }
+
+  .book-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
 
   .nav-inner { padding: 0 12px; flex-wrap: wrap; height: auto; min-height: 52px; gap: 2px; }
   .nav-links { width: 100%; justify-content: center; gap: 12px; padding: 6px 0 8px; border-top: 1px solid #e8e8ed; }
