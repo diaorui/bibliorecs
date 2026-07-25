@@ -5,7 +5,7 @@ Personalized children's book recommendation engine for Bibliocommons library sys
 ## Features
 
 - **Multi-library support** — 5 BC library systems with tree-style branch selector
-- **Recommendations** — per-category carousels (Picture Books, Fiction, Graphic Novels, etc.) computed from borrowing history using sentence-transformer embeddings + MaxSim + MMR diversity
+- **Recommendations** — single "Top Picks" carousel computed from borrowing history using model2vec embeddings + MaxSim + MMR diversity
 - **Privacy-first** — credentials and borrowing history stored in your browser's localStorage, not on the server. Proxy endpoints forward tokens inline, server is stateless
 - **Live holds & checkouts** — hold status on every card, fetched on page load from BC API
 - **Hold management** — place and cancel holds with status transitions
@@ -20,7 +20,7 @@ Personalized children's book recommendation engine for Bibliocommons library sys
 ## Requirements
 
 - Python 3.13+
-- torchtorch, sentence-transformers (for daily embedding generation; server-only doesn't need them)
+- model2vec (for embedding generation)
 - A Bibliocommons library card from any supported system
 
 ## Setup
@@ -37,12 +37,12 @@ Edit `config.py` if needed. The defaults work for the 5 supported libraries:
 
 | Variable | Default | Description |
 |---|---|---|
-| `EMBEDDING_MODEL` | `sentence-transformers/static-retrieval-mrl-en-v1` | Embedding model (256-d) |
-| `TIME_DECAY_HALF_LIFE_DAYS` | `90` | Borrow recency weight half-life |
-| `TOP_CANDIDATES` | `15` | Max books per carousel |
+| `HALF_LIFE_DAYS` | `90` | Borrow recency weight half-life |
+| `DISCOVERY_SEEDS` | `20` | MMR-seeded books for OR queries |
+| `POOL_LIMIT` | `100` | Max results per OR query |
+| `TOP_CANDIDATES` | `300` | Max books in Top Picks carousel |
 | `MMR_LAMBDA` | `0.5` | Diversity vs. relevance trade-off |
-| `MMR_TOP_K` | `100` | MMR candidate pool size |
-| `NEW_BOOK_MAX_AGE_YEARS` | `1` | How recent a book must be for "New" carousel |
+| `MMR_TOP_K` | `300` | MMR candidate pool size |
 | `UPDATE_WINDOW_START` | `2` | Auto-update window start (24h) |
 | `UPDATE_WINDOW_END` | `4` | Auto-update window end (24h) |
 
@@ -78,12 +78,12 @@ When `app.py` runs in non-debug mode, `updater.py` runs as a daemon thread and t
 
 ```
 daily.py                  → full pipeline: reset schema → sync catalog (5 libraries) → sync branches → generate embeddings
-recommend.py              → MaxSim/centroid + MMR recommendation engine, unified book_category()
+search_recs.py            → real-time recommendation engine: OR queries → MaxSim → MMR → Top Picks
 api.py                    → Bibliocommons API client (search, login, proxy functions for holds/checkouts/history)
 app.py                    → Flask web app (proxy endpoints, recommendations API, settings, stats)
 db.py                     → SQLite schema and helpers
 updater.py                → daemon thread for nightly auto-updates
-generate_embeddings.py    → sentence-transformer embedding generation from title/subtitle/authors/subjects/genres
+generate_embeddings.py    → embedding generation from title/subtitle/authors/subjects/genres
 sync.py                   → full catalog sync for a single library (used by daily.py)
 reset_db.py               → schema reset
 config.py                 → all configuration constants
@@ -95,18 +95,20 @@ Credentials are never stored on the server. The frontend stores `{card, PIN, bc_
 
 ### Recommendation algorithm
 
-1. **Embeddings** — each book is encoded as a 256-d vector from title, subtitle, content type, author, series, subjects, and genres
-2. **MaxSim scoring** — relevance is the max cosine similarity to any single borrowed book (time-decay weighted)
-3. **MMR reranking** — top 100 candidates per category are reranked balancing relevance and pairwise embedding diversity
-4. **Categories** — unified `book_category()` with 5 steps: format field → DDC → genre regex → format keywords → content_type
+1. **Embeddings** — each book is encoded as a vector from title, subtitle, content type, author, series, subjects, and genres via `model2vec` (`potion-base-4M`)
+2. **Seed selection** — time-weighted MMR (λ=0.5) picks 20 diverse books from borrowing history
+3. **OR queries** — each seed generates an OR query combining its subject headings, authors, and series; queries run in parallel against the BC search API
+4. **Pool scoring** — MaxSim computes each pool book's relevance as max weighted cosine similarity to any borrowed book
+5. **MMR reranking** — top 300 candidates are reranked balancing relevance and pairwise embedding diversity
+6. **Output** — single "Top Picks" carousel
 
 ### Data pipeline
 
 ```
-BC API → daily.py → sync.py → books_in_library table (5 libraries)
-                  → branches API → branches table
-                  → generate_embeddings.py → embeddings.npy
-Frontend → proxy endpoints → real-time holds/checkouts/history → localStorage
+BC API (search) ← search_recs.py ← borrowing history (from frontend)
+Frontend → proxy endpoints → real-time borrowing history (from BC API)
+       ↓
+localStorage (cached history) → POST /api/recommendations → search_recs.py
 ```
 
 ## API endpoints
