@@ -21,6 +21,20 @@ def _get_embedder():
 
 _NON_PHYSICAL_BOOK_FORMATS = frozenset({"EBOOK", "EAUDIO", "EMAGAZINE"})
 
+def dedup_items(items, key=None):
+    seen = set()
+    result = []
+    for item in items:
+        k = key(item) if key else item
+        if isinstance(k, str):
+            k = k.strip().lower()
+        if not k:
+            continue
+        if k not in seen:
+            seen.add(k)
+            result.append(item)
+    return result
+
 def _discover_physical_formats(library_id):
     try:
         data = api.search_bibs_json('audience:"children"', library_id,
@@ -61,12 +75,10 @@ def _build_embedding_text(title="", subtitle="", content_type="",
     if authors:
         parts.append(f"author: {'; '.join(authors)}")
     if series:
-        seen = set()
         for s in series:
             name = s.get("name", s) if isinstance(s, dict) else s
             name = (name or "").strip()
-            if name and name.lower() not in seen:
-                seen.add(name.lower())
+            if name:
                 parts.append(f"series: {name}")
     if subjects:
         parts.append(f"subjects: {' '.join(subjects)}")
@@ -204,12 +216,13 @@ def get_recommendations(library_id, borrowing_history):
     books = []
     for b in borrowing_history:
         authors_raw = b.get("authors") or b.get("author") or ""
-        authors = authors_raw if isinstance(authors_raw, list) else []
-        series = b.get("series") or []
+        authors = dedup_items(authors_raw if isinstance(authors_raw, list) else [])
+        series_raw = b.get("series") or []
+        series = dedup_items(series_raw, key=lambda s: s.get("name", "") if isinstance(s, dict) else str(s))
         title = (b.get("title") or "").strip()
         subtitle = b.get("subtitle") or ""
         content_type = b.get("content_type") or ""
-        subjects = b.get("subjects") or []
+        subjects = dedup_items(b.get("subjects") or [])
         genres = b.get("genres") or []
 
         text_for_emb = _build_embedding_text(
