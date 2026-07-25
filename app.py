@@ -97,6 +97,8 @@ def api_recommendations():
                 _fmt_rec(r, syndetics, lib_id)
 
         return jsonify({"carousels": carousels, "has_profile": has_profile})
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
         if app.config.get("DEBUG_MODE"):
             raise

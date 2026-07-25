@@ -79,7 +79,7 @@ def _time_weight(checkout_date, is_current=False):
     if is_current:
         return 1.0
     if not checkout_date:
-        return 0.3
+        raise ValueError(f"borrowing history entry missing checkout_date")
     try:
         d = date.fromisoformat(checkout_date[:10])
     except (ValueError, TypeError):
