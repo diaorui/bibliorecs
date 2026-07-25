@@ -8,6 +8,21 @@ import re
 import config
 
 
+def dedup_items(items, key=None):
+    seen = set()
+    result = []
+    for item in items:
+        k = key(item) if key else item
+        if isinstance(k, str):
+            k = k.strip().lower()
+        if not k:
+            continue
+        if k not in seen:
+            seen.add(k)
+            result.append(item)
+    return result
+
+
 def _lib_cfg(library_id):
     return config.LIBRARIES[library_id]
 
@@ -81,14 +96,15 @@ def parse_fields(data):
 
 def extract_book_info(metadata_id, bib):
     info = bib.get("briefInfo", {})
-    subjects = info.get("subjectHeadings", [])
+    subjects = dedup_items(info.get("subjectHeadings", []))
     composite_subjects = info.get("compositeSubjectHeadings", [])
     genres = info.get("genreForm", [])
-    series_raw = info.get("series", [])
+    series_raw = dedup_items(info.get("series", []),
+                              key=lambda s: s.get("name", "") if isinstance(s, dict) else str(s))
     isbns = info.get("isbns", [])
     super_formats = info.get("superFormats", [])
 
-    authors = info.get("authors", [])
+    authors = dedup_items(info.get("authors", []))
 
     audiences = info.get("audiences", [])
 

@@ -342,6 +342,18 @@
       });
     }
 
+    function dedupItems(items, keyFn) {
+      var seen = {}, result = [];
+      for (var i = 0; i < items.length; i++) {
+        var item = items[i];
+        var k = keyFn ? keyFn(item) : item;
+        if (typeof k === 'string') k = k.trim().toLowerCase();
+        if (!k) continue;
+        if (!seen[k]) { seen[k] = true; result.push(item); }
+      }
+      return result;
+    }
+
     function buildBorrowingHistory(entries, bibs) {
       var seen = {};
       var borrowingHistory = [];
@@ -355,10 +367,10 @@
             metadata_id: entry.metadataId,
             title: bib.title || '',
             subtitle: bib.subtitle || '',
-            authors: bib.authors || [],
-            series: bib.series || [],
+            authors: dedupItems(bib.authors || []),
+            series: dedupItems(bib.series || [], function(s) { return (s && s.name) || ''; }),
             isbns: bib.isbns || [],
-            subjects: bib.subjectHeadings || [],
+            subjects: dedupItems(bib.subjectHeadings || []),
             genres: bib.genreForm || [],
             content_type: bib.contentType || '',
             format: bib.format || '',
@@ -385,10 +397,10 @@
           metadata_id: co.metadataId,
           title: bib.title || co.bibTitle || '',
           subtitle: bib.subtitle || '',
-          authors: bib.authors || [],
-          series: bib.series || [],
+          authors: dedupItems(bib.authors || []),
+          series: dedupItems(bib.series || [], function(s) { return (s && s.name) || ''; }),
           isbns: bib.isbns || [],
-          subjects: bib.subjectHeadings || [],
+          subjects: dedupItems(bib.subjectHeadings || []),
           genres: bib.genreForm || [],
           content_type: bib.contentType || '',
           format: bib.format || '',

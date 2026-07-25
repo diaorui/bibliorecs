@@ -8,6 +8,7 @@ from model2vec import StaticModel
 
 import config
 import api
+from api import dedup_items
 
 _EMBEDDER = None
 
@@ -20,20 +21,6 @@ def _get_embedder():
 
 
 _NON_PHYSICAL_BOOK_FORMATS = frozenset({"EBOOK", "EAUDIO", "EMAGAZINE"})
-
-def dedup_items(items, key=None):
-    seen = set()
-    result = []
-    for item in items:
-        k = key(item) if key else item
-        if isinstance(k, str):
-            k = k.strip().lower()
-        if not k:
-            continue
-        if k not in seen:
-            seen.add(k)
-            result.append(item)
-    return result
 
 def _discover_physical_formats(library_id):
     try:

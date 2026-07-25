@@ -8,6 +8,7 @@ import urllib.error
 
 from flask import Flask, render_template, jsonify, request
 import api
+from api import dedup_items
 import config
 import search_recs
 
@@ -299,9 +300,10 @@ def api_proxy_bib(metadata_id):
             "format": bi.get("format"),
             "description": bi.get("description"),
             "publication_year": api._parse_year(bi.get("publicationDate", "")),
-            "series": bi.get("series", []),
-            "subjects": bi.get("subjectHeadings", []),
-            "genres": bi.get("genreForm", []),
+            "series": dedup_items(bi.get("series", []),
+                                   key=lambda s: s.get("name", "") if isinstance(s, dict) else str(s)),
+            "subjects": dedup_items(bi.get("subjectHeadings", [])),
+            "genres": dedup_items(bi.get("genreForm", [])),
         })
     except Exception as e:
         return jsonify({"error": str(e)})
