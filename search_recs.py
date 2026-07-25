@@ -21,24 +21,23 @@ def _get_embedder():
     return _EMBEDDER
 
 
+_NON_PHYSICAL_BOOK_FORMATS = frozenset({"EBOOK", "EAUDIO", "EMAGAZINE"})
+
 def _discover_physical_formats(library_id):
-    formats = set()
     try:
-        data = api.search_bibs_json('audience:"children"', library_id, f_circ="CIRC", limit=100)
-        bibs = api.parse_bib_entities(data)
-        for mid, bib in bibs.items():
-            bi = bib.get("briefInfo", {})
-            fmt = bi.get("format", "")
-            isbns = bi.get("isbns", [])
-            super_fmts = bi.get("superFormats", [])
-            if not fmt or not isbns:
-                continue
-            if "BOOKS" in super_fmts and "ELECTRONIC_FORMATS" not in super_fmts:
-                formats.add(fmt)
+        data = api.search_bibs_json('audience:"children"', library_id,
+                                     f_circ="CIRC", limit=1)
+        for f in data.get("catalogSearch", {}).get("fields", []):
+            if f.get("id") == "FORMAT":
+                fmts = [
+                    fil["value"] for fil in f.get("fieldFilters", [])
+                    if "BOOKS" in fil.get("groupIds", [])
+                    and fil["value"] not in _NON_PHYSICAL_BOOK_FORMATS
+                ]
+                return fmts if fmts else ["BK"]
     except Exception:
         pass
-
-    return list(formats) if formats else ["BK"]
+    return ["BK"]
 
 
 def _embed_texts(texts):
