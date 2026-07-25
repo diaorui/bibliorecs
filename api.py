@@ -358,28 +358,35 @@ def fetch_novelist(library_id, metadata_id):
 
     results = []
     eb = data.get("entities", {}).get("bibs", {})
-    for item in data.get("recommendations", {}).get("items", []):
-        if item.get("providerName") != "NOVELIST":
-            continue
-        rid = item.get("id")
-        if not rid or rid not in eb:
-            continue
-        bib = eb[rid]
+
+    def _add_bib(rid):
+        bib = eb.get(rid)
+        if not bib:
+            return
         bi = bib.get("briefInfo", {})
         if not bi:
-            continue
+            return
         lang = (bi.get("primaryLanguage") or "").lower()
         if lang and lang != "eng":
-            continue
-        super_fmts = bi.get("superFormats", [])
-        if "BOOKS" not in super_fmts or "ELECTRONIC_FORMATS" in super_fmts:
-            continue
+            return
+        if "BOOKS" not in bi.get("superFormats", []):
+            return
         if not bi.get("isbns"):
-            continue
+            return
         a = bib.get("availability", {})
         if a.get("status") == "ON_ORDER" or a.get("circulationType") == "NON_CIRCULATING":
-            continue
+            return
         results.append(extract_book_info(rid, bib))
+
+    # NOVELIST recommendations
+    for item in data.get("recommendations", {}).get("items", []):
+        if item.get("providerName") == "NOVELIST":
+            _add_bib(item.get("id"))
+
+    # Related titles
+    for rid in data.get("relatedTitles", {}).get("items", []):
+        _add_bib(rid)
+
     return results
 
 
