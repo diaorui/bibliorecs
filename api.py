@@ -88,6 +88,8 @@ def extract_book_info(metadata_id, bib):
 
     authors = info.get("authors", [])
 
+    audiences = info.get("audiences", [])
+
     return {
         "metadata_id": metadata_id,
         "title": info.get("title", ""),
@@ -95,6 +97,7 @@ def extract_book_info(metadata_id, bib):
         "authors": json.dumps(authors, ensure_ascii=False),
         "format": info.get("format", ""),
         "content_type": info.get("contentType"),
+        "audiences": json.dumps(audiences, ensure_ascii=False),
         "description": info.get("description", ""),
         "call_number": info.get("callNumber", ""),
         "publication_year": _parse_year(info.get("publicationDate", "")),
