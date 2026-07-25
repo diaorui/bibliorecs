@@ -306,6 +306,7 @@ def get_recommendations(library_id, borrowing_history):
     global_order = np.argsort(sims)[::-1][:top_k]
     global_subset = pool_norm[global_order]
     global_pairwise = global_subset @ global_subset.T
+    np.clip(global_pairwise, 0, 1, out=global_pairwise)
     mmr_selected = _mmr(sims[global_order], global_pairwise, config.MMR_LAMBDA, config.TOP_CANDIDATES)
     top_picks_indices = global_order[mmr_selected]
 
