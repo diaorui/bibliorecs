@@ -369,6 +369,9 @@ def fetch_novelist(library_id, metadata_id):
         lang = (bi.get("primaryLanguage") or "").lower()
         if lang and lang != "eng":
             return
+        audiences = bi.get("audiences", [])
+        if audiences and "JUVENILE" not in audiences:
+            return
         if "BOOKS" not in bi.get("superFormats", []):
             return
         if not bi.get("isbns"):
