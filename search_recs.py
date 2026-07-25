@@ -142,11 +142,11 @@ def _build_or_query(book):
         s = s.strip()
         if s:
             parts.append(f'subject:({s})')
-    for a in authors[:2]:
+    for a in authors[:3]:
         a = a.strip().replace('"', "")
         if a:
             parts.append(f'author:"{a}"')
-    for s in series_raw[:2]:
+    for s in series_raw[:3]:
         name = s.get("name", "").strip() if isinstance(s, dict) else str(s).strip()
         name = name.replace('"', "")
         if name:
