@@ -138,7 +138,7 @@ def _build_or_query(book):
     series_raw = book.get("series") or []
 
     parts = []
-    for s in subjects[:5]:
+    for s in subjects[:6]:
         s = s.strip()
         if s:
             parts.append(f'subject:({s})')
