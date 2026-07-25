@@ -292,7 +292,7 @@ def api_proxy_bib(metadata_id):
             "metadata_id": metadata_id,
             "title": bi.get("title"),
             "subtitle": bi.get("subtitle"),
-            "author": ", ".join(bi.get("authors") or []),
+            "author": ", ".join(dedup_items(bi.get("authors") or [])),
             "isbn": isbn,
             "isbns": isbns,
             "img_url": img,

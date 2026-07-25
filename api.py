@@ -98,7 +98,7 @@ def extract_book_info(metadata_id, bib):
     info = bib.get("briefInfo", {})
     subjects = dedup_items(info.get("subjectHeadings", []))
     composite_subjects = info.get("compositeSubjectHeadings", [])
-    genres = info.get("genreForm", [])
+    genres = dedup_items(info.get("genreForm", []))
     series_raw = dedup_items(info.get("series", []),
                               key=lambda s: s.get("name", "") if isinstance(s, dict) else str(s))
     isbns = info.get("isbns", [])
