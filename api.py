@@ -13,7 +13,7 @@ def _lib_cfg(library_id):
 
 
 def search_bibs_json(query, library_id, formats=None, f_circ=None, f_lang=None,
-                     search_type="bl", page=1, sort=None, retries=3, limit=100):
+                     f_audience=None, search_type="bl", page=1, sort=None, retries=3, limit=100):
     cfg = _lib_cfg(library_id)
     gateway_base = cfg["gateway_base"]
     catalog_base = cfg["catalog_base"]
@@ -31,6 +31,8 @@ def search_bibs_json(query, library_id, formats=None, f_circ=None, f_lang=None,
         body["f_CIRC"] = f_circ
     if f_lang:
         body["f_PRIMARY_LANGUAGE"] = f_lang
+    if f_audience:
+        body["f_AUDIENCE"] = f_audience
     if sort:
         body["sort"] = sort
     if limit:

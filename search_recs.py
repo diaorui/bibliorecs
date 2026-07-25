@@ -1,7 +1,5 @@
-import re
 import json
 import threading
-from collections import defaultdict
 from datetime import date
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -92,124 +90,6 @@ def _time_weight(checkout_date, is_current=False):
     return 2 ** (-days_ago / config.HALF_LIFE_DAYS)
 
 
-def _build_query(qtype, value):
-    if qtype == "author" and value:
-        return f'author:"{value}" AND audience:"children"'
-    elif qtype == "series" and value:
-        return f'series:"{value}" AND audience:"children"'
-    elif qtype == "title" and value:
-        return f'title:"{value}" AND audience:"children"'
-    return None
-
-
-def _continuous_greedy(books, emb_norm, weights, max_queries=10):
-    if not books or len(emb_norm) == 0:
-        return []
-    n = len(books)
-    sim_matrix = emb_norm @ emb_norm.T
-    sim_matrix = np.clip(sim_matrix, 0, 1)
-
-    seen_q = set()
-    candidates = []
-
-    for i, b in enumerate(books):
-        for a in (b.get("authors") or []):
-            key = ("author", a.strip().lower())
-            if not a.strip() or key in seen_q:
-                continue
-            seen_q.add(key)
-            exact = {j for j, bb in enumerate(books)
-                     if any(aa.strip().lower() == a.strip().lower()
-                            for aa in (bb.get("authors") or []))}
-            candidates.append(("author", a.strip(), exact))
-
-        for s in (b.get("series") or []):
-            name = s.get("name", s) if isinstance(s, dict) else s
-            name = (name or "").strip()
-            if not name:
-                continue
-            key = ("series", name.lower())
-            if key in seen_q:
-                continue
-            seen_q.add(key)
-            exact = {j for j, bb in enumerate(books)
-                     if any(sn.lower() == name.lower()
-                            for sn in _get_series_names(bb))}
-            candidates.append(("series", name, exact))
-
-    valid = []
-    for qt, qv, exact in candidates:
-        if not exact:
-            continue
-        exact_arr = np.array(list(exact))
-        cov_vec = np.max(sim_matrix[:, exact_arr], axis=1)
-        valid.append((qt, qv, exact, cov_vec))
-
-    selected = []
-    cur_cov = np.zeros(n)
-    remaining = list(enumerate(valid))
-
-    for _ in range(max_queries):
-        best_m = -1.0
-        best_i = -1
-
-        for ri, (orig_idx, (qt, qv, exact, cov_vec)) in enumerate(remaining):
-            delta = np.maximum(0, cov_vec - cur_cov)
-            marginal = float((weights * delta).sum())
-            if marginal > best_m:
-                best_m = marginal
-                best_i = ri
-
-        if best_i < 0 or best_m <= 0:
-            break
-
-        qt, qv, exact, cov_vec = remaining[best_i][1]
-        q = _build_query(qt, qv)
-        if not q:
-            del remaining[best_i]
-            continue
-        selected.append((qt, qv, q))
-        cur_cov = np.maximum(cur_cov, cov_vec)
-        del remaining[best_i]
-
-    return selected
-
-
-def _get_series_names(book):
-    seen = set()
-    names = []
-    for s in (book.get("series") or []):
-        name = s.get("name", s) if isinstance(s, dict) else s
-        name = (name or "").strip().lower()
-        if name and name not in seen:
-            seen.add(name)
-            names.append(name)
-    return names
-
-
-def _search_one(query, library_id, formats):
-    try:
-        data = api.search_bibs_json(query, library_id, formats=formats,
-                                     f_circ="CIRC", f_lang="eng", limit=config.POOL_LIMIT)
-        bibs = api.parse_bib_entities(data)
-        results = []
-        for metadata_id, bib in bibs.items():
-            bi = bib.get("briefInfo", {})
-            isbns = bi.get("isbns", [])
-            a = bib.get("availability", {})
-            if a.get("status") == "ON_ORDER" or a.get("circulationType") == "NON_CIRCULATING":
-                continue
-            if not isbns:
-                continue
-            lang = (bi.get("primaryLanguage") or "").lower()
-            if lang and lang != "eng":
-                continue
-            info = api.extract_book_info(metadata_id, bib)
-            results.append(info)
-        return results, query
-    except Exception:
-        return [], query
-
 
 def _maxsim_scores(pool_norm, borrowed_norm, borrowed_weights):
     weighted = borrowed_norm * borrowed_weights[:, np.newaxis]
@@ -253,18 +133,57 @@ def _dedup_books(books):
     return result
 
 
-def _carousel_name(qtype, query_str):
-    m = re.search(r'[a-z]+:"([^"]+)"', query_str)
-    val = m.group(1) if m else None
-    if not val:
+def _build_or_query(book):
+    subjects = book.get("subjects") or []
+    authors = book.get("authors") or []
+    series_raw = book.get("series") or []
+
+    parts = []
+    for s in subjects[:5]:
+        s = s.strip()
+        if s:
+            parts.append(f'subject:({s})')
+    for a in authors[:2]:
+        a = a.strip().replace('"', "")
+        if a:
+            parts.append(f'author:"{a}"')
+    for s in series_raw[:2]:
+        name = s.get("name", "").strip() if isinstance(s, dict) else str(s).strip()
+        name = name.replace('"', "")
+        if name:
+            parts.append(f'series:"{name}"')
+
+    if not parts:
         return None
-    if qtype == "author":
-        return f"Books by {val}"
-    elif qtype == "series":
-        return f"{val}"
-    elif qtype == "title":
-        return f"If you liked {val}"
-    return None
+    return f"({' OR '.join(parts)})"
+
+
+def _search_or(query, library_id, formats):
+    try:
+        data = api.search_bibs_json(query, library_id, formats=formats,
+                                     f_circ="CIRC", f_lang="eng",
+                                     f_audience="juvenile",
+                                     limit=config.POOL_LIMIT)
+        bibs = api.parse_bib_entities(data)
+        results = []
+        for metadata_id, bib in bibs.items():
+            bi = bib.get("briefInfo", {})
+            isbns = bi.get("isbns", [])
+            a = bib.get("availability", {})
+            if a.get("status") == "ON_ORDER" or a.get("circulationType") == "NON_CIRCULATING":
+                continue
+            if not isbns:
+                continue
+            lang = (bi.get("primaryLanguage") or "").lower()
+            if lang and lang != "eng":
+                continue
+            if "JUVENILE" not in bi.get("audiences", []):
+                continue
+            info = api.extract_book_info(metadata_id, bib)
+            results.append(info)
+        return results
+    except Exception:
+        return []
 
 
 def get_recommendations(library_id, borrowing_history):
@@ -272,7 +191,6 @@ def get_recommendations(library_id, borrowing_history):
         return {"carousels": [], "has_profile": False}
 
     has_profile = True
-    pool_lock = threading.Lock()
 
     borrowed_mids = set()
     borrowed_isbns = set()
@@ -318,30 +236,26 @@ def get_recommendations(library_id, borrowing_history):
     emb_norm = _embed_texts(texts)
     weights = np.array([_time_weight(b["checkout_date"], b["is_current"]) for b in books], dtype=float)
 
-    fmt_queries = _continuous_greedy(books, emb_norm, weights, config.MAX_SEARCH_QUERIES)
-    if not fmt_queries:
-        return {"carousels": [], "has_profile": has_profile}
-
-    formats = _discover_physical_formats(library_id)
-
-    # Select diverse seeds for NOVELIST discovery via MMR
+    # Select diverse seeds via MMR
     sim_matrix = emb_norm @ emb_norm.T
     np.clip(sim_matrix, 0, 1, out=sim_matrix)
-    seed_indices = _mmr(weights, sim_matrix, 0.5, min(config.DISCOVERY_SEEDS, len(books)))
+    n_seeds = min(config.DISCOVERY_SEEDS, len(books))
+    seed_indices = _mmr(weights, sim_matrix, config.MMR_LAMBDA, n_seeds)
+
+    formats = _discover_physical_formats(library_id)
 
     pool = []
     pool_mids = set()
     pool_isbns = set()
-    query_to_results = defaultdict(list)
     pool_lock = threading.Lock()
 
     def _add_to_pool(info):
         mid = info["metadata_id"]
         if mid in borrowed_mids:
-            return
+            return False
         info_isbns = json.loads(info.get("isbns") or "[]")
         if any(i in borrowed_isbns for i in info_isbns):
-            return
+            return False
         with pool_lock:
             if mid not in pool_mids and not any(i in pool_isbns for i in info_isbns):
                 pool_mids.add(mid)
@@ -351,31 +265,18 @@ def get_recommendations(library_id, borrowing_history):
                 return True
         return False
 
-    def _do_discovery(metadata_id):
-        try:
-            results = api.fetch_novelist(library_id, metadata_id)
-            added = 0
-            for info in results:
-                if _add_to_pool(info):
-                    added += 1
-            return added
-        except Exception:
-            return 0
-
+    # Build OR queries and run in parallel
     with ThreadPoolExecutor(max_workers=10) as executor:
-        search_futs = {executor.submit(_search_one, q, library_id, formats): q
-                       for _, _, q in fmt_queries}
-        discovery_futs = {executor.submit(_do_discovery, books[i]["metadata_id"]): i
-                          for i in seed_indices}
+        futs = {}
+        for i in seed_indices:
+            query = _build_or_query(books[i])
+            if query:
+                futs[executor.submit(_search_or, query, library_id, formats)] = books[i]["title"]
 
-        all_futs = list(search_futs.keys()) + list(discovery_futs.keys())
-
-        for fut in as_completed(all_futs):
-            if fut in search_futs:
-                results, query = fut.result()
-                for info in results:
-                    if _add_to_pool(info):
-                        query_to_results[query].append(info)
+        for fut in as_completed(futs):
+            results = fut.result()
+            for info in results:
+                _add_to_pool(info)
 
     if not pool:
         return {"carousels": [], "has_profile": has_profile}
@@ -396,9 +297,6 @@ def get_recommendations(library_id, borrowing_history):
             subjects=subjects_raw, genres=genres_raw))
 
     pool_norm = _embed_texts(pool_texts)
-    pool_mid_to_idx = {}
-    for i, info in enumerate(pool):
-        pool_mid_to_idx[info["metadata_id"]] = i
 
     # MaxSim
     sims = _maxsim_scores(pool_norm, emb_norm, weights)
@@ -420,36 +318,6 @@ def get_recommendations(library_id, borrowing_history):
         rank += 1
         top_picks.append(info)
 
-    # Per-query carousels
-    per_query_carousels = []
-
-    for qt, qv, q in fmt_queries:
-        results = query_to_results.get(q, [])
-        if len(results) < config.RECS_PER_CAROUSEL:
-            continue
-        name = _carousel_name(qt, q)
-        if not name:
-            continue
-
-        results.sort(key=lambda r: -sims[pool_mid_to_idx.get(r["metadata_id"], 0)])
-        top_n = min(config.TOP_CANDIDATES, len(results))
-        selected = []
-        for info in results[:top_n]:
-            mid = info["metadata_id"]
-            idx = pool_mid_to_idx.get(mid)
-            if idx is None:
-                continue
-            r = dict(info)
-            r["score"] = float(sims[idx])
-            selected.append(r)
-
-        if selected:
-            per_query_carousels.append({"name": name, "books": _dedup_books(selected)})
-
-    carousels = []
-
-    carousels.append({"name": "Top Picks", "books": top_picks})
-
-    carousels.extend(per_query_carousels)
+    carousels = [{"name": "Top Picks", "books": top_picks}]
 
     return {"carousels": carousels, "has_profile": has_profile}
