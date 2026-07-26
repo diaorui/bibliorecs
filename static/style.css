@@ -56,7 +56,20 @@ body {
   color: #86868b;
   min-width: 0;
   overflow: hidden;
+  cursor: pointer;
+  user-select: none;
 }
+
+.nav-location:hover { color: #1d1d1f; }
+
+.nav-location-chevron {
+  font-size: 0.6rem;
+  flex-shrink: 0;
+  color: #aeaeb2;
+  transition: transform 0.15s;
+}
+
+.nav-location:hover .nav-location-chevron { color: #86868b; }
 
 .nav-location-icon { flex-shrink: 0; }
 

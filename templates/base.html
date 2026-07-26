@@ -12,9 +12,10 @@
     <div class="nav-inner">
       <a href="/" class="nav-brand">Bibliorecs</a>
       {% if selected_branch_name %}
-      <div class="nav-location" title="{{ selected_library_name }}">
+      <div class="nav-location" title="{{ selected_library_name }}" onclick="openBranchPicker()">
         <span class="nav-location-icon">📍</span>
         <span class="nav-location-name">{{ selected_branch_name }}</span>
+        <span class="nav-location-chevron">▾</span>
       </div>
       {% endif %}
       <div class="nav-links">
@@ -31,6 +32,45 @@
   <main class="container">
     {% block content %}{% endblock %}
   </main>
+
+  <div id="branch-picker-overlay" class="onboarding-overlay" style="display:none" onclick="closeBranchPicker()">
+    <div class="onboarding-modal" onclick="event.stopPropagation()" style="text-align:left;padding:24px;max-width:480px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <strong style="font-size:1.05rem">Change Pickup Location</strong>
+        <span onclick="closeBranchPicker()" style="cursor:pointer;font-size:1.3rem;color:#86868b;line-height:1">&times;</span>
+      </div>
+      <div class="tree-select" style="margin-top:0">
+        <div class="tree-search">
+          <span class="tree-search-icon">🔍</span>
+          <input type="text" id="tree-filter" class="tree-input" placeholder="Search branch or library name…" oninput="filterTree()">
+        </div>
+        <div class="tree-list" id="tree-list">
+          {% for lid, lcfg in libraries.items() %}
+          {% set lib_branches = branches.get(lid, []) %}
+          <div class="tree-lib" data-lib-id="{{ lid }}" data-lib-name="{{ lcfg.name }}">
+            <div class="tree-lib-header" onclick="toggleLib(this)">
+              <span class="tree-lib-icon">📖</span>
+              <span class="tree-lib-name">{{ lcfg.name }}</span>
+              <span class="tree-lib-count">{{ lib_branches|length }} branches</span>
+              <span class="tree-chevron">▶</span>
+            </div>
+            <div class="tree-branches">
+              {% for b in lib_branches %}
+              <div class="tree-branch" data-branch-code="{{ b.code }}" data-branch-name="{{ b.name }}" onclick="selectBranch('{{ lid }}', '{{ b.code }}')">
+                <span class="tree-branch-icon">📍</span>
+                <span class="tree-branch-name">{{ b.name }}</span>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        <div id="tree-empty" class="tree-empty" style="display:none">
+          <p>😕 No library or branch matches your search.</p>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <script>
   var PLACEHOLDER_SVG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='180' viewBox='0 0 120 180'%3E%3Crect width='120' height='180' fill='%23e8e8ed' rx='4'/%3E%3Cpath d='M45 55v70l15-8 15 8V55z' fill='%2386868b' opacity='.4'/%3E%3Crect x='48' y='65' width='24' height='2' fill='%2386868b' opacity='.3'/%3E%3C/svg%3E";
@@ -175,6 +215,103 @@
   }
   </script>
   <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3/dist/JsBarcode.all.min.js"></script>
+
+<script>
+var _treeData = [
+  {% for lid, lcfg in libraries.items() %}
+  {% set lib_branches = branches.get(lid, []) %}
+  {
+    libId: '{{ lid }}',
+    libName: '{{ lcfg.name }}',
+    branches: [
+      {% for b in lib_branches %}
+      {code: '{{ b.code }}', name: '{{ b.name }}'}{% if not loop.last %},{% endif %}
+      {% endfor %}
+    ]
+  }{% if not loop.last %},{% endif %}
+  {% endfor %}
+];
+
+function toggleLib(header) {
+  var lib = header.closest('.tree-lib');
+  lib.classList.toggle('tree-lib-open');
+  var chevron = header.querySelector('.tree-chevron');
+  chevron.textContent = lib.classList.contains('tree-lib-open') ? '▼' : '▶';
+}
+
+function filterTree() {
+  var q = document.getElementById('tree-filter').value.toLowerCase().trim();
+  var list = document.getElementById('tree-list');
+  var empty = document.getElementById('tree-empty');
+  var anyVisible = false;
+
+  _treeData.forEach(function(lib) {
+    var el = list.querySelector('.tree-lib[data-lib-id="' + lib.libId + '"]');
+    var branchEls = el.querySelectorAll('.tree-branch');
+    var libMatch = lib.libName.toLowerCase().includes(q);
+
+    branchEls.forEach(function(b) {
+      var name = b.getAttribute('data-branch-name').toLowerCase() + ' ' + lib.libName.toLowerCase();
+      var match = q === '' || name.includes(q);
+      b.style.display = match ? '' : 'none';
+    });
+
+    var visibleBranches = el.querySelectorAll('.tree-branch[style*="display: none"]').length === 0
+      ? branchEls.length
+      : el.querySelectorAll('.tree-branch:not([style*="display: none"])').length;
+
+    if (q === '') {
+      el.style.display = '';
+      el.querySelector('.tree-branches').style.display = 'none';
+      el.classList.remove('tree-lib-open');
+    } else if (libMatch) {
+      el.style.display = '';
+      el.querySelector('.tree-branches').style.display = '';
+      el.classList.add('tree-lib-open');
+    } else if (visibleBranches > 0) {
+      el.style.display = '';
+      el.querySelector('.tree-branches').style.display = '';
+      el.classList.add('tree-lib-open');
+    } else {
+      el.style.display = 'none';
+    }
+
+    if (el.style.display !== 'none') anyVisible = true;
+  });
+
+  list.style.display = anyVisible ? '' : 'none';
+  empty.style.display = anyVisible ? 'none' : '';
+}
+
+function selectBranch(libId, branchCode) {
+  document.querySelector('.tree-select').innerHTML =
+    '<div style="text-align:center;padding:40px">' +
+    '<div class="spinner"></div>' +
+    '<p style="margin-top:12px;color:#86868b">Saving…</p></div>';
+  document.cookie = 'selected_library=' + libId + '; path=/; max-age=31536000';
+  document.cookie = 'selected_branch=' + branchCode + '; path=/; max-age=31536000';
+  location.reload();
+}
+
+function openBranchPicker() {
+  var overlay = document.getElementById('branch-picker-overlay');
+  overlay.style.display = '';
+  var input = document.getElementById('tree-filter');
+  if (input) {
+    input.value = '';
+    input.focus();
+    filterTree();
+  }
+}
+
+function closeBranchPicker() {
+  document.getElementById('branch-picker-overlay').style.display = 'none';
+}
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeBranchPicker();
+});
+</script>
   {% block scripts %}{% endblock %}
 </body>
 </html>
