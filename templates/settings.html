@@ -87,8 +87,8 @@ function loadCreds() {
     var statusEl = document.getElementById('creds-status-' + lid);
     var actionsEl = document.getElementById('creds-actions-' + lid);
     if (creds[lid] && creds[lid].bc_token) {
-      statusEl.innerHTML = '<span class="creds-status-dot creds-status-on"></span> Connected';
-      actionsEl.innerHTML = '<button class="btn-ghost creds-show-card" data-lib="' + lid + '">Show Card</button> <button class="btn-ghost creds-disconnect" data-lib="' + lid + '">Disconnect</button>';
+      statusEl.innerHTML = '<button class="btn-ghost creds-show-card" data-lib="' + lid + '" style="font-size:0.82rem">Show Card</button>';
+      actionsEl.innerHTML = '<button class="btn-ghost creds-disconnect" data-lib="' + lid + '">Disconnect</button>';
     } else {
       statusEl.innerHTML = '<span class="creds-status-dot creds-status-off"></span> Not connected';
       actionsEl.innerHTML = '<button class="btn-ghost creds-connect-btn" data-lib="' + lid + '">Connect</button>';
