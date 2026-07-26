@@ -160,8 +160,10 @@ def _refresh_search(key, meta):
     try:
         seed_audiences = meta.get("audiences", []) or []
         f_audience = "|".join(seed_audiences) if seed_audiences else None
+        seed_lang = meta.get("primary_language", "") or ""
+        f_lang = seed_lang.lower() if seed_lang else None
         data = api.search_bibs_json(query, library_id, formats=formats,
-                                     f_circ="CIRC", f_lang="eng",
+                                     f_circ="CIRC", f_lang=f_lang,
                                      f_audience=f_audience,
                                      limit=config.POOL_LIMIT)
         bibs = api.parse_bib_entities(data)
@@ -170,9 +172,10 @@ def _refresh_search(key, meta):
             bi = bib.get("briefInfo", {})
             if not bi.get("isbns"):
                 continue
-            lang = (bi.get("primaryLanguage") or "").lower()
-            if lang and lang != "eng":
-                continue
+            if seed_lang:
+                lang = (bi.get("primaryLanguage") or "").lower()
+                if lang and lang != seed_lang.lower():
+                    continue
             if seed_audiences:
                 bib_audiences = bi.get("audiences", []) or []
                 if not any(a in bib_audiences for a in seed_audiences):
@@ -287,7 +290,7 @@ def get_recommendations(library_id, borrowing_history):
             "checkout_date": b.get("checkout_date"),
             "is_current": b.get("is_current", False),
             "_text": text_for_emb,
-            "_meta": {"subjects": subjects, "authors": authors, "series": series, "audiences": b.get("audiences") or []},
+            "_meta": {"subjects": subjects, "authors": authors, "series": series, "audiences": b.get("audiences") or [], "primary_language": b.get("primary_language") or ""},
         })
 
     if not books:
