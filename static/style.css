@@ -1356,6 +1356,8 @@ th {
 
 .tree-list { border: 1px solid #e8e8ed; border-radius: 8px; overflow: hidden; background: #fff; }
 
+#branch-picker-overlay .tree-list { max-height: min(50vh, 400px); overflow-y: auto; overflow-x: hidden; }
+
 .tree-lib { border-bottom: 1px solid #e8e8ed; }
 .tree-lib:last-child { border-bottom: none; }
 
