@@ -25,7 +25,7 @@ _NON_PHYSICAL_BOOK_FORMATS = frozenset({"EBOOK", "EAUDIO", "EMAGAZINE"})
 
 def _discover_physical_formats(library_id):
     try:
-        data = api.search_bibs_json('audience:"children"', library_id,
+        data = api.search_bibs_json('*', library_id,
                                      f_circ="CIRC", limit=1)
         for f in data.get("catalogSearch", {}).get("fields", []):
             if f.get("id") == "FORMAT":
@@ -158,9 +158,11 @@ def _refresh_search(key, meta):
         return []
 
     try:
+        seed_audiences = meta.get("audiences", []) or []
+        f_audience = "|".join(seed_audiences) if seed_audiences else None
         data = api.search_bibs_json(query, library_id, formats=formats,
                                      f_circ="CIRC", f_lang="eng",
-                                     f_audience="juvenile",
+                                     f_audience=f_audience,
                                      limit=config.POOL_LIMIT)
         bibs = api.parse_bib_entities(data)
         results = []
@@ -171,8 +173,10 @@ def _refresh_search(key, meta):
             lang = (bi.get("primaryLanguage") or "").lower()
             if lang and lang != "eng":
                 continue
-            if "JUVENILE" not in bi.get("audiences", []):
-                continue
+            if seed_audiences:
+                bib_audiences = bi.get("audiences", []) or []
+                if not any(a in bib_audiences for a in seed_audiences):
+                    continue
             a = bib.get("availability", {})
             if a.get("status") == "ON_ORDER" or a.get("circulationType") == "NON_CIRCULATING":
                 continue
@@ -283,7 +287,7 @@ def get_recommendations(library_id, borrowing_history):
             "checkout_date": b.get("checkout_date"),
             "is_current": b.get("is_current", False),
             "_text": text_for_emb,
-            "_meta": {"subjects": subjects, "authors": authors, "series": series},
+            "_meta": {"subjects": subjects, "authors": authors, "series": series, "audiences": b.get("audiences") or []},
         })
 
     if not books:

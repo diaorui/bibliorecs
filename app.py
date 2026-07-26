@@ -222,6 +222,7 @@ def _ensure_bibs_from_proxy(data, library_id):
             "authors": dedup_items(bib.get("authors", [])),
             "series": dedup_items(bib.get("series", []),
                                    key=lambda s: s.get("name", "") if isinstance(s, dict) else str(s)),
+            "audiences": bib.get("audiences", []) or [],
         }
         search_recs.search_cache.ensure((library_id, metadata_id), meta=meta, wait=False)
 
