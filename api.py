@@ -82,6 +82,19 @@ def parse_bib_entities(data):
     return data.get("entities", {}).get("bibs", {})
 
 
+def suggest(library_id, query):
+    cfg = _lib_cfg(library_id)
+    url = f"{cfg['gateway_base']}/bibs/search/suggest?query={urllib.parse.quote(query)}&searchType=KEYWORD"
+    headers = {"Accept": "application/json"}
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode())
+        return [s["text"] for s in data.get("suggestions", [])]
+    except Exception:
+        return []
+
+
 def parse_pagination(data):
     return data.get("catalogSearch", {}).get("pagination", {})
 

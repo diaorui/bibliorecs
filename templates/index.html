@@ -48,6 +48,16 @@
 </div>
 
 {% else %}
+<div id="search-bar" style="margin-bottom:16px">
+  <div style="position:relative">
+    <div class="search-input-wrap">
+      <span class="search-icon">🔍</span>
+      <input type="text" id="search-input" class="search-input" placeholder="Search books..." autocomplete="off">
+      <button class="search-clear" id="search-clear" style="display:none">&times;</button>
+    </div>
+    <div id="search-suggestions" class="search-suggestions" style="display:none"></div>
+  </div>
+</div>
 <div id="recommendations-container">
   <h1 class="page-title">Your Recommendations</h1>
   <div id="rec-skeleton">
@@ -72,8 +82,17 @@
 (function() {
   var container = document.getElementById('recommendations-container');
   var skeleton = document.getElementById('rec-skeleton');
+  var searchInput = document.getElementById('search-input');
+  var searchClear = document.getElementById('search-clear');
+  var searchSuggestions = document.getElementById('search-suggestions');
   var __holdsByMid = {};
   var __checkedOutByMe = new Set();
+  var _searchQuery = '';
+  var _searchPage = 0;
+  var _searchTotalPages = 0;
+  var _cachedRecsHtml = null;
+  var _suggestTimer = null;
+  var _searchLoadingMore = false;
 
   function _ratingStars(avg) {
     var val = avg / 20;
@@ -89,6 +108,26 @@
     return html;
   }
 
+  function _bookCardHtml(r) {
+    var subtitle = r.subtitle ? '<span class="carousel-subtitle">' + r.subtitle + '</span>' : '';
+    return '<div class="carousel-card" data-mid="' + r.metadata_id + '">'
+      + '<a href="/book/' + r.metadata_id + '?isbn=' + (r.isbn || '') + '" class="carousel-card-link">'
+      + '<div class="carousel-cover-wrap">'
+      + '<img class="carousel-cover cover-img" src="' + r.img_url + '" alt="' + r.title + '" loading="lazy" data-fallback="' + r.fallback_url + '" data-isbn="' + (r.isbn || '') + '">'
+      + '<div class="cover-placeholder">📖<br>' + (r.title ? r.title.slice(0, 30) : '') + '</div>'
+      + '</div>'
+      + '<div class="carousel-body">'
+      + '<div class="carousel-title"><span>' + r.title + '</span>' + subtitle + '</div>'
+      + '<div class="carousel-author">' + (r.author || '') + '</div>'
+      + '<div style="height:1.2em;font-size:0.75rem;line-height:1.2em;margin-top:3px">'
+        + (r.rating_avg && r.rating_count ? _ratingStars(r.rating_avg) : '')
+      + '</div>'
+      + '</div>'
+      + '</a>'
+      + '<button class="btn-card" data-mid="' + r.metadata_id + '">Hold</button>'
+      + '</div>';
+  }
+
   function renderCarousels(carousels, hasProfile) {
     skeleton.style.display = 'none';
     var html = '<h1 class="page-title">Your Recommendations</h1>';
@@ -97,37 +136,9 @@
       var books = carousel.books || [];
       if (!books.length) return;
       html += '<div class="book-grid">';
-      books.forEach(function(r) {
-        var subtitle = r.subtitle ? '<span class="carousel-subtitle">' + r.subtitle + '</span>' : '';
-        html += '<div class="carousel-card" data-mid="' + r.metadata_id + '">'
-          + '<a href="/book/' + r.metadata_id + '?isbn=' + (r.isbn || '') + '" class="carousel-card-link">'
-          + '<div class="carousel-cover-wrap">'
-          + '<img class="carousel-cover cover-img" src="' + r.img_url + '" alt="' + r.title + '" loading="lazy" data-fallback="' + r.fallback_url + '" data-isbn="' + (r.isbn || '') + '">'
-          + '<div class="cover-placeholder">📖<br>' + (r.title ? r.title.slice(0, 30) : '') + '</div>'
-          + '</div>'
-          + '<div class="carousel-body">'
-          + '<div class="carousel-title"><span>' + r.title + '</span>' + subtitle + '</div>'
-          + '<div class="carousel-author">' + (r.author || '') + '</div>'
-          + '<div style="height:1.2em;font-size:0.75rem;line-height:1.2em;margin-top:3px">'
-            + (r.rating_avg && r.rating_count ? _ratingStars(r.rating_avg) : '')
-          + '</div>'
-          + '</div>'
-          + '</a>'
-          + '<button class="btn-card" data-mid="' + r.metadata_id + '">Hold</button>'
-          + '</div>';
-      });
+      books.forEach(function(r) { html += _bookCardHtml(r); });
       html += '</div>';
     });
-
-    if (!carousels.length) {
-      var msg;
-      if (hasProfile === false) {
-        msg = 'Visit the <a href="/history">History</a> page to sync your borrowing history.';
-      } else {
-        msg = 'Not enough books match your reading history. Borrow more to get better recommendations.';
-      }
-      html += '<div class="empty-state"><h2>No recommendations yet</h2><p>' + msg + '</p></div>';
-    }
 
     container.innerHTML = html;
   }
@@ -173,7 +184,152 @@
     }
 
     fetchHoldsAndCheckouts();
+
+    searchInput.addEventListener('input', function() {
+      var val = this.value.trim();
+      searchClear.style.display = val ? '' : 'none';
+      _suggestTimer && clearTimeout(_suggestTimer);
+      if (val.length < 2) { dismissSuggestions(); return; }
+      _suggestTimer = setTimeout(function() { fetchSuggestions(val); }, 300);
+    });
+
+    searchInput.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        dismissSuggestions();
+        doSearch(this.value.trim());
+      }
+      if (e.key === 'Escape') {
+        restoreRecommendations();
+      }
+    });
+
+    searchClear.addEventListener('click', function() {
+      restoreRecommendations();
+    });
   }
+
+  function dismissSuggestions() {
+    searchSuggestions.style.display = 'none';
+  }
+
+  function fetchSuggestions(query) {
+    var libId = document.body.getAttribute('data-lib');
+    fetch('/api/search/suggest?library_id=' + encodeURIComponent(libId) + '&q=' + encodeURIComponent(query))
+      .then(function(r) { return r.json(); })
+      .then(function(list) {
+        if (!list || !list.length) { dismissSuggestions(); return; }
+        searchSuggestions.innerHTML = list.map(function(s) {
+          return '<div class="suggestion-item" data-q="' + s.replace(/"/g, '&quot;') + '">🔍 ' + s + '</div>';
+        }).join('');
+        searchSuggestions.style.display = '';
+      })
+      .catch(function() { dismissSuggestions(); });
+  }
+
+  function doSearch(query, page) {
+    if (!query) return;
+    page = page || 1;
+    _searchQuery = query;
+    _searchPage = page;
+
+    if (!_cachedRecsHtml) _cachedRecsHtml = container.innerHTML;
+    _searchTotalPages = 0;
+
+    skeleton.style.display = '';
+    container.innerHTML = '<h1 class="page-title">Search Results</h1>';
+    document.getElementById('rec-skeleton') || container.appendChild(skeleton);
+
+    var libId = document.body.getAttribute('data-lib');
+    fetch('/api/search', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({library_id: libId, query: query, page: page})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      skeleton.style.display = 'none';
+      if (data.error) { renderSearchError(data.error); return; }
+      var books = data.books || [];
+      _searchTotalPages = data.total_pages || 0;
+      if (!books.length && page <= 1) { renderNoResults(query); return; }
+      renderSearchResults(books, page);
+      applyButtonStates();
+      revealButtons();
+      document.querySelectorAll('img.cover-img').forEach(function(img) {
+        if (typeof initCoverFallback === 'function') initCoverFallback(img);
+      });
+    })
+    .catch(function() {
+      skeleton.style.display = 'none';
+      renderSearchError('Network error');
+    });
+  }
+
+  function renderSearchResults(books, page) {
+    if (page <= 1) {
+      container.innerHTML = '<h1 class="page-title">Search Results</h1>';
+    }
+    var grid = container.querySelector('.book-grid');
+    if (!grid) {
+      grid = document.createElement('div');
+      grid.className = 'book-grid';
+      container.appendChild(grid);
+    }
+    books.forEach(function(r) {
+      var tmp = document.createElement('div');
+      tmp.innerHTML = _bookCardHtml(r);
+      grid.appendChild(tmp.firstElementChild);
+    });
+  }
+
+  function renderNoResults(query) {
+    container.innerHTML = '<h1 class="page-title">Search Results</h1>'
+      + '<div class="empty-state"><p>No results for "' + query + '"</p></div>';
+  }
+
+  function renderSearchError(msg) {
+    container.innerHTML = '<h1 class="page-title">Search Results</h1>'
+      + '<div class="empty-state" style="color:#dc2626">' + msg + '</div>';
+  }
+
+  function restoreRecommendations() {
+    if (_cachedRecsHtml) {
+      container.innerHTML = _cachedRecsHtml;
+      _cachedRecsHtml = null;
+    }
+    searchInput.value = '';
+    searchClear.style.display = 'none';
+    dismissSuggestions();
+    _searchQuery = '';
+    _searchPage = 0;
+    _searchTotalPages = 0;
+    skeleton.style.display = 'none';
+    document.querySelectorAll('img.cover-img').forEach(function(img) {
+      if (typeof initCoverFallback === 'function') initCoverFallback(img);
+    });
+    applyButtonStates();
+    revealButtons();
+  }
+
+  document.addEventListener('scroll', function() {
+    if (!_searchQuery || _searchPage <= 0 || _searchPage >= _searchTotalPages || _searchLoadingMore) return;
+    var scrollPos = window.scrollY + window.innerHeight;
+    if (scrollPos >= document.body.scrollHeight - 300) {
+      _searchLoadingMore = true;
+      _searchPage++;
+      doSearch(_searchQuery, _searchPage);
+    }
+  });
+
+  document.addEventListener('click', function(e) {
+    var item = e.target.closest('.suggestion-item');
+    if (item) {
+      var q = item.getAttribute('data-q');
+      searchInput.value = q;
+      dismissSuggestions();
+      doSearch(q);
+    }
+  });
 
   function showCredsBanner() {
     if (document.getElementById('creds-banner')) return;

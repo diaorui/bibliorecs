@@ -102,6 +102,60 @@ def api_recommendations():
         return jsonify({"carousels": [], "has_profile": False})
 
 
+@app.route("/api/search/suggest", methods=["GET"])
+def api_search_suggest():
+    lib_id = request.args.get("library_id") or request.cookies.get("selected_library")
+    query = request.args.get("q", "").strip()
+    if not lib_id or len(query) < 2:
+        return jsonify([])
+    return jsonify(api.suggest(lib_id, query))
+
+
+@app.route("/api/search", methods=["POST"])
+def api_search():
+    body = request.get_json() or {}
+    lib_id = body.get("library_id") or request.cookies.get("selected_library")
+    query = body.get("query", "").strip()
+    page = int(body.get("page", 1))
+    if not lib_id or not query:
+        return jsonify({"books": [], "total_results": 0, "current_page": 1, "total_pages": 0})
+
+    lib_cfg = config.LIBRARIES.get(lib_id)
+    if not lib_cfg:
+        return jsonify({"error": "Invalid library"}), 400
+
+    try:
+        formats = search_recs.formats_cache.get(lib_id)
+        data = api.search_bibs_json(query, lib_id, formats=formats, f_circ="CIRC", page=page, limit=50)
+        bibs = api.parse_bib_entities(data)
+        pagination = api.parse_pagination(data)
+
+        books = []
+        for mid, bib in bibs.items():
+            bi = bib.get("briefInfo", {})
+            if "BOOKS" not in bi.get("superFormats", []):
+                continue
+            a = bib.get("availability", {})
+            if a.get("status") == "ON_ORDER" or a.get("circulationType") == "NON_CIRCULATING":
+                continue
+            if not bi.get("isbns"):
+                continue
+            info = api.extract_book_info(mid, bib)
+            _fmt_rec(info, lib_cfg["syndetics_client"], lib_id)
+            books.append(info)
+
+        return jsonify({
+            "books": books,
+            "total_results": pagination.get("count", 0),
+            "current_page": pagination.get("page", 1),
+            "total_pages": pagination.get("pages", 0),
+        })
+    except Exception as e:
+        if app.config.get("DEBUG_MODE"):
+            raise
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/book/<metadata_id>")
 def book_detail(metadata_id):
     lib_id, branch_code, lib_cfg = _lib_from_cookies()
