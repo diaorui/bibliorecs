@@ -1,4 +1,5 @@
 import json
+import os
 from datetime import date
 
 import numpy as np
@@ -189,6 +190,22 @@ formats_cache = RefreshCache(_refresh_formats, refresh_hours=config.FORMATS_REFR
                               failure_retry_minutes=5, name="formats")
 search_cache = RefreshCache(_refresh_search, refresh_hours=config.REFRESH_HOURS,
                              failure_retry_minutes=5, name="search")
+
+
+def _refresh_branches(key, meta=None):
+    gateway = config.LIBRARIES[key]["gateway_base"]
+    return api.fetch_branches(gateway)
+
+
+_branches_path = os.path.join(os.path.dirname(__file__), "branches.json")
+branches_cache = RefreshCache(
+    _refresh_branches,
+    refresh_hours=24,
+    failure_retry_minutes=5,
+    name="branches",
+    persist_path=_branches_path,
+    scanner_interval=60,
+)
 
 
 def _add_to_pool(info, pool, pool_mids, pool_isbns, borrowed_mids, borrowed_isbns):

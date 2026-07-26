@@ -15,10 +15,6 @@ import search_recs
 app = Flask(__name__)
 app.config["DEBUG_MODE"] = "--debug" in sys.argv or os.environ.get("BIBLIORECS_DEBUG") == "1"
 
-_BRANCHES = {}
-for lid, cfg in config.LIBRARIES.items():
-    _BRANCHES[lid] = api.fetch_branches(cfg["gateway_base"])
-
 OL_URL = "https://covers.openlibrary.org/b/isbn/{isbn}-{size}.jpg"
 PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='180' viewBox='0 0 120 180'%3E%3Crect width='120' height='180' fill='%23e8e8ed' rx='4'/%3E%3Cpath d='M45 55v70l15-8 15 8V55z' fill='%2386868b' opacity='.4'/%3E%3Crect x='48' y='65' width='24' height='2' fill='%2386868b' opacity='.3'/%3E%3C/svg%3E"
 
@@ -154,7 +150,7 @@ def api_branches():
         result[lib_id] = {
             "catalog_base": cfg["catalog_base"],
             "syndetics_client": cfg["syndetics_client"],
-            "branches": _BRANCHES.get(lib_id, []),
+            "branches": search_recs.branches_cache.get(lib_id) or [],
         }
     return jsonify(result)
 
@@ -631,12 +627,16 @@ def inject_globals():
     lib_id = request.cookies.get("selected_library") or ""
     branch_code = request.cookies.get("selected_branch") or ""
     branch_name = ""
-    if lib_id in _BRANCHES:
-        for b in _BRANCHES[lib_id]:
-            if b["code"] == branch_code:
-                branch_name = b["name"]
-                break
+    lib_branches = search_recs.branches_cache.get(lib_id) or []
+    for b in lib_branches:
+        if b["code"] == branch_code:
+            branch_name = b["name"]
+            break
     lib_name = config.LIBRARIES[lib_id]["name"] if lib_id in config.LIBRARIES else ""
+    branches_dict = {}
+    for lid in config.LIBRARIES:
+        b = search_recs.branches_cache.get(lid)
+        branches_dict[lid] = b if b is not None else []
     return {
         "debug": app.config.get("DEBUG_MODE", False),
         "selected_library": lib_id,
@@ -644,7 +644,7 @@ def inject_globals():
         "selected_library_name": lib_name,
         "selected_branch_name": branch_name,
         "libraries": config.LIBRARIES,
-        "branches": _BRANCHES,
+        "branches": branches_dict,
     }
 
 
@@ -665,5 +665,7 @@ def api_restart():
 
 
 if __name__ == "__main__":
+    for lid in config.LIBRARIES:
+        search_recs.branches_cache.ensure(lid, wait=False)
     debug_mode = app.config["DEBUG_MODE"]
     app.run(host="0.0.0.0", port=5050, debug=debug_mode)
