@@ -1,7 +1,5 @@
 import json
-import threading
 from datetime import date
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
 from model2vec import StaticModel
@@ -9,6 +7,7 @@ from model2vec import StaticModel
 import config
 import api
 from api import dedup_items
+from cache import RefreshCache
 
 _EMBEDDER = None
 
@@ -21,6 +20,7 @@ def _get_embedder():
 
 
 _NON_PHYSICAL_BOOK_FORMATS = frozenset({"EBOOK", "EAUDIO", "EMAGAZINE"})
+
 
 def _discover_physical_formats(library_id):
     try:
@@ -89,7 +89,6 @@ def _time_weight(checkout_date, is_current=False):
     return 2 ** (-days_ago / config.HALF_LIFE_DAYS)
 
 
-
 def _maxsim_scores(pool_norm, borrowed_norm, borrowed_weights):
     weighted = borrowed_norm * borrowed_weights[:, np.newaxis]
     sims = weighted @ pool_norm.T
@@ -121,22 +120,7 @@ def _mmr(scores, pairwise_sim, lambda_param, top_n):
     return selected
 
 
-def _dedup_books(books):
-    seen = set()
-    result = []
-    for b in books:
-        mid = b.get("metadata_id")
-        if mid and mid not in seen:
-            seen.add(mid)
-            result.append(b)
-    return result
-
-
-def _build_or_query(book):
-    subjects = book.get("subjects") or []
-    authors = book.get("authors") or []
-    series_raw = book.get("series") or []
-
+def _build_or_query_raw(subjects, authors, series_raw):
     parts = []
     for s in subjects[:6]:
         s = s.strip()
@@ -157,7 +141,21 @@ def _build_or_query(book):
     return f"({' OR '.join(parts)})"
 
 
-def _search_or(query, library_id, formats):
+def _refresh_search(key, meta):
+    library_id, metadata_id = key
+    subjects = meta.get("subjects", []) or []
+    authors = meta.get("authors", []) or []
+    series_raw = meta.get("series", []) or []
+
+    formats = formats_cache.get(library_id)
+    if formats is None:
+        formats = _discover_physical_formats(library_id)
+        formats_cache.set(library_id, formats)
+
+    query = _build_or_query_raw(subjects, authors, series_raw)
+    if not query:
+        return []
+
     try:
         data = api.search_bibs_json(query, library_id, formats=formats,
                                      f_circ="CIRC", f_lang="eng",
@@ -165,24 +163,64 @@ def _search_or(query, library_id, formats):
                                      limit=config.POOL_LIMIT)
         bibs = api.parse_bib_entities(data)
         results = []
-        for metadata_id, bib in bibs.items():
+        for mid, bib in bibs.items():
             bi = bib.get("briefInfo", {})
-            isbns = bi.get("isbns", [])
-            a = bib.get("availability", {})
-            if a.get("status") == "ON_ORDER" or a.get("circulationType") == "NON_CIRCULATING":
-                continue
-            if not isbns:
+            if not bi.get("isbns"):
                 continue
             lang = (bi.get("primaryLanguage") or "").lower()
             if lang and lang != "eng":
                 continue
             if "JUVENILE" not in bi.get("audiences", []):
                 continue
-            info = api.extract_book_info(metadata_id, bib)
-            results.append(info)
+            a = bib.get("availability", {})
+            if a.get("status") == "ON_ORDER" or a.get("circulationType") == "NON_CIRCULATING":
+                continue
+            results.append(api.extract_book_info(mid, bib))
         return results
     except Exception:
         return []
+
+
+def _refresh_formats(key, meta=None):
+    return _discover_physical_formats(key)
+
+
+formats_cache = RefreshCache(_refresh_formats, refresh_hours=config.FORMATS_REFRESH_HOURS,
+                              failure_retry_minutes=5, name="formats")
+search_cache = RefreshCache(_refresh_search, refresh_hours=config.REFRESH_HOURS,
+                             failure_retry_minutes=5, name="search")
+
+
+def _add_to_pool(info, pool, pool_mids, pool_isbns, borrowed_mids, borrowed_isbns):
+    mid = info["metadata_id"]
+    if mid in borrowed_mids:
+        return False
+    info_isbns = json.loads(info.get("isbns") or "[]")
+    if any(i in borrowed_isbns for i in info_isbns):
+        return False
+    if mid in pool_mids:
+        return False
+    if any(i in pool_isbns for i in info_isbns):
+        return False
+    pool_mids.add(mid)
+    for i_isbn in info_isbns:
+        pool_isbns.add(i_isbn)
+    pool.append(info)
+    return True
+
+
+def _build_pool_embed_text(info):
+    title = info.get("title") or ""
+    subtitle = info.get("subtitle") or ""
+    content_type = info.get("content_type") or ""
+    authors_raw = json.loads(info.get("authors") or "[]")
+    series_raw = json.loads(info.get("series") or "[]")
+    subjects_raw = json.loads(info.get("subjects") or "[]")
+    genres_raw = json.loads(info.get("genres") or "[]")
+    return _build_embedding_text(
+        title=title, subtitle=subtitle, content_type=content_type,
+        authors=authors_raw, series=series_raw,
+        subjects=subjects_raw, genres=genres_raw)
 
 
 def get_recommendations(library_id, borrowing_history):
@@ -217,6 +255,7 @@ def get_recommendations(library_id, borrowing_history):
             authors=authors, series=series, subjects=subjects, genres=genres)
         if not text_for_emb:
             continue
+
         books.append({
             "metadata_id": b.get("metadata_id"),
             "title": title,
@@ -227,6 +266,7 @@ def get_recommendations(library_id, borrowing_history):
             "checkout_date": b.get("checkout_date"),
             "is_current": b.get("is_current", False),
             "_text": text_for_emb,
+            "_meta": {"subjects": subjects, "authors": authors, "series": series},
         })
 
     if not books:
@@ -236,72 +276,27 @@ def get_recommendations(library_id, borrowing_history):
     emb_norm = _embed_texts(texts)
     weights = np.array([_time_weight(b["checkout_date"], b["is_current"]) for b in books], dtype=float)
 
-    # Select diverse seeds via MMR
-    sim_matrix = emb_norm @ emb_norm.T
-    np.clip(sim_matrix, 0, 1, out=sim_matrix)
-    n_seeds = min(config.DISCOVERY_SEEDS, len(books))
-    seed_indices = _mmr(weights, sim_matrix, config.MMR_LAMBDA, n_seeds)
-
-    formats = _discover_physical_formats(library_id)
-
     pool = []
     pool_mids = set()
     pool_isbns = set()
-    pool_lock = threading.Lock()
 
-    def _add_to_pool(info):
-        mid = info["metadata_id"]
-        if mid in borrowed_mids:
-            return False
-        info_isbns = json.loads(info.get("isbns") or "[]")
-        if any(i in borrowed_isbns for i in info_isbns):
-            return False
-        with pool_lock:
-            if mid not in pool_mids and not any(i in pool_isbns for i in info_isbns):
-                pool_mids.add(mid)
-                for i_isbn in info_isbns:
-                    pool_isbns.add(i_isbn)
-                pool.append(info)
-                return True
-        return False
-
-    # Build OR queries and run in parallel
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        futs = {}
-        for i in seed_indices:
-            query = _build_or_query(books[i])
-            if query:
-                futs[executor.submit(_search_or, query, library_id, formats)] = books[i]["title"]
-
-        for fut in as_completed(futs):
-            results = fut.result()
+    for b in books:
+        mid = b["metadata_id"]
+        key = (library_id, mid)
+        results = search_cache.get(key)
+        if results is not None:
             for info in results:
-                _add_to_pool(info)
+                _add_to_pool(info, pool, pool_mids, pool_isbns, borrowed_mids, borrowed_isbns)
+        else:
+            search_cache.ensure(key, meta=b["_meta"], wait=False)
 
     if not pool:
         return {"carousels": [], "has_profile": has_profile}
 
-    # Embed pool
-    pool_texts = []
-    for info in pool:
-        title = info.get("title") or ""
-        subtitle = info.get("subtitle") or ""
-        content_type = info.get("content_type") or ""
-        authors_raw = json.loads(info.get("authors") or "[]")
-        series_raw = json.loads(info.get("series") or "[]")
-        subjects_raw = json.loads(info.get("subjects") or "[]")
-        genres_raw = json.loads(info.get("genres") or "[]")
-        pool_texts.append(_build_embedding_text(
-            title=title, subtitle=subtitle, content_type=content_type,
-            authors=authors_raw, series=series_raw,
-            subjects=subjects_raw, genres=genres_raw))
+    pool_norm = _embed_texts([_build_pool_embed_text(info) for info in pool])
 
-    pool_norm = _embed_texts(pool_texts)
-
-    # MaxSim
     sims = _maxsim_scores(pool_norm, emb_norm, weights)
 
-    # Top Picks (global MMR)
     top_k = min(config.MMR_TOP_K, len(pool))
     global_order = np.argsort(sims)[::-1][:top_k]
     global_subset = pool_norm[global_order]
@@ -319,6 +314,4 @@ def get_recommendations(library_id, borrowing_history):
         rank += 1
         top_picks.append(info)
 
-    carousels = [{"name": "Top Picks", "books": top_picks}]
-
-    return {"carousels": carousels, "has_profile": has_profile}
+    return {"carousels": [{"name": "Top Picks", "books": top_picks}], "has_profile": has_profile}

@@ -38,11 +38,12 @@ Edit `config.py` if needed. The defaults work for the 5 supported libraries:
 | Variable | Default | Description |
 |---|---|---|
 | `HALF_LIFE_DAYS` | `90` | Borrow recency weight half-life |
-| `DISCOVERY_SEEDS` | `20` | MMR-seeded books for OR queries |
 | `POOL_LIMIT` | `100` | Max results per OR query |
 | `TOP_CANDIDATES` | `300` | Max books in Top Picks carousel |
 | `MMR_LAMBDA` | `0.5` | Diversity vs. relevance trade-off |
 | `MMR_TOP_K` | `300` | MMR candidate pool size |
+| `REFRESH_HOURS` | `4` | Search result cache TTL |
+| `FORMATS_REFRESH_HOURS` | `24` | Physical format list cache TTL |
 | `UPDATE_WINDOW_START` | `2` | Auto-update window start (24h) |
 | `UPDATE_WINDOW_END` | `4` | Auto-update window end (24h) |
 
@@ -78,9 +79,10 @@ When `app.py` runs in non-debug mode, `updater.py` runs as a daemon thread and t
 
 ```
 daily.py                  → full pipeline: reset schema → sync catalog (5 libraries) → sync branches → generate embeddings
-search_recs.py            → real-time recommendation engine: OR queries → MaxSim → MMR → Top Picks
+search_recs.py            → recommendation engine: cache-backed OR queries → MaxSim → MMR → Top Picks
+cache.py                  → generic RefreshCache with background TTL-based refresh
 api.py                    → Bibliocommons API client (search, login, proxy functions for holds/checkouts/history)
-app.py                    → Flask web app (proxy endpoints, recommendations API, settings, stats)
+app.py                    → Flask web app (proxy endpoints with cache trigger, recommendations API)
 db.py                     → SQLite schema and helpers
 updater.py                → daemon thread for nightly auto-updates
 generate_embeddings.py    → embedding generation from title/subtitle/authors/subjects/genres
@@ -96,8 +98,8 @@ Credentials are never stored on the server. The frontend stores `{card, PIN, bc_
 ### Recommendation algorithm
 
 1. **Embeddings** — each book is encoded as a vector from title, subtitle, content type, author, series, subjects, and genres via `model2vec` (`potion-base-4M`)
-2. **Seed selection** — time-weighted MMR (λ=0.5) picks 20 diverse books from borrowing history
-3. **OR queries** — each seed generates an OR query combining its subject headings, authors, and series; queries run in parallel against the BC search API
+2. **Cache-backed OR queries** — every book in borrowing history generates an OR query combining its subject headings, authors, and series. Results are cached per `(library_id, metadata_id)` via `RefreshCache` with a 4-hour TTL. Cache is pre-warmed by proxy endpoints on history/checkout page visits
+3. **Pool assembly** — cached search results are merged, deduplicating by metadata_id and ISBN, and filtered against borrowed books
 4. **Pool scoring** — MaxSim computes each pool book's relevance as max weighted cosine similarity to any borrowed book
 5. **MMR reranking** — top 300 candidates are reranked balancing relevance and pairwise embedding diversity
 6. **Output** — single "Top Picks" carousel
@@ -105,10 +107,10 @@ Credentials are never stored on the server. The frontend stores `{card, PIN, bc_
 ### Data pipeline
 
 ```
-BC API (search) ← search_recs.py ← borrowing history (from frontend)
-Frontend → proxy endpoints → real-time borrowing history (from BC API)
+BC API (search) ← RefreshCache ← search_recs.py ← borrowing history (from frontend)
+Frontend → proxy endpoints → BC borrowing history → RefreshCache (ensure, async)
        ↓
-localStorage (cached history) → POST /api/recommendations → search_recs.py
+localStorage (cached history) → POST /api/recommendations → search_recs.py → RefreshCache (read)
 ```
 
 ## API endpoints

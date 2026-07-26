@@ -211,6 +211,25 @@ def history():
                            selected_library=lib_id, selected_branch=branch_code)
 
 
+def _ensure_bibs_from_proxy(data, library_id):
+    bibs = data.get("entities", {}).get("bibs") or {}
+    entries = {}
+    entries.update(data.get("entities", {}).get("checkouts", {}))
+    entries.update(data.get("entities", {}).get("borrowingHistory", {}))
+    for eid, entry in entries.items():
+        metadata_id = entry.get("metadataId")
+        if not metadata_id:
+            continue
+        bib = (bibs.get(metadata_id) or {}).get("briefInfo") or {}
+        meta = {
+            "subjects": dedup_items(bib.get("subjectHeadings", [])),
+            "authors": dedup_items(bib.get("authors", [])),
+            "series": dedup_items(bib.get("series", []),
+                                   key=lambda s: s.get("name", "") if isinstance(s, dict) else str(s)),
+        }
+        search_recs.search_cache.ensure((library_id, metadata_id), meta=meta, wait=False)
+
+
 # ── Proxy endpoints (stateless — tokens from frontend) ──
 
 @app.route("/api/proxy/login", methods=["POST"])
@@ -251,6 +270,7 @@ def api_proxy_checkouts():
     try:
         data = api.proxy_fetch_checkouts(body["library_id"], body["bc_token"],
                                           body["session_id"], body["account_id"])
+        _ensure_bibs_from_proxy(data, body["library_id"])
         return jsonify(data)
     except Exception as e:
         return jsonify({"error": str(e)})
@@ -266,6 +286,7 @@ def api_proxy_history():
     try:
         data = api.proxy_fetch_history(body["library_id"], body["bc_token"],
                                         body["session_id"], body["account_id"], page)
+        _ensure_bibs_from_proxy(data, body["library_id"])
         return jsonify(data)
     except Exception as e:
         return jsonify({"error": str(e)})
