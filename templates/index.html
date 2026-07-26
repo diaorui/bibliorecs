@@ -215,13 +215,8 @@ function selectBranch(libId, branchCode) {
     var libCreds = creds[libId];
     var history = [];
     try {
-      var prefix = 'bibliorecs_history_';
-      Object.keys(localStorage).forEach(function(k) {
-        if (k.startsWith(prefix)) {
-          var h = JSON.parse(localStorage.getItem(k)) || [];
-          history = history.concat(h);
-        }
-      });
+      var stored = localStorage.getItem('bibliorecs_history_' + libId);
+      if (stored) history = JSON.parse(stored) || [];
     } catch(e) {}
 
     fetch('/api/recommendations', {
