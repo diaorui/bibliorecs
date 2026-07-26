@@ -71,6 +71,15 @@
     <button class="btn-ghost" id="creds-form-cancel">Cancel</button>
     <div id="creds-form-status" style="display:none;margin-top:8px;font-size:0.85rem"></div>
   </div>
+
+  <div id="barcode-modal" class="onboarding-overlay" style="display:none" onclick="closeBarcode()">
+    <div class="onboarding-modal" onclick="event.stopPropagation()" style="max-width:380px">
+      <svg id="barcode-svg"></svg>
+      <p id="barcode-number" style="font-size:1.3rem;font-family:monospace;margin-top:14px;letter-spacing:3px;color:#1d1d1f"></p>
+      <p id="barcode-library" style="font-size:0.9rem;color:#86868b;margin-top:2px"></p>
+      <button class="btn" onclick="closeBarcode()" style="margin-top:18px">Close</button>
+    </div>
+  </div>
 </div>
 
 <div class="section" style="margin-top:2rem">
@@ -198,8 +207,9 @@ function loadCreds() {
     var statusEl = document.getElementById('creds-status-' + lid);
     var actionsEl = document.getElementById('creds-actions-' + lid);
     if (creds[lid] && creds[lid].bc_token) {
-      statusEl.innerHTML = '<span class="creds-status-dot creds-status-on"></span> Connected';
-      actionsEl.innerHTML = '<button class="btn-ghost creds-disconnect" data-lib="' + lid + '">Disconnect</button>';
+      var masked = creds[lid].user.slice(-4);
+      statusEl.innerHTML = '<span class="creds-status-dot creds-status-on"></span> &bull;&bull;&bull;&bull; ' + masked;
+      actionsEl.innerHTML = '<button class="btn-ghost creds-show-card" data-lib="' + lid + '">Show Card</button> <button class="btn-ghost creds-disconnect" data-lib="' + lid + '">Disconnect</button>';
     } else {
       statusEl.innerHTML = '<span class="creds-status-dot creds-status-off"></span> Not connected';
       actionsEl.innerHTML = '<button class="btn-ghost creds-connect-btn" data-lib="' + lid + '">Connect</button>';
@@ -207,6 +217,28 @@ function loadCreds() {
   })();
   {% endfor %}
   attachCredsEvents();
+}
+
+function showBarcode(libId) {
+  var creds = getCreds();
+  var libCreds = creds[libId];
+  if (!libCreds) return;
+  var libName = document.querySelector('.creds-row[data-lib="' + libId + '"] .creds-row-name').textContent;
+  document.getElementById('barcode-library').textContent = libName;
+  document.getElementById('barcode-number').textContent = libCreds.user;
+  document.getElementById('barcode-modal').style.display = '';
+  JsBarcode('#barcode-svg', libCreds.user, {
+    format: 'CODE128',
+    width: 2,
+    height: 60,
+    displayValue: false,
+    margin: 10,
+    background: '#ffffff'
+  });
+}
+
+function closeBarcode() {
+  document.getElementById('barcode-modal').style.display = 'none';
 }
 
 function attachCredsEvents() {
@@ -220,6 +252,12 @@ function attachCredsEvents() {
       document.getElementById('creds-form-status').style.display = 'none';
       document.getElementById('creds-form').style.display = '';
       document.getElementById('creds-form').scrollIntoView({behavior:'smooth',block:'nearest'});
+    });
+  });
+
+  document.querySelectorAll('.creds-show-card').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      showBarcode(btn.getAttribute('data-lib'));
     });
   });
 
