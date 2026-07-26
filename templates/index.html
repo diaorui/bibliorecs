@@ -59,7 +59,6 @@
   </div>
 </div>
 <div id="recommendations-container">
-  <h1 class="page-title">Your Recommendations</h1>
   <div id="rec-skeleton">
     <div class="book-grid">
       {% for _ in range(12) %}
@@ -130,7 +129,7 @@
 
   function renderCarousels(carousels, hasProfile) {
     skeleton.style.display = 'none';
-    var html = '<h1 class="page-title">Your Recommendations</h1>';
+    var html = '';
 
       carousels.forEach(function(carousel) {
       var books = carousel.books || [];
@@ -236,7 +235,7 @@
     _searchTotalPages = 0;
 
     skeleton.style.display = '';
-    container.innerHTML = '<h1 class="page-title">Search Results</h1>';
+    container.innerHTML = '';
     document.getElementById('rec-skeleton') || container.appendChild(skeleton);
 
     var libId = document.body.getAttribute('data-lib');
@@ -267,7 +266,7 @@
 
   function renderSearchResults(books, page) {
     if (page <= 1) {
-      container.innerHTML = '<h1 class="page-title">Search Results</h1>';
+      container.innerHTML = '';
     }
     var grid = container.querySelector('.book-grid');
     if (!grid) {
@@ -283,13 +282,11 @@
   }
 
   function renderNoResults(query) {
-    container.innerHTML = '<h1 class="page-title">Search Results</h1>'
-      + '<div class="empty-state"><p>No results for "' + query + '"</p></div>';
+    container.innerHTML = '<div class="empty-state"><p>No results for "' + query + '"</p></div>';
   }
 
   function renderSearchError(msg) {
-    container.innerHTML = '<h1 class="page-title">Search Results</h1>'
-      + '<div class="empty-state" style="color:#dc2626">' + msg + '</div>';
+    container.innerHTML = '<div class="empty-state" style="color:#dc2626">' + msg + '</div>';
   }
 
   function restoreRecommendations() {
