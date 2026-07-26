@@ -1229,6 +1229,9 @@ th {
 .creds-status-off { background: #d2d2d7; }
 .creds-status-unknown { background: #f59e0b; }
 
+.creds-show-card { cursor: pointer; }
+.creds-show-card:hover { color: #2563eb; }
+
 /* ── onboarding ── */
 
 .onboarding-overlay {
