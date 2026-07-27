@@ -321,6 +321,39 @@ def api_proxy_checkouts():
         return jsonify({"error": str(e)})
 
 
+@app.route("/api/proxy/checkout/renew", methods=["POST"])
+def api_proxy_checkout_renew():
+    body = request.get_json() or {}
+    for k in ("library_id", "bc_token", "session_id", "account_id", "checkout_id"):
+        if k not in body:
+            return jsonify({"error": f"{k} required"}), 400
+    try:
+        data = api.proxy_renew_checkout(
+            body["library_id"], body["bc_token"], body["session_id"],
+            body["account_id"], [body["checkout_id"]]
+        )
+        failures = data.get("failures")
+        if failures:
+            if isinstance(failures, dict) and body["checkout_id"] in failures:
+                return jsonify({"success": False, "error": str(failures[body["checkout_id"]])})
+            if isinstance(failures, list):
+                for f in failures:
+                    if f.get("id") == body["checkout_id"] or f.get("checkoutId") == body["checkout_id"]:
+                        msg = f.get("message") or f.get("error") or str(f)
+                        return jsonify({"success": False, "error": msg})
+        co = (data.get("entities", {}).get("checkouts", {}) or {}).get(body["checkout_id"], {})
+        return jsonify({"success": True, "due_date": co.get("dueDate")})
+    except urllib.error.HTTPError as e:
+        try:
+            detail = json.loads(e.read().decode())
+            msg = detail.get("error", {}).get("message", str(e))
+        except Exception:
+            msg = str(e)
+        return jsonify({"success": False, "error": msg})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+
 @app.route("/api/proxy/history", methods=["POST"])
 def api_proxy_history():
     body = request.get_json() or {}

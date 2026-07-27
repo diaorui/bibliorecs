@@ -58,6 +58,9 @@
         var remain = item.due_remaining || '';
         dateHtml = '<span class="due-date">' + label + '</span>';
         if (remain) dateHtml += '<span class="due-relative">' + remain + '</span>';
+        if (item.actions && item.actions.indexOf('renew') !== -1) {
+          dateHtml += '<button class="btn-renew" data-checkout-id="' + item.checkout_id + '" data-mid="' + item.metadata_id + '">Renew</button>';
+        }
       } else {
         dateHtml = '<span class="due-date">' + (item.checkout_date || '') + '</span>';
       }
@@ -275,6 +278,8 @@
       if (b.is_current) {
         var dl = fmtDueLabel(b.checkout_date);
         if (dl) { item.due_label_compact = dl.label; item.due_remaining = dl.remain; }
+        item.checkout_id = b.checkout_id;
+        item.actions = b.actions;
         current.push(item);
       } else {
         past.push(item);
@@ -397,6 +402,8 @@
         var bib = (allBibs[co.metadataId] || {}).briefInfo || {};
         borrowingHistory.push({
           metadata_id: co.metadataId,
+          checkout_id: k,
+          actions: co.actions || [],
           title: bib.title || co.bibTitle || '',
           subtitle: bib.subtitle || '',
           authors: dedupItems(bib.authors || []),
@@ -447,6 +454,47 @@
   window.addEventListener('resize', function() {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(onResize, 200);
+  });
+
+  document.addEventListener('click', function(e) {
+    var btn = e.target.closest('.btn-renew:not(:disabled)');
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    var checkoutId = btn.getAttribute('data-checkout-id');
+    var mid = btn.getAttribute('data-mid');
+    btn.textContent = 'Renewing...';
+    btn.disabled = true;
+    proxyFetch('/api/proxy/checkout/renew', {
+      checkout_id: checkoutId,
+      metadata_id: mid
+    }).then(function(data) {
+      if (data.success) {
+        var row = btn.closest('.history-item');
+        var dueSpan = row && row.querySelector('.due-date');
+        if (dueSpan && data.due_date) {
+          var dl = fmtDueLabel(data.due_date);
+          if (dl) {
+            dueSpan.textContent = dl.label;
+            var remainSpan = row.querySelector('.due-relative');
+            if (remainSpan) {
+              if (dl.remain) remainSpan.textContent = dl.remain;
+              else remainSpan.remove();
+            }
+          }
+        }
+        btn.remove();
+        showToast('Renewed!', 3000);
+      } else {
+        btn.textContent = 'Renew';
+        btn.disabled = false;
+        showToast(data.error || 'Renew failed', 5000);
+      }
+    }).catch(function() {
+      btn.textContent = 'Renew';
+      btn.disabled = false;
+      showToast('Network error', 5000);
+    });
   });
 
   loadCached();

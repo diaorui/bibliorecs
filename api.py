@@ -332,6 +332,13 @@ def _gateway_patch(library_id, path, bc_token, session_id, body, retries=2):
 
 # ── Proxy functions (stateless, tokens passed by caller) ──
 
+def proxy_renew_checkout(library_id, bc_token, session_id, account_id, checkout_ids):
+    return _gateway_patch(library_id, "/checkouts", bc_token, session_id, {
+        "checkoutIds": checkout_ids,
+        "accountId": account_id,
+    })
+
+
 def proxy_fetch_holds(library_id, bc_token, session_id, account_id):
     return _gateway_get(library_id, "/holds", bc_token, session_id,
                         {"accountId": account_id, "size": 100, "locale": "en-US"})

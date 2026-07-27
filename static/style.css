@@ -1256,6 +1256,23 @@ th {
 
 .btn-ghost:hover { color: #515154; }
 
+/* ── renew button ── */
+
+.btn-renew {
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid #2563eb;
+  background: #fff;
+  color: #2563eb;
+  cursor: pointer;
+  vertical-align: middle;
+  font-weight: 500;
+  transition: background 0.12s;
+}
+.btn-renew:hover { background: #eff6ff; }
+.btn-renew:disabled { opacity: 0.5; cursor: default; }
+
 /* ── creds banner ── */
 
 .creds-banner {
