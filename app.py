@@ -116,9 +116,8 @@ def api_search():
     body = request.get_json() or {}
     lib_id = body.get("library_id") or request.cookies.get("selected_library")
     query = body.get("query", "").strip()
-    page = int(body.get("page", 1))
     if not lib_id or not query:
-        return jsonify({"books": [], "total_results": 0, "current_page": 1, "total_pages": 0})
+        return jsonify({"books": []})
 
     lib_cfg = config.LIBRARIES.get(lib_id)
     if not lib_cfg:
@@ -126,9 +125,8 @@ def api_search():
 
     try:
         formats = search_recs.formats_cache.get(lib_id)
-        data = api.search_bibs_json(query, lib_id, formats=formats, f_circ="CIRC", page=page, limit=50)
+        data = api.search_bibs_json(query, lib_id, formats=formats, f_circ="CIRC", limit=100)
         bibs = api.parse_bib_entities(data)
-        pagination = api.parse_pagination(data)
 
         books = []
         for mid, bib in bibs.items():
@@ -144,12 +142,7 @@ def api_search():
             _fmt_rec(info, lib_cfg["syndetics_client"], lib_id)
             books.append(info)
 
-        return jsonify({
-            "books": books,
-            "total_results": pagination.get("count", 0),
-            "current_page": pagination.get("page", 1),
-            "total_pages": pagination.get("pages", 0),
-        })
+        return jsonify({"books": books})
     except Exception as e:
         if app.config.get("DEBUG_MODE"):
             raise

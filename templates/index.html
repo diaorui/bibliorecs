@@ -87,12 +87,9 @@
   var __holdsByMid = {};
   var __checkedOutByMe = new Set();
   var _searchQuery = '';
-  var _searchPage = 0;
-  var _searchTotalPages = 0;
   var _cachedRecsHtml = null;
   var _suggestAbort = null;
   var _suggestTimer = null;
-  var _searchLoadingMore = false;
 
   function _ratingStars(avg) {
     var val = avg / 20;
@@ -240,15 +237,12 @@
       });
   }
 
-  function doSearch(query, page) {
+  function doSearch(query) {
     if (!query) return;
     dismissSuggestions();
-    page = page || 1;
     _searchQuery = query;
-    _searchPage = page;
 
     if (!_cachedRecsHtml) _cachedRecsHtml = container.innerHTML;
-    _searchTotalPages = 0;
 
     skeleton.style.display = '';
     container.innerHTML = '';
@@ -258,17 +252,15 @@
     fetch('/api/search', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({library_id: libId, query: query, page: page})
+      body: JSON.stringify({library_id: libId, query: query})
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {
-      _searchLoadingMore = false;
       skeleton.style.display = 'none';
       if (data.error) { renderSearchError(data.error); return; }
       var books = data.books || [];
-      _searchTotalPages = data.total_pages || 0;
-      if (!books.length && page <= 1) { renderNoResults(query); return; }
-      renderSearchResults(books, page);
+      if (!books.length) { renderNoResults(query); return; }
+      renderSearchResults(books);
       applyButtonStates();
       revealButtons();
       document.querySelectorAll('img.cover-img').forEach(function(img) {
@@ -276,22 +268,16 @@
       });
     })
     .catch(function() {
-      _searchLoadingMore = false;
       skeleton.style.display = 'none';
       renderSearchError('Network error');
     });
   }
 
-  function renderSearchResults(books, page) {
-    if (page <= 1) {
-      container.innerHTML = '';
-    }
-    var grid = container.querySelector('.book-grid');
-    if (!grid) {
-      grid = document.createElement('div');
-      grid.className = 'book-grid';
-      container.appendChild(grid);
-    }
+  function renderSearchResults(books) {
+    container.innerHTML = '';
+    var grid = document.createElement('div');
+    grid.className = 'book-grid';
+    container.appendChild(grid);
     books.forEach(function(r) {
       var tmp = document.createElement('div');
       tmp.innerHTML = _bookCardHtml(r);
@@ -316,8 +302,6 @@
     searchClear.style.display = 'none';
     dismissSuggestions();
     _searchQuery = '';
-    _searchPage = 0;
-    _searchTotalPages = 0;
     skeleton.style.display = 'none';
     document.querySelectorAll('img.cover-img').forEach(function(img) {
       if (typeof initCoverFallback === 'function') initCoverFallback(img);
@@ -325,16 +309,6 @@
     applyButtonStates();
     revealButtons();
   }
-
-  document.addEventListener('scroll', function() {
-    if (!_searchQuery || _searchPage <= 0 || _searchPage >= _searchTotalPages || _searchLoadingMore) return;
-    var scrollPos = window.scrollY + window.innerHeight;
-    if (scrollPos >= document.body.scrollHeight - 300) {
-      _searchLoadingMore = true;
-      _searchPage++;
-      doSearch(_searchQuery, _searchPage);
-    }
-  });
 
   document.addEventListener('click', function(e) {
     var item = e.target.closest('.suggestion-item');
