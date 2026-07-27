@@ -134,6 +134,9 @@ function attachCredsEvents() {
       document.getElementById('creds-form-user').value = '';
       document.getElementById('creds-form-pass').value = '';
       document.getElementById('creds-form-status').style.display = 'none';
+      document.getElementById('creds-form-save').textContent = 'Connect';
+      document.getElementById('creds-form-save').disabled = false;
+      document.getElementById('creds-form-cancel').disabled = false;
       document.getElementById('creds-form').style.display = '';
       document.getElementById('creds-form').scrollIntoView({behavior:'smooth',block:'nearest'});
     });
@@ -189,6 +192,9 @@ document.getElementById('creds-form-save').addEventListener('click', function() 
       };
       saveCreds(creds);
       document.getElementById('creds-form').style.display = 'none';
+      btn.textContent = 'Connect';
+      btn.disabled = false;
+      document.getElementById('creds-form-cancel').disabled = false;
       loadCreds();
     } else {
       statusEl.style.color = '#dc2626';
