@@ -50,11 +50,13 @@
 {% else %}
 <div id="search-bar" style="margin-bottom:16px">
   <div style="position:relative">
+    <form id="search-form" action="#">
     <div class="search-input-wrap">
       <span class="search-icon">🔍</span>
       <input type="text" id="search-input" class="search-input" placeholder="Search books..." autocomplete="off">
       <button class="search-clear" id="search-clear" style="display:none">&times;</button>
     </div>
+    </form>
     <div id="search-suggestions" class="search-suggestions" style="display:none"></div>
   </div>
 </div>
@@ -192,15 +194,19 @@
     });
 
     searchInput.addEventListener('keydown', function(e) {
-      if (e.key === 'Enter') {
-        if (_suggestAbort) _suggestAbort.abort();
-        _suggestTimer && clearTimeout(_suggestTimer);
-        dismissSuggestions();
-        doSearch(this.value.trim());
-      }
       if (e.key === 'Escape') {
         restoreRecommendations();
       }
+    });
+
+    document.getElementById('search-form').addEventListener('submit', function(e) {
+      e.preventDefault();
+      var val = searchInput.value.trim();
+      if (!val) return;
+      if (_suggestAbort) _suggestAbort.abort();
+      _suggestTimer && clearTimeout(_suggestTimer);
+      dismissSuggestions();
+      doSearch(val);
     });
 
     searchClear.addEventListener('click', function() {
