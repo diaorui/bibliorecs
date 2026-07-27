@@ -242,6 +242,7 @@
 
   function doSearch(query, page) {
     if (!query) return;
+    dismissSuggestions();
     page = page || 1;
     _searchQuery = query;
     _searchPage = page;
