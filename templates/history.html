@@ -489,7 +489,7 @@
         var libId = document.body.getAttribute('data-lib');
         if (libId) {
           try {
-            var cache = JSON.parse(localStorage.getItem('bcache_history_' + libId) || '[]');
+            var cache = JSON.parse(localStorage.getItem('bibliorecs_history_' + libId) || '[]');
             for (var i = 0; i < cache.length; i++) {
               if (cache[i].checkout_id === checkoutId) {
                 cache[i].checkout_date = data.due_date;
@@ -497,7 +497,7 @@
                 break;
               }
             }
-            localStorage.setItem('bcache_history_' + libId, JSON.stringify(cache));
+            localStorage.setItem('bibliorecs_history_' + libId, JSON.stringify(cache));
           } catch(e) {}
         }
         showToast('Renewed!', 3000);
