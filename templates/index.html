@@ -153,8 +153,7 @@
       if (stored) history = JSON.parse(stored) || [];
     } catch(e) {}
 
-    if (history.length === 0) {
-    } else {
+    if (history.length > 0) {
       skeleton.style.display = '';
       fetch('/api/recommendations', {
       method: 'POST',
