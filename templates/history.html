@@ -308,6 +308,25 @@
       if (all && all.length) {
         var renderData = buildRenderData(all, syndeticsClient);
         updateContent(renderData, true);
+        var dateCounts = {};
+        all.forEach(function(b) {
+          if (b.is_current) return;
+          var date = b.checkout_date;
+          if (date) {
+            var month = date.slice(0, 7);
+            dateCounts[month] = (dateCounts[month] || 0) + 1;
+          }
+        });
+        var months = Object.keys(dateCounts).sort();
+        if (months.length) {
+          var chartData = [];
+          var cumulative = 0;
+          months.forEach(function(m) {
+            cumulative += dateCounts[m];
+            chartData.push({m: m, b: dateCounts[m], c: cumulative});
+          });
+          drawChart(chartData);
+        }
         return;
       }
     } catch(e) {}
