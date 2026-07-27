@@ -86,6 +86,11 @@
 
   function renderHolds(holds) {
     var ready = holds.filter(function(h) { return h.status === 'READY_FOR_PICKUP'; });
+    ready.sort(function(a, b) {
+      if (!a.expiry_date) return 1;
+      if (!b.expiry_date) return -1;
+      return a.expiry_date.localeCompare(b.expiry_date);
+    });
     var waiting = holds.filter(function(h) { return h.status !== 'READY_FOR_PICKUP'; });
     var html = renderSection('Ready for Pickup', ready) + renderSection('On Hold', waiting);
 
