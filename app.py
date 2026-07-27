@@ -125,6 +125,9 @@ def api_search():
 
     try:
         formats = search_recs.formats_cache.get(lib_id)
+        if formats is None:
+            formats = search_recs._discover_physical_formats(lib_id)
+            search_recs.formats_cache.set(lib_id, formats)
         data = api.search_bibs_json(query, lib_id, formats=formats, f_circ="CIRC", limit=100)
         bibs = api.parse_bib_entities(data)
 
@@ -134,7 +137,7 @@ def api_search():
             if "BOOKS" not in bi.get("superFormats", []):
                 continue
             a = bib.get("availability", {})
-            if a.get("status") == "ON_ORDER" or a.get("circulationType") == "NON_CIRCULATING":
+            if a.get("bibType") != "PHYSICAL" or a.get("status") == "ON_ORDER" or a.get("circulationType") == "NON_CIRCULATING":
                 continue
             if not bi.get("isbns"):
                 continue
@@ -748,6 +751,7 @@ def api_restart():
 
 if __name__ == "__main__":
     for lid in config.LIBRARIES:
+        search_recs.formats_cache.ensure(lid, wait=False)
         search_recs.branches_cache.ensure(lid, wait=False)
     debug_mode = app.config["DEBUG_MODE"]
     app.run(host="0.0.0.0", port=5050, debug=debug_mode)

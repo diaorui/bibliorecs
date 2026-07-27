@@ -376,10 +376,18 @@ def fetch_bib_by_isbn(library_id, isbn):
     try:
         data = search_bibs_json(isbn, library_id, formats=None, limit=5)
         bibs = parse_bib_entities(data)
+        fallback = None
         for mid, bib in bibs.items():
             bi = bib.get("briefInfo", {})
-            if isbn in (bi.get("isbns") or []):
+            if isbn not in (bi.get("isbns") or []):
+                continue
+            a = bib.get("availability", {})
+            if a.get("bibType") == "PHYSICAL":
                 return extract_book_info(mid, bib)
+            if fallback is None:
+                fallback = (mid, bib)
+        if fallback:
+            return extract_book_info(fallback[0], fallback[1])
         for mid, bib in bibs.items():
             return extract_book_info(mid, bib)
     except Exception:

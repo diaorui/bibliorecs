@@ -20,7 +20,7 @@ def _get_embedder():
     return _EMBEDDER
 
 
-_NON_PHYSICAL_BOOK_FORMATS = frozenset({"EBOOK", "EAUDIO", "EMAGAZINE"})
+_NON_PHYSICAL_BOOK_FORMATS = frozenset({"EBOOK", "EAUDIO", "EMAGAZINE", "GRAPHIC_NOVEL_DOWNLOAD", "EAUDIOBOOK"})
 
 
 def _discover_physical_formats(library_id):
@@ -181,7 +181,7 @@ def _refresh_search(key, meta):
                 if not any(a in bib_audiences for a in seed_audiences):
                     continue
             a = bib.get("availability", {})
-            if a.get("status") == "ON_ORDER" or a.get("circulationType") == "NON_CIRCULATING":
+            if a.get("bibType") != "PHYSICAL" or a.get("status") == "ON_ORDER" or a.get("circulationType") == "NON_CIRCULATING":
                 continue
             results.append(api.extract_book_info(mid, bib))
         return results
@@ -193,8 +193,10 @@ def _refresh_formats(key, meta=None):
     return _discover_physical_formats(key)
 
 
+_formats_path = os.path.join(os.path.dirname(__file__), "formats.json")
 formats_cache = RefreshCache(_refresh_formats, refresh_hours=config.FORMATS_REFRESH_HOURS,
-                              failure_retry_minutes=5, name="formats")
+                              failure_retry_minutes=5, name="formats",
+                              persist_path=_formats_path)
 search_cache = RefreshCache(_refresh_search, refresh_hours=config.REFRESH_HOURS,
                              failure_retry_minutes=5, name="search")
 
