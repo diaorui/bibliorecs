@@ -14,8 +14,10 @@
   </div>
   <div class="book-info">
     <h1 id="book-title"></h1>
+    <p class="book-multiscript-title" id="book-multiscript-title" style="display:none"></p>
     <p class="book-subtitle" id="book-subtitle" style="display:none"></p>
     <p class="author" id="book-author" style="display:none"></p>
+    <p class="book-multiscript-author" id="book-multiscript-author" style="display:none"></p>
     <p class="rating" id="book-rating" style="display:none"></p>
     <div class="series-row" id="book-series" style="display:none"></div>
     <p class="metadata" id="book-metadata" style="display:none"></p>
@@ -128,6 +130,12 @@ function renderBook(data) {
   document.getElementById('book-title').textContent = title;
   document.title = title + ' – Bibliorecs';
 
+  var msTitleEl = document.getElementById('book-multiscript-title');
+  if (data.multiscript_title && data.multiscript_title !== data.title) {
+    msTitleEl.textContent = data.multiscript_title;
+    msTitleEl.style.display = '';
+  }
+
   var authorEl = document.getElementById('book-author');
   var author = data.author;
   if (!author) {
@@ -137,6 +145,12 @@ function renderBook(data) {
   if (author) {
     authorEl.textContent = author;
     authorEl.style.display = '';
+  }
+
+  var msAuthorEl = document.getElementById('book-multiscript-author');
+  if (data.multiscript_author) {
+    msAuthorEl.textContent = data.multiscript_author;
+    msAuthorEl.style.display = '';
   }
 
   var ratingEl = document.getElementById('book-rating');
