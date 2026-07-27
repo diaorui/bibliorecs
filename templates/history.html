@@ -484,6 +484,20 @@
           }
         }
         btn.remove();
+        var libId = document.body.getAttribute('data-lib');
+        if (libId) {
+          try {
+            var cache = JSON.parse(localStorage.getItem('bcache_history_' + libId) || '[]');
+            for (var i = 0; i < cache.length; i++) {
+              if (cache[i].checkout_id === checkoutId) {
+                cache[i].checkout_date = data.due_date;
+                cache[i].actions = (cache[i].actions || []).filter(function(a) { return a !== 'renew'; });
+                break;
+              }
+            }
+            localStorage.setItem('bcache_history_' + libId, JSON.stringify(cache));
+          } catch(e) {}
+        }
         showToast('Renewed!', 3000);
       } else {
         btn.textContent = 'Renew';
