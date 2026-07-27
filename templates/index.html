@@ -90,6 +90,7 @@
   var _searchPage = 0;
   var _searchTotalPages = 0;
   var _cachedRecsHtml = null;
+  var _suggestAbort = null;
   var _suggestTimer = null;
   var _searchLoadingMore = false;
 
@@ -187,6 +188,7 @@
     searchInput.addEventListener('input', function() {
       var val = this.value.trim();
       searchClear.style.display = val ? '' : 'none';
+      if (_suggestAbort) _suggestAbort.abort();
       _suggestTimer && clearTimeout(_suggestTimer);
       if (val.length < 2) { dismissSuggestions(); return; }
       _suggestTimer = setTimeout(function() { fetchSuggestions(val); }, 300);
@@ -194,6 +196,8 @@
 
     searchInput.addEventListener('keydown', function(e) {
       if (e.key === 'Enter') {
+        if (_suggestAbort) _suggestAbort.abort();
+        _suggestTimer && clearTimeout(_suggestTimer);
         dismissSuggestions();
         doSearch(this.value.trim());
       }
@@ -207,13 +211,21 @@
     });
   }
 
+  document.addEventListener('click', function(e) {
+    var sb = document.getElementById('search-bar');
+    if (sb && !sb.contains(e.target)) dismissSuggestions();
+  }, { capture: true });
+
   function dismissSuggestions() {
+    if (_suggestAbort) _suggestAbort.abort();
     searchSuggestions.style.display = 'none';
   }
 
   function fetchSuggestions(query) {
+    _suggestAbort = new AbortController();
     var libId = document.body.getAttribute('data-lib');
-    fetch('/api/search/suggest?library_id=' + encodeURIComponent(libId) + '&q=' + encodeURIComponent(query))
+    fetch('/api/search/suggest?library_id=' + encodeURIComponent(libId) + '&q=' + encodeURIComponent(query),
+      { signal: _suggestAbort.signal })
       .then(function(r) { return r.json(); })
       .then(function(list) {
         if (!list || !list.length) { dismissSuggestions(); return; }
@@ -222,7 +234,10 @@
         }).join('');
         searchSuggestions.style.display = '';
       })
-      .catch(function() { dismissSuggestions(); });
+      .catch(function(e) {
+        if (e.name === 'AbortError') return;
+        dismissSuggestions();
+      });
   }
 
   function doSearch(query, page) {
