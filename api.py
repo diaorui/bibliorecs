@@ -351,7 +351,7 @@ def proxy_fetch_checkouts(library_id, bc_token, session_id, account_id):
 
 def proxy_fetch_history(library_id, bc_token, session_id, account_id, page=0):
     return _gateway_get(library_id, "/borrowinghistory", bc_token, session_id,
-                        {"accountId": account_id, "page": page, "locale": "en-US"})
+                        {"accountId": account_id, "page": page, "locale": "en-US", "size": 10000})
 
 
 def proxy_place_hold(library_id, bc_token, session_id, account_id, metadata_id, branch_code):

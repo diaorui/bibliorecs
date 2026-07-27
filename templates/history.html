@@ -357,14 +357,11 @@
     var allEntries = {};
     var allBibs = {};
 
-    function fetchHistoryPage(page) {
-      return proxyFetch('/api/proxy/history', {page: page}).then(function(data) {
-        var entries = data.entities.borrowingHistory || {};
-        var keys = Object.keys(entries);
-        if (keys.length === 0 || page > 100) return;
+    function fetchHistory() {
+      return proxyFetch('/api/proxy/history', {page: 0}).then(function(data) {
         Object.assign(allBibs, data.entities.bibs || {});
-        keys.forEach(function(k) { allEntries[k] = entries[k]; });
-        return fetchHistoryPage(page + 1);
+        var entries = data.entities.borrowingHistory || {};
+        Object.keys(entries).forEach(function(k) { allEntries[k] = entries[k]; });
       });
     }
 
@@ -410,7 +407,7 @@
       return borrowingHistory;
     }
 
-    fetchHistoryPage(1).then(function() {
+    fetchHistory().then(function() {
       return proxyFetch('/api/proxy/checkouts', {});
     }).then(function(checkoutsData) {
       Object.assign(allBibs, checkoutsData.entities.bibs || {});
