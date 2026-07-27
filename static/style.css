@@ -462,11 +462,19 @@ th {
   align-items: center;
   padding: 12px 0;
   border-bottom: 1px solid #e8e8ed;
-  text-decoration: none;
-  color: inherit;
 }
 
 .history-item:hover { background: #fafafa; margin: 0 -12px; padding: 12px; border-radius: 8px; }
+
+.history-item-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+  text-decoration: none;
+  color: inherit;
+}
 
 .history-cover {
   width: 48px;

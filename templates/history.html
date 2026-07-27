@@ -64,7 +64,8 @@
       } else {
         dateHtml = '<span class="due-date">' + (item.checkout_date || '') + '</span>';
       }
-      html += '<a href="/book/' + item.metadata_id + '?isbn=' + (item.isbn || '') + '" class="history-item">'
+      html += '<div class="history-item">'
+        + '<a href="/book/' + item.metadata_id + '?isbn=' + (item.isbn || '') + '" class="history-item-link">'
         + '<div class="history-cover-wrap">'
         + '<img class="history-cover cover-img" src="' + item.img_url + '" alt="" loading="lazy" data-fallback="' + item.fallback_url + '" data-isbn="' + (item.isbn || '') + '">'
         + '<div class="cover-placeholder cover-placeholder-sm">📖</div>'
@@ -74,8 +75,9 @@
         + (item.subtitle ? '<div class="sub">' + item.subtitle + '</div>' : '')
         + '<div class="sub">' + (item.author || '') + '</div>'
         + '</div>'
+        + '</a>'
         + '<span class="history-date">' + dateHtml + '</span>'
-        + '</a>';
+        + '</div>';
     });
     container.innerHTML = html;
     container.style.display = '';
