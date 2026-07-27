@@ -126,6 +126,7 @@
   }
 
   function renderCarousels(carousels, hasProfile) {
+    if (_searchQuery) return;
     skeleton.style.display = 'none';
     var html = '';
 
