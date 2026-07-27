@@ -168,9 +168,7 @@
           if (typeof initCoverFallback === 'function') initCoverFallback(img);
         });
         if (!libCreds || !libCreds.bc_token) {
-          if (!localStorage.getItem('bibliorecs_skip_creds')) {
-            showCredsBanner();
-          }
+          showCredsBanner();
         }
       })
       .catch(function() {
@@ -179,10 +177,7 @@
     }
 
     if (!libCreds || !libCreds.bc_token) {
-      if (!localStorage.getItem('bibliorecs_skip_creds')) {
-        showCredsBanner();
-      }
-      return;
+      showCredsBanner();
     }
 
     fetchHoldsAndCheckouts();
@@ -336,7 +331,6 @@
       + '<input type="text" id="creds-user" class="creds-input" placeholder="Library card number">'
       + '<input type="password" id="creds-pass" class="creds-input" placeholder="PIN">'
       + '<button class="btn btn-sml" id="creds-connect">Connect</button>'
-      + '<button class="btn-sml btn-ghost" id="creds-skip">Skip</button>'
       + '</div>'
       + '<div id="creds-status" style="display:none;margin-top:8px;font-size:0.85rem"></div>'
       + '</div>';
@@ -349,7 +343,6 @@
       var btn = this;
       btn.textContent = 'Connecting...';
       btn.disabled = true;
-      document.getElementById('creds-skip').disabled = true;
       var status = document.getElementById('creds-status');
       status.style.display = '';
       status.textContent = 'Logging in...';
@@ -380,7 +373,6 @@
           status.style.color = '#dc2626';
           btn.textContent = 'Connect';
           btn.disabled = false;
-          document.getElementById('creds-skip').disabled = false;
         }
       })
       .catch(function() {
@@ -388,13 +380,7 @@
         status.style.color = '#dc2626';
         btn.textContent = 'Connect';
         btn.disabled = false;
-        document.getElementById('creds-skip').disabled = false;
       });
-    });
-
-    document.getElementById('creds-skip').addEventListener('click', function() {
-      localStorage.setItem('bibliorecs_skip_creds', 'true');
-      banner.remove();
     });
   }
   function fetchHoldsAndCheckouts() {
