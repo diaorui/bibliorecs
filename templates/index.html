@@ -262,6 +262,7 @@
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {
+      _searchLoadingMore = false;
       skeleton.style.display = 'none';
       if (data.error) { renderSearchError(data.error); return; }
       var books = data.books || [];
@@ -275,6 +276,7 @@
       });
     })
     .catch(function() {
+      _searchLoadingMore = false;
       skeleton.style.display = 'none';
       renderSearchError('Network error');
     });
