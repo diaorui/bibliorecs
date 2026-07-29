@@ -52,6 +52,9 @@
     var label = isCurrent ? 'Currently Checked Out' : 'Past Borrows';
     var html = '<h2 class="section-title">' + label + ' (' + items.length + ')</h2>';
     items.forEach(function(item) {
+      var displayTitle = item.multiscript_title || item.title || item.metadata_id;
+      var displaySubtitle = item.multiscript_title ? '' : item.subtitle;
+      var displayAuthor = item.multiscript_author || item.author || '';
       var dateHtml;
       if (isCurrent) {
         var label = item.due_label_compact || item.checkout_date || '';
@@ -71,9 +74,9 @@
         + '<div class="cover-placeholder cover-placeholder-sm">📖</div>'
         + '</div>'
         + '<div class="history-body">'
-        + '<div class="title">' + (item.title || item.metadata_id) + '</div>'
-        + (item.subtitle ? '<div class="sub">' + item.subtitle + '</div>' : '')
-        + '<div class="sub">' + (item.author || '') + '</div>'
+        + '<div class="title">' + displayTitle + '</div>'
+        + (displaySubtitle ? '<div class="sub">' + displaySubtitle + '</div>' : '')
+        + '<div class="sub">' + displayAuthor + '</div>'
         + '</div>'
         + '</a>'
         + '<span class="history-date">' + dateHtml + '</span>'
@@ -390,6 +393,8 @@
             metadata_id: entry.metadataId,
             title: bib.title || '',
             subtitle: bib.subtitle || '',
+            multiscript_title: bib.multiscriptTitle || '',
+            multiscript_author: (bib.multiscriptAuthor || ''),
             authors: dedupItems(bib.authors || []),
             series: dedupItems(bib.series || [], function(s) { return (s && (s.name || s)) || ''; }),
             isbns: bib.isbns || [],
@@ -424,6 +429,8 @@
           actions: co.actions || [],
           title: bib.title || co.bibTitle || '',
           subtitle: bib.subtitle || '',
+          multiscript_title: bib.multiscriptTitle || '',
+          multiscript_author: (bib.multiscriptAuthor || ''),
           authors: dedupItems(bib.authors || []),
           series: dedupItems(bib.series || [], function(s) { return (s && (s.name || s)) || ''; }),
           isbns: bib.isbns || [],

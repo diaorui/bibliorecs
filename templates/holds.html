@@ -57,15 +57,19 @@
       ? '<span class="hold-branch">📍 ' + h.pickup_branch + '</span>'
       : '';
 
+    var displayTitle = h.multiscript_title || h.title;
+    var subtitle = h.multiscript_title ? '' : (h.subtitle ? '<div class="sub">' + h.subtitle + '</div>' : '');
+    var displayAuthor = h.multiscript_author || h.author;
+
     return '<a href="/book/' + h.metadata_id + '?isbn=' + (h.isbn || '') + '" class="history-item">'
       + '<div class="history-cover-wrap">'
       + '<img class="history-cover cover-img" src="' + syndetics + '" alt="" loading="lazy" data-fallback="' + openlibrary + '"' + dataIsbn + '>'
       + '<div class="cover-placeholder cover-placeholder-sm">📖</div>'
       + '</div>'
       + '<div class="history-body">'
-      + '<div class="title">' + (h.title || '') + '</div>'
-      + (h.subtitle ? '<div class="sub">' + h.subtitle + '</div>' : '')
-      + '<div class="sub">' + (h.author || '') + '</div>'
+      + '<div class="title">' + displayTitle + '</div>'
+      + subtitle
+      + '<div class="sub">' + displayAuthor + '</div>'
       + '</div>'
       + '<div class="hold-status-wrap">'
       + badge
@@ -175,6 +179,8 @@
             metadata_id: h.metadataId,
             title: info.title || h.bibTitle || '',
             subtitle: info.subtitle || '',
+            multiscript_title: info.multiscriptTitle || '',
+            multiscript_author: (info.multiscriptAuthor || ''),
             author: dedupItems(info.authors || []).join(', '),
             isbn: (info.isbns || [])[0] || '',
             status: h.status,

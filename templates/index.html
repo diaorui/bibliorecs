@@ -108,16 +108,18 @@
   }
 
   function _bookCardHtml(r) {
-    var subtitle = r.subtitle ? '<span class="carousel-subtitle">' + r.subtitle + '</span>' : '';
+    var displayTitle = r.multiscript_title || r.title;
+    var subtitle = r.multiscript_title ? '' : (r.subtitle ? '<span class="carousel-subtitle">' + r.subtitle + '</span>' : '');
+    var displayAuthor = r.multiscript_author || r.author || '';
     return '<div class="carousel-card" data-mid="' + r.metadata_id + '">'
       + '<a href="/book/' + r.metadata_id + '?isbn=' + (r.isbn || '') + '" class="carousel-card-link">'
       + '<div class="carousel-cover-wrap">'
-      + '<img class="carousel-cover cover-img" src="' + r.img_url + '" alt="' + r.title + '" loading="lazy" data-fallback="' + r.fallback_url + '" data-isbn="' + (r.isbn || '') + '">'
-      + '<div class="cover-placeholder">📖<br>' + (r.title ? r.title.slice(0, 30) : '') + '</div>'
+      + '<img class="carousel-cover cover-img" src="' + r.img_url + '" alt="' + displayTitle + '" loading="lazy" data-fallback="' + r.fallback_url + '" data-isbn="' + (r.isbn || '') + '">'
+      + '<div class="cover-placeholder">📖<br>' + (displayTitle ? displayTitle.slice(0, 30) : '') + '</div>'
       + '</div>'
       + '<div class="carousel-body">'
-      + '<div class="carousel-title"><span>' + r.title + '</span>' + subtitle + '</div>'
-      + '<div class="carousel-author">' + (r.author || '') + '</div>'
+      + '<div class="carousel-title"><span>' + displayTitle + '</span>' + subtitle + '</div>'
+      + '<div class="carousel-author">' + displayAuthor + '</div>'
       + '<div style="height:1.2em;font-size:0.75rem;line-height:1.2em;margin-top:3px">'
         + (r.rating_avg && r.rating_count ? _ratingStars(r.rating_avg) : '')
       + '</div>'
