@@ -154,7 +154,7 @@ function renderBook(data) {
   }
 
   var subEl = document.getElementById('book-subtitle');
-  if (data.subtitle) {
+  if (data.subtitle && !data.multiscript_title) {
     subEl.textContent = data.subtitle;
     subEl.style.display = '';
   }
