@@ -317,6 +317,9 @@ body {
 .book-info .metadata span { margin-right: 16px; }
 
 .book-info .book-subtitle {
+  color: #515154;
+  margin-bottom: 4px;
+}
 
 .book-info .description {
   font-size: 0.92rem;
