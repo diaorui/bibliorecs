@@ -96,27 +96,27 @@ def _maxsim_scores(pool_norm, borrowed_norm, borrowed_weights):
     return np.max(sims, axis=0)
 
 
-def _mmr(scores, pairwise_sim, lambda_param, top_n):
+def _mmr(scores, embeddings, lambda_param, top_n):
+    """Greedy MMR in O(k · n · d). embeddings must be L2-normalized rows."""
     n = len(scores)
+    if n == 0 or top_n <= 0:
+        return []
+    scores = np.asarray(scores, dtype=np.float64)
+    max_sim = np.full(n, -np.inf, dtype=np.float64)
+    selected_mask = np.zeros(n, dtype=bool)
     selected = []
-    candidates = set(range(n))
 
     for _ in range(min(top_n, n)):
-        if not candidates:
+        div = np.maximum(max_sim, 0.0)
+        mmr_vals = lambda_param * scores - (1.0 - lambda_param) * div
+        mmr_vals[selected_mask] = -np.inf
+        best_idx = int(np.argmax(mmr_vals))
+        if not np.isfinite(mmr_vals[best_idx]):
             break
-        best_score = -float("inf")
-        best_idx = -1
-
-        for idx in candidates:
-            rel = scores[idx]
-            div = max(pairwise_sim[idx, s] for s in selected) if selected else 0
-            mmr_val = lambda_param * rel - (1 - lambda_param) * div
-            if mmr_val > best_score:
-                best_score = mmr_val
-                best_idx = idx
-
         selected.append(best_idx)
-        candidates.remove(best_idx)
+        selected_mask[best_idx] = True
+        sims_to_new = np.clip(embeddings @ embeddings[best_idx], 0.0, 1.0)
+        np.maximum(max_sim, sims_to_new, out=max_sim)
 
     return selected
 
@@ -349,9 +349,7 @@ def get_recommendations(library_id, borrowing_history):
 
     sims = _maxsim_scores(pool_norm, emb_norm, weights)
 
-    pairwise = pool_norm @ pool_norm.T
-    np.clip(pairwise, 0, 1, out=pairwise)
-    mmr_selected = _mmr(sims, pairwise, config.MMR_LAMBDA, config.TOP_CANDIDATES)
+    mmr_selected = _mmr(sims, pool_norm, config.MMR_LAMBDA, config.TOP_CANDIDATES)
 
     top_picks = []
     for rank, i in enumerate(mmr_selected, 1):
