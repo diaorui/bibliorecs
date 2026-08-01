@@ -274,6 +274,10 @@ def _ensure_bibs_from_proxy(data, library_id):
                                    key=lambda s: s.get("name", "") if isinstance(s, dict) else str(s)),
             "audiences": bib.get("audiences", []) or [],
             "primary_language": bib.get("primaryLanguage", "") or "",
+            "title": bib.get("title") or "",
+            "subtitle": bib.get("subtitle") or "",
+            "content_type": bib.get("contentType") or "",
+            "genres": dedup_items(bib.get("genreForm", [])),
         }
         search_recs.search_cache.ensure((library_id, metadata_id), meta=meta, wait=False)
 

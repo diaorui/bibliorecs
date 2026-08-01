@@ -184,7 +184,23 @@ def _refresh_search(key, meta):
             if a.get("bibType") != "PHYSICAL" or a.get("status") == "ON_ORDER" or a.get("circulationType") == "NON_CIRCULATING":
                 continue
             results.append(api.extract_book_info(mid, bib))
-        return results
+        if not results:
+            return []
+        seed_text = _build_embedding_text(
+            title=meta.get("title") or "",
+            subtitle=meta.get("subtitle") or "",
+            content_type=meta.get("content_type") or "",
+            authors=authors,
+            series=series_raw,
+            subjects=subjects,
+            genres=meta.get("genres") or [],
+        )
+        if not seed_text:
+            return results
+        seed_vec = _embed_texts([seed_text])[0]
+        cand_vecs = _embed_texts([_build_pool_embed_text(info) for info in results])
+        sims = cand_vecs @ seed_vec
+        return [info for info, s in zip(results, sims) if float(s) >= config.MIN_COSINE]
     except Exception:
         return []
 
@@ -292,7 +308,17 @@ def get_recommendations(library_id, borrowing_history):
             "checkout_date": b.get("checkout_date"),
             "is_current": b.get("is_current", False),
             "_text": text_for_emb,
-            "_meta": {"subjects": subjects, "authors": authors, "series": series, "audiences": b.get("audiences") or [], "primary_language": b.get("primary_language") or ""},
+            "_meta": {
+                "subjects": subjects,
+                "authors": authors,
+                "series": series,
+                "audiences": b.get("audiences") or [],
+                "primary_language": b.get("primary_language") or "",
+                "title": title,
+                "subtitle": subtitle,
+                "content_type": content_type,
+                "genres": genres,
+            },
         })
 
     if not books:
@@ -323,21 +349,15 @@ def get_recommendations(library_id, borrowing_history):
 
     sims = _maxsim_scores(pool_norm, emb_norm, weights)
 
-    top_k = min(config.MMR_TOP_K, len(pool))
-    global_order = np.argsort(sims)[::-1][:top_k]
-    global_subset = pool_norm[global_order]
-    global_pairwise = global_subset @ global_subset.T
-    np.clip(global_pairwise, 0, 1, out=global_pairwise)
-    mmr_selected = _mmr(sims[global_order], global_pairwise, config.MMR_LAMBDA, config.TOP_CANDIDATES)
-    top_picks_indices = global_order[mmr_selected]
+    pairwise = pool_norm @ pool_norm.T
+    np.clip(pairwise, 0, 1, out=pairwise)
+    mmr_selected = _mmr(sims, pairwise, config.MMR_LAMBDA, config.TOP_CANDIDATES)
 
     top_picks = []
-    rank = 1
-    for i in top_picks_indices:
+    for rank, i in enumerate(mmr_selected, 1):
         info = dict(pool[i])
         info["score"] = float(sims[i])
         info["category_rank"] = rank
-        rank += 1
         top_picks.append(info)
 
     return {"carousels": [{"name": "Top Picks", "books": top_picks}], "has_profile": has_profile}

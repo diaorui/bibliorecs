@@ -41,7 +41,7 @@ Edit `config.py` if needed. The defaults work for the 5 supported libraries:
 | `POOL_LIMIT` | `100` | Max results per OR query |
 | `TOP_CANDIDATES` | `300` | Max books shown in Top Picks |
 | `MMR_LAMBDA` | `0.5` | Diversity vs. relevance trade-off |
-| `MMR_TOP_K` | `1000` | MMR candidate pool (top-N by similarity) |
+| `MIN_COSINE` | `0.75` | Min cosine similarity to seed when caching search results |
 | `REFRESH_HOURS` | `4` | Search result cache TTL |
 | `FORMATS_REFRESH_HOURS` | `24` | Physical format list cache TTL |
 
@@ -69,10 +69,11 @@ Credentials are never stored on the server. The frontend stores `{card, PIN, bc_
 
 1. **OR queries** — each book in borrowing history generates an OR query combining its subject headings, authors, and series. Results are cached per `(library_id, metadata_id)` via `RefreshCache` with a 4-hour TTL. Cache is pre-warmed by proxy endpoints on history/checkout page visits.
 2. **Format filtering** — results are filtered to physical books only (no eBooks, eAudiobooks, eMagazines). Format list is discovered from BC API and cached with file persistence.
-3. **Pool assembly** — cached search results are merged, deduplicating by metadata_id and ISBN, and filtered against borrowed books.
-4. **Embedding & similarity** — each book is encoded via model2vec (`potion-base-4M`) from title, subtitle, content type, author, series, subjects, and genres. MaxSim computes each pool book's relevance as max weighted cosine similarity to any borrowed book (weighted by recency).
-5. **MMR reranking** — top 1000 by similarity are reranked balancing relevance and pairwise embedding diversity; 300 are shown.
-6. **Output** — single "Top Picks" carousel.
+3. **Cosine filter** — each search hit must have cosine similarity ≥ `MIN_COSINE` (0.75) to its seed book (model2vec `potion-base-4M`) before being cached.
+4. **Pool assembly** — cached search results are merged, deduplicating by metadata_id and ISBN, and filtered against borrowed books.
+5. **Embedding & similarity** — each book is encoded from title, subtitle, content type, author, series, subjects, and genres. MaxSim computes each pool book's relevance as max weighted cosine similarity to any borrowed book (weighted by recency).
+6. **MMR reranking** — the full filtered pool is reranked balancing relevance and pairwise embedding diversity; up to 300 are shown.
+7. **Output** — single "Top Picks" carousel.
 
 ## API endpoints
 
