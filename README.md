@@ -39,9 +39,9 @@ Edit `config.py` if needed. The defaults work for the 5 supported libraries:
 |---|---|---|
 | `HALF_LIFE_DAYS` | `90` | Borrow recency weight half-life |
 | `POOL_LIMIT` | `100` | Max results per OR query |
-| `TOP_CANDIDATES` | `300` | Max books in Top Picks carousel |
+| `TOP_CANDIDATES` | `300` | Max books shown in Top Picks |
 | `MMR_LAMBDA` | `0.5` | Diversity vs. relevance trade-off |
-| `MMR_TOP_K` | `300` | MMR candidate pool size |
+| `MMR_TOP_K` | `1000` | MMR candidate pool (top-N by similarity) |
 | `REFRESH_HOURS` | `4` | Search result cache TTL |
 | `FORMATS_REFRESH_HOURS` | `24` | Physical format list cache TTL |
 
@@ -71,7 +71,7 @@ Credentials are never stored on the server. The frontend stores `{card, PIN, bc_
 2. **Format filtering** — results are filtered to physical books only (no eBooks, eAudiobooks, eMagazines). Format list is discovered from BC API and cached with file persistence.
 3. **Pool assembly** — cached search results are merged, deduplicating by metadata_id and ISBN, and filtered against borrowed books.
 4. **Embedding & similarity** — each book is encoded via model2vec (`potion-base-4M`) from title, subtitle, content type, author, series, subjects, and genres. MaxSim computes each pool book's relevance as max weighted cosine similarity to any borrowed book (weighted by recency).
-5. **MMR reranking** — top 300 candidates are reranked balancing relevance and pairwise embedding diversity.
+5. **MMR reranking** — top 1000 by similarity are reranked balancing relevance and pairwise embedding diversity; 300 are shown.
 6. **Output** — single "Top Picks" carousel.
 
 ## API endpoints
