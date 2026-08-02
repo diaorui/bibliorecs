@@ -34,22 +34,23 @@
     var openlibrary = isbn ? 'https://covers.openlibrary.org/b/isbn/' + isbn + '-L.jpg' : placeholder;
     var dataIsbn = ' data-isbn="' + isbn + '"';
     var isReady = h.status === 'READY_FOR_PICKUP';
-    var formatted = '';
+    var dateStr = (h.expiry_date || '').slice(0, 10);
     var daysLeft = '';
-    if (isReady && h.expiry_date) {
-      var d = new Date(h.expiry_date);
-      var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-      formatted = months[d.getMonth()] + ' ' + d.getDate();
-      var today = new Date(); today.setHours(0,0,0,0);
-      var delta = Math.round((d - today) / 86400000);
-      daysLeft = delta > 0 ? delta + ' days left' : (delta === 0 ? 'today' : (-delta) + ' days ago');
+    if (isReady && dateStr) {
+      var parts = dateStr.split('-');
+      if (parts.length === 3) {
+        var exp = new Date(+parts[0], +parts[1] - 1, +parts[2]);
+        var today = new Date(); today.setHours(0, 0, 0, 0);
+        var delta = Math.round((exp - today) / 86400000);
+        daysLeft = delta > 0 ? delta + ' days left' : (delta === 0 ? 'today' : (-delta) + ' days ago');
+      }
     }
-    var badge = isReady && h.expiry_date
-      ? '<span class="hold-badge hold-ready">Pick up by ' + formatted + '</span>'
+    var badge = isReady && dateStr
+      ? '<span class="hold-badge hold-ready">Pick up by ' + dateStr + '</span>'
       : isReady
         ? '<span class="hold-badge hold-ready">Ready for Pickup</span>'
         : '<span class="hold-badge hold-queued">' + (h.position && h.position > 0 ? 'Position #' + h.position : 'On Hold') + '</span>';
-    var expiry = isReady && h.expiry_date
+    var expiry = isReady && dateStr && daysLeft
       ? '<span class="hold-expiry"><span class="due-relative">' + daysLeft + '</span></span>'
       : '';
 
