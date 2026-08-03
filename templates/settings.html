@@ -217,7 +217,7 @@ document.getElementById('creds-form-save').addEventListener('click', function() 
       btn.textContent = 'Connect';
       btn.disabled = false;
       document.getElementById('creds-form-cancel').disabled = false;
-      showToast('Connected! Syncing data...', 3000);
+      showToast('Connected!', 3000);
       _mePromise.then(function() { return fetch('/api/me').then(function(r) { return r.json(); }); })
         .then(function(m) { _meData = m; loadCreds(); });
     } else {

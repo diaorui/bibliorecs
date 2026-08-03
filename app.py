@@ -378,9 +378,9 @@ def api_creds_login():
         "session_id": session_id,
         "account_id": account_id_bc,
     })
-    sync_manager.request(g.account_id, lib, "holds", force=True)
-    sync_manager.request(g.account_id, lib, "checkouts", force=True)
-    sync_manager.request(g.account_id, lib, "history", force=True)
+    sync_manager.sync_now(g.account_id, lib, "holds")
+    sync_manager.sync_now(g.account_id, lib, "checkouts")
+    sync_manager.sync_now(g.account_id, lib, "history")
     return jsonify({"success": True})
 
 
