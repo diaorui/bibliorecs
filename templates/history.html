@@ -8,6 +8,11 @@
 </h1>
 
 <div id="history-content">
+  <div id="history-loading" class="loading-state">
+    <div class="spinner"></div>
+    <p>Loading your borrowing history...</p>
+  </div>
+
   <div class="section" id="section-current" style="display:none"></div>
 
   <div id="chart-wrap" style="display:none">
@@ -17,7 +22,7 @@
   <div class="section" id="section-past" style="display:none"></div>
 
   <div class="empty-state" id="history-empty" style="display:none">
-    <h2>No borrowing history</h2>
+    <h2 id="history-empty-title">No borrowing history</h2>
     <p id="history-empty-msg"></p>
     <a id="history-empty-btn" href="/settings" class="btn btn-primary" style="margin-top:12px;display:inline-block;text-decoration:none">Go to Settings</a>
   </div>
@@ -323,6 +328,8 @@
     _mePromise.then(function() {
       if (!isConnected(libId)) {
         hideIndicator();
+        document.getElementById('history-loading').style.display = 'none';
+        document.getElementById('history-empty-title').textContent = 'No borrowing history';
         document.getElementById('history-empty-msg').textContent = 'Connect a library card in Settings to sync your borrowing history.';
         document.getElementById('history-empty-btn').style.display = '';
         document.getElementById('history-empty').style.display = '';
@@ -334,9 +341,11 @@
       fetch('/api/history/' + encodeURIComponent(libId))
         .then(function(r) { return r.json(); })
         .then(function(resp) {
+          document.getElementById('history-loading').style.display = 'none';
           var all = resp.data || [];
           if (!all.length) {
             hideIndicator();
+            document.getElementById('history-empty-title').textContent = resp.stale ? 'Syncing' : 'No borrowing history';
             document.getElementById('history-empty-msg').textContent = resp.stale ? 'Syncing your borrowing history...' : 'No borrowing history yet.';
             document.getElementById('history-empty-btn').style.display = 'none';
             document.getElementById('history-empty').style.display = '';
@@ -386,6 +395,7 @@
         })
         .catch(function() {
           hideIndicator();
+          document.getElementById('history-loading').style.display = 'none';
           showToast('Could not load history', 5000);
         });
     });
