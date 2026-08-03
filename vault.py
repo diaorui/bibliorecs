@@ -219,12 +219,16 @@ def claim_pair_code(code, device_id):
             return {"error": "too many attempts"}
         dev = conn.execute(
             "SELECT account_id FROM devices WHERE id = ?", (device_id,)).fetchone()
-        if dev and dev["account_id"] == row["account_id"]:
+        if not dev:
+            return {"error": "invalid device"}
+        if dev["account_id"] == row["account_id"]:
             conn.execute(
                 "UPDATE pair_codes SET attempts = attempts + 1 WHERE code = ?",
                 (code,))
             conn.commit()
             return {"error": "already linked to this account"}
+        if _has_creds(conn, dev["account_id"]):
+            return {"error": "this device already has a library card linked"}
         conn.execute(
             "UPDATE pair_codes SET attempts = attempts + 1 WHERE code = ?",
             (code,))
@@ -232,10 +236,21 @@ def claim_pair_code(code, device_id):
             "UPDATE devices SET account_id = ? WHERE id = ?",
             (row["account_id"], device_id))
         conn.execute("DELETE FROM pair_codes WHERE code = ?", (code,))
-        if dev:
-            _gc_account(conn, dev["account_id"])
+        _gc_account(conn, dev["account_id"])
         conn.commit()
         return {"success": True}
+
+
+def _has_creds(conn, account_id):
+    row = conn.execute(
+        "SELECT 1 AS c FROM vault WHERE account_id = ? AND key LIKE 'creds:%' LIMIT 1",
+        (account_id,)).fetchone()
+    return row is not None
+
+
+def has_creds(account_id):
+    conn = _get_conn()
+    return _has_creds(conn, account_id)
 
 
 # ── creds (encrypted) ──

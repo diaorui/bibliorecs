@@ -442,7 +442,8 @@ def api_history_data(library_id):
 @app.route("/api/pair/create", methods=["POST"])
 def api_pair_create():
     code = vault.create_pair_code(g.account_id)
-    return jsonify({"code": code, "expires_at": time.time() + 600})
+    return jsonify({"code": code, "expires_at": time.time() + 600,
+                    "has_data": vault.has_creds(g.account_id)})
 
 
 @app.route("/api/pair/claim", methods=["POST"])

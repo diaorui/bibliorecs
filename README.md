@@ -72,7 +72,7 @@ config.py                 → Library definitions and configuration constants
 
 ### Account & device model
 
-Every browser is auto-provisioned with an opaque device token (HttpOnly cookie `bc_device`); the server only stores its hash. Device tokens map to an account that owns all data. To share data across devices (e.g. phone ↔ desktop), generate a 6-digit pairing code in Settings → Devices and enter it on the other device. A device can be revoked at any time; "Forget this device" unlinks the current browser.
+Every browser is auto-provisioned with an opaque device token (HttpOnly cookie `bc_device`); the server only stores its hash. Device tokens map to an account that owns all data. Pairing is one-way: the device with your library cards shows a 6-digit code in Settings → Devices, and a new (empty) device enters it to join the same account; devices with existing library data cannot claim a code. A device can be revoked at any time; "Forget this device" unlinks the current browser.
 
 ### Server-side credentials
 

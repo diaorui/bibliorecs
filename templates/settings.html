@@ -46,20 +46,28 @@
 
 <div class="section" style="margin-top:2rem">
   <h2 class="section-title">Devices</h2>
-  <p class="section-desc">Data is stored on the server and shared across your linked devices. Link a new device by entering the pairing code shown here.</p>
+  <p class="section-desc">Data is stored on the server and shared across your linked devices. Pairing is one-way: the device with your library cards shows a code, and a new device enters it.</p>
   <div id="devices-list"></div>
-  <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:14px">
-    <button class="btn" id="pair-create-btn">Show pairing code</button>
+
+  <div id="pair-give" style="display:none;margin-top:16px;background:#f5f5f7;border-radius:8px;padding:16px">
+    <strong style="font-size:0.95rem">Add a new device</strong>
+    <p style="font-size:0.85rem;color:#86868b;margin-top:4px">This device has your library cards. Show a code, then enter it on the new device.</p>
+    <button class="btn" id="pair-create-btn" style="margin-top:10px">Show pairing code</button>
+    <div id="pair-code-box" style="display:none;margin-top:14px;background:#fff;border-radius:8px;padding:16px;text-align:center">
+      <p style="font-size:0.9rem;color:#86868b;margin-bottom:6px">Enter this code on your new device:</p>
+      <p id="pair-code-value" style="font-family:monospace;font-size:2rem;letter-spacing:8px;color:#1d1d1f"></p>
+      <p id="pair-code-countdown" style="font-size:0.85rem;color:#86868b;margin-top:6px"></p>
+    </div>
   </div>
-  <div id="pair-code-box" style="display:none;margin-top:14px;background:#f5f5f7;border-radius:8px;padding:16px;text-align:center">
-    <p style="font-size:0.9rem;color:#86868b;margin-bottom:6px">On your other device, go to Settings → Devices → Link this device, then enter:</p>
-    <p id="pair-code-value" style="font-family:monospace;font-size:2rem;letter-spacing:8px;color:#1d1d1f"></p>
-    <p id="pair-code-countdown" style="font-size:0.85rem;color:#86868b;margin-top:6px"></p>
-  </div>
-  <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;align-items:center">
-    <input type="text" id="pair-claim-input" class="creds-input" placeholder="Pairing code" style="max-width:160px" maxlength="6">
-    <button class="btn" id="pair-claim-btn">Link this device</button>
-    <span id="pair-claim-status" style="font-size:0.85rem;color:#86868b"></span>
+
+  <div id="pair-claim" style="display:none;margin-top:16px;background:#f5f5f7;border-radius:8px;padding:16px">
+    <strong style="font-size:0.95rem">Link this device</strong>
+    <p style="font-size:0.85rem;color:#86868b;margin-top:4px">This device has no library data yet. Enter the code shown on your other device (the one with your library cards).</p>
+    <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:10px;align-items:center">
+      <input type="text" id="pair-claim-input" class="creds-input" placeholder="Pairing code" style="max-width:160px" maxlength="6">
+      <button class="btn" id="pair-claim-btn">Link this device</button>
+      <span id="pair-claim-status" style="font-size:0.85rem;color:#86868b"></span>
+    </div>
   </div>
 </div>
 
@@ -184,10 +192,7 @@ function attachCredsEvents() {
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({library_id: lib})
       }).then(function(r) { return r.json(); }).then(function() {
-        return fetch('/api/me').then(function(r) { return r.json(); });
-      }).then(function(m) {
-        _meData = m;
-        loadCreds();
+        refreshMe(loadCreds);
       });
     });
   });
@@ -218,8 +223,7 @@ document.getElementById('creds-form-save').addEventListener('click', function() 
       btn.disabled = false;
       document.getElementById('creds-form-cancel').disabled = false;
       showToast('Connected!', 3000);
-      _mePromise.then(function() { return fetch('/api/me').then(function(r) { return r.json(); }); })
-        .then(function(m) { _meData = m; loadCreds(); });
+      refreshMe(function() { loadCreds(); loadDevices(); });
     } else {
       statusEl.style.color = '#dc2626';
       statusEl.textContent = d.error || 'Login failed';
@@ -250,38 +254,48 @@ function loadDevices() {
   var devices = me.devices || [];
   if (!devices.length) {
     list.innerHTML = '<p style="color:#86868b;font-size:0.9rem">No devices linked.</p>';
-    return;
-  }
-  var html = devices.map(function(d) {
-    var isSelf = d.id === me.device_id;
-    var lastSeen = d.last_seen ? new Date(d.last_seen * 1000).toLocaleString() : 'never';
-    return '<div class="creds-row">'
-      + '<div class="creds-row-name">' + (d.name || 'Device') + (isSelf ? ' <span style="color:#86868b;font-size:0.8rem">(this device)</span>' : '') + '</div>'
-      + '<div class="creds-row-status"><span class="creds-status-dot creds-status-on"></span> <span style="font-size:0.85rem;color:#86868b">Last seen ' + lastSeen + '</span></div>'
-      + '<div class="creds-row-actions">'
-      + (isSelf ? '' : '<button class="btn-ghost device-revoke" data-device-id="' + d.id + '">Revoke</button>')
-      + '</div>'
-      + '</div>';
-  }).join('');
-  list.innerHTML = html;
-  list.querySelectorAll('.device-revoke').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-      var id = btn.getAttribute('data-device-id');
-      if (!confirm('Revoke this device? It will lose access to your account.')) return;
-      fetch('/api/device/revoke', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({device_id: id})
-      }).then(function(r) { return r.json(); }).then(function(d) {
-        if (d.success) {
-          showToast('Device revoked', 3000);
-          _mePromise.then(function() { return fetch('/api/me').then(function(r) { return r.json(); }); })
-            .then(function(m) { _meData = m; loadDevices(); });
-        } else {
-          showToast(d.error || 'Failed', 4000);
-        }
+  } else {
+    var html = devices.map(function(d) {
+      var isSelf = d.id === me.device_id;
+      var lastSeen = d.last_seen ? new Date(d.last_seen * 1000).toLocaleString() : 'never';
+      return '<div class="creds-row">'
+        + '<div class="creds-row-name">' + (d.name || 'Device') + (isSelf ? ' <span style="color:#86868b;font-size:0.8rem">(this device)</span>' : '') + '</div>'
+        + '<div class="creds-row-status"><span class="creds-status-dot creds-status-on"></span> <span style="font-size:0.85rem;color:#86868b">Last seen ' + lastSeen + '</span></div>'
+        + '<div class="creds-row-actions">'
+        + (isSelf ? '' : '<button class="btn-ghost device-revoke" data-device-id="' + d.id + '">Revoke</button>')
+        + '</div>'
+        + '</div>';
+    }).join('');
+    list.innerHTML = html;
+    list.querySelectorAll('.device-revoke').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var id = btn.getAttribute('data-device-id');
+        if (!confirm('Revoke this device? It will lose access to your account.')) return;
+        fetch('/api/device/revoke', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({device_id: id})
+        }).then(function(r) { return r.json(); }).then(function(d) {
+          if (d.success) {
+            showToast('Device revoked', 3000);
+            refreshMe(loadDevices);
+          } else {
+            showToast(d.error || 'Failed', 4000);
+          }
+        });
       });
     });
+  }
+  var hasCard = Object.keys(me.libs || {}).some(function(k) { return me.libs[k].connected; });
+  document.getElementById('pair-give').style.display = hasCard ? '' : 'none';
+  document.getElementById('pair-claim').style.display = hasCard ? 'none' : '';
+}
+
+function refreshMe(cb) {
+  return fetch('/api/me').then(function(r) { return r.json(); }).then(function(m) {
+    _meData = m;
+    if (cb) cb();
+    return m;
   });
 }
 
@@ -329,7 +343,7 @@ document.getElementById('pair-claim-btn').addEventListener('click', function() {
     btn.disabled = false;
     if (d.success) {
       status.textContent = 'Linked! Reloading...';
-      showToast('Device linked', 3000);
+      showToast('Linked! Your library cards and data are now available here.', 3000);
       setTimeout(function() { location.reload(); }, 1500);
     } else {
       status.style.color = '#dc2626';
