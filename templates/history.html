@@ -340,7 +340,11 @@
             document.getElementById('history-empty-msg').textContent = resp.stale ? 'Syncing your borrowing history...' : 'No borrowing history yet.';
             document.getElementById('history-empty-btn').style.display = 'none';
             document.getElementById('history-empty').style.display = '';
-            if (resp.stale) scheduleRetry(5000);
+            if (resp.stale) {
+              scheduleRetry(5000);
+            } else {
+              sessionStorage.removeItem(retryKey);
+            }
             return;
           }
           if (!resp.stale) sessionStorage.removeItem(retryKey);
