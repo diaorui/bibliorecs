@@ -9,7 +9,7 @@ In-page catalog search and library account management for Bibliocommons library 
 - **Multi-device** — data lives on the server (encrypted SQLite vault); every browser gets a device identity automatically, and devices can be linked via a 6-digit pairing code. No accounts or passwords to remember
 - **Server-side sync** — holds/checkouts/history are cached per account with TTL-based background refresh (holds 15 min, checkouts/history 60 min, search 4 h); actions like placing/cancelling a hold or renewing immediately invalidate the cache
 - **Hold management** — view holds with status, place and cancel holds, ready-for-pickup with countdown
-- **Borrowing history** — lazy-synced from BC API on view, cached in localStorage for instant repeat views; renew current checkouts
+- **Borrowing history** — synced from BC API on view, cached server-side per account for instant repeat views and cross-device consistency; renew current checkouts
 - **Book detail** — description, metadata, series, subjects, genres, borrow history, Google Books Preview; multi-script title/author display for non-English books
 - **Cover fallback chain** — Syndetics → OpenLibrary → OpenLibrary search → placeholder SVG
 - **Settings** — library/branch selection and per-library credential management
@@ -63,7 +63,8 @@ Edit `config.py` if needed. The defaults work for the 5 supported libraries:
 app.py                    → Flask web app (all routes, device cookie middleware, template filters)
 api.py                    → Bibliocommons API client (search, login, proxy functions)
 search_recs.py            → Recommendation engine: OR queries → cache → embedding → MaxSim → MMR
-sync_manager.py           → Account data worker: priority job queue, TTL, dedup, search-cache prewarm
+sync_manager.py           → Account data worker: job queue, TTL, dedup, search-cache prewarm
+login_manager.py          → Serialized BC re-login (single-flight per account+library)
 vault.py                  → SQLite storage: accounts, devices, pair codes, encrypted account data, catalog cache
 cache.py                  → Generic RefreshCache with TTL-based refresh, in-flight dedup, SQLite persistence
 config.py                 → Library definitions and configuration constants
@@ -75,7 +76,7 @@ Every browser is auto-provisioned with an opaque device token (HttpOnly cookie `
 
 ### Server-side credentials
 
-Library card credentials (card number, PIN, BC session tokens) are stored encrypted (Fernet) in the SQLite vault and shared across all linked devices. Proxy endpoints use them server-side and automatically re-login on 401. The card number is exposed to the frontend for the barcode view; the PIN never leaves the server after connecting.
+Library card credentials (card number, PIN, BC session tokens) are stored encrypted (Fernet) in the SQLite vault and shared across all linked devices. Connecting a card immediately pulls holds, checkouts, and history (blocking, so the reload lands on fresh data). Proxy endpoints use the stored tokens server-side and automatically re-login on 401; re-logins are serialized per (account, library) so concurrent requests never race a login. The card number is exposed to the frontend for the barcode view; the PIN never leaves the server after connecting.
 
 ### Recommendation algorithm
 
@@ -103,7 +104,7 @@ Library card credentials (card number, PIN, BC session tokens) are stored encryp
 | `/api/branches` | GET | Branch list for all libraries |
 | `/api/ol-cover-search/<isbn>` | GET | OpenLibrary cover search fallback |
 | `/api/me` | GET | Current account, linked devices, per-library connection status |
-| `/api/creds/login` | POST | Connect a library card (server logs in, stores encrypted) |
+| `/api/creds/login` | POST | Connect a library card (logs in, stores encrypted, syncs holds/checkouts/history) |
 | `/api/creds/disconnect` | POST | Remove a library card |
 | `/api/holds/<lib>` | GET | Cached holds (`{data, stale, last_updated}`) |
 | `/api/checkouts/<lib>` | GET | Cached checkouts (`{data, stale, last_updated}`) |
