@@ -145,8 +145,45 @@
     container.innerHTML = html;
   }
 
+  var _searchSetupDone = false;
+
+  function setupSearch() {
+    if (_searchSetupDone) return;
+    _searchSetupDone = true;
+
+    searchInput.addEventListener('input', function() {
+      var val = this.value.trim();
+      searchClear.style.display = val ? '' : 'none';
+      if (_suggestAbort) _suggestAbort.abort();
+      _suggestTimer && clearTimeout(_suggestTimer);
+      if (val.length < 2) { dismissSuggestions(); return; }
+      _suggestTimer = setTimeout(function() { fetchSuggestions(val); }, 300);
+    });
+
+    searchInput.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        restoreRecommendations();
+      }
+    });
+
+    document.getElementById('search-form').addEventListener('submit', function(e) {
+      e.preventDefault();
+      var val = searchInput.value.trim();
+      if (!val) return;
+      if (_suggestAbort) _suggestAbort.abort();
+      _suggestTimer && clearTimeout(_suggestTimer);
+      dismissSuggestions();
+      doSearch(val);
+    });
+
+    searchClear.addEventListener('click', function() {
+      restoreRecommendations();
+    });
+  }
+
   function init() {
     var libId = document.body.getAttribute('data-lib');
+    setupSearch();
 
     _mePromise.then(function() {
       if (!isConnected(libId)) {
@@ -178,35 +215,6 @@
         });
 
       fetchHoldsAndCheckouts();
-    });
-
-    searchInput.addEventListener('input', function() {
-      var val = this.value.trim();
-      searchClear.style.display = val ? '' : 'none';
-      if (_suggestAbort) _suggestAbort.abort();
-      _suggestTimer && clearTimeout(_suggestTimer);
-      if (val.length < 2) { dismissSuggestions(); return; }
-      _suggestTimer = setTimeout(function() { fetchSuggestions(val); }, 300);
-    });
-
-    searchInput.addEventListener('keydown', function(e) {
-      if (e.key === 'Escape') {
-        restoreRecommendations();
-      }
-    });
-
-    document.getElementById('search-form').addEventListener('submit', function(e) {
-      e.preventDefault();
-      var val = searchInput.value.trim();
-      if (!val) return;
-      if (_suggestAbort) _suggestAbort.abort();
-      _suggestTimer && clearTimeout(_suggestTimer);
-      dismissSuggestions();
-      doSearch(val);
-    });
-
-    searchClear.addEventListener('click', function() {
-      restoreRecommendations();
     });
   }
 
@@ -475,6 +483,11 @@
   });
 
   window.addEventListener('pageshow', function() { init(); });
+  document.addEventListener('visibilitychange', function() {
+    if (!document.hidden && document.getElementById('search-input')) {
+      init();
+    }
+  });
 })();
 </script>
 {% endif %}
