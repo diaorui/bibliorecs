@@ -6,14 +6,14 @@
 
 <div class="section" style="margin-top:2rem">
   <h2 class="section-title">Library Cards</h2>
-  <p class="section-desc">Connect your library cards to sync borrowing history and place holds. Your card number and PIN are stored in your browser only.</p>
+  <p class="section-desc">Connect your library cards to sync borrowing history and place holds. Credentials are stored on the server, encrypted, and shared across your linked devices.</p>
   <div id="creds-list">
     {% for lid, lcfg in libraries.items() %}
     <div class="creds-row" data-lib="{{ lid }}">
       <div class="creds-row-name">{{ lcfg.name }}</div>
       <div class="creds-row-status" id="creds-status-{{ lid }}">
         <span class="creds-status-dot creds-status-unknown"></span>
-        ...
+        <span class="creds-status-text">…</span>
       </div>
       <div class="creds-row-actions" id="creds-actions-{{ lid }}"></div>
     </div>
@@ -45,14 +45,33 @@
 </div>
 
 <div class="section" style="margin-top:2rem">
+  <h2 class="section-title">Devices</h2>
+  <p class="section-desc">Data is stored on the server and shared across your linked devices. Link a new device by entering the pairing code shown here.</p>
+  <div id="devices-list"></div>
+  <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:14px">
+    <button class="btn" id="pair-create-btn">Show pairing code</button>
+  </div>
+  <div id="pair-code-box" style="display:none;margin-top:14px;background:#f5f5f7;border-radius:8px;padding:16px;text-align:center">
+    <p style="font-size:0.9rem;color:#86868b;margin-bottom:6px">On your other device, go to Settings → Devices → Link this device, then enter:</p>
+    <p id="pair-code-value" style="font-family:monospace;font-size:2rem;letter-spacing:8px;color:#1d1d1f"></p>
+    <p id="pair-code-countdown" style="font-size:0.85rem;color:#86868b;margin-top:6px"></p>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;align-items:center">
+    <input type="text" id="pair-claim-input" class="creds-input" placeholder="Pairing code" style="max-width:160px" maxlength="6">
+    <button class="btn" id="pair-claim-btn">Link this device</button>
+    <span id="pair-claim-status" style="font-size:0.85rem;color:#86868b"></span>
+  </div>
+</div>
+
+<div class="section" style="margin-top:2rem">
   <h2 class="section-title">Server</h2>
   <button onclick="restartServer()" class="btn btn-restart" style="background:#dc2626;color:#fff;border:none;padding:8px 16px;border-radius:6px;font-size:0.9rem;cursor:pointer">Restart Server</button>
 </div>
 
 <div class="section" style="margin-top:2rem">
   <h2 class="section-title section-title-danger">Danger Zone</h2>
-  <button class="btn btn-danger" onclick="resetOnboarding()">Reset Onboarding</button>
-  <p class="section-desc" style="margin-top:4px">Clears your library and branch selection, then restarts the setup process.</p>
+  <button class="btn btn-danger" onclick="forgetDevice()">Forget this device</button>
+  <p class="section-desc" style="margin-top:4px">Unlinks this browser from the account. You can re-link anytime with a pairing code; your data stays on the server.</p>
 </div>
 
 </div>
@@ -61,14 +80,12 @@
 
 {% block scripts %}
 <script>
-function resetOnboarding() {
-  if (!confirm('Reset your library and branch selection? You will need to set them again.')) return;
-  Object.keys(localStorage).forEach(function(k) {
-    if (k.startsWith('bibliorecs_')) localStorage.removeItem(k);
+function forgetDevice() {
+  if (!confirm('Forget this device? Your library cards stay on the server and can be re-linked with a pairing code.')) return;
+  fetch('/api/device/forget', { method: 'POST' }).then(function() {
+    showToast('Device forgotten', 3000);
+    setTimeout(function() { location.href = '/'; }, 1500);
   });
-  document.cookie = 'selected_library=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-  document.cookie = 'selected_branch=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-  location.href = '/';
 }
 
 function restartServer() {
@@ -81,17 +98,24 @@ function restartServer() {
   });
 }
 
-// ── creds management (localStorage) ──
+// ── creds management (server vault) ──
 var _credsFormLib = null;
 
+function libName(lid) {
+  var el = document.querySelector('.creds-row[data-lib="' + lid + '"] .creds-row-name');
+  return el ? el.textContent : lid;
+}
+
 function loadCreds() {
-  var creds = getCreds();
+  var me = _meData;
+  var libs = me.libs || {};
   {% for lid, lcfg in libraries.items() %}
   (function() {
     var lid = '{{ lid }}';
     var statusEl = document.getElementById('creds-status-' + lid);
     var actionsEl = document.getElementById('creds-actions-' + lid);
-    if (creds[lid] && creds[lid].bc_token) {
+    var info = libs[lid] || {};
+    if (info.connected) {
       statusEl.innerHTML = '<span class="creds-status-dot creds-status-on"></span> <span class="creds-show-card" data-lib="' + lid + '">Show Card</span>';
       actionsEl.innerHTML = '<button class="btn-ghost creds-disconnect" data-lib="' + lid + '">Disconnect</button>';
     } else {
@@ -104,14 +128,12 @@ function loadCreds() {
 }
 
 function showBarcode(libId) {
-  var creds = getCreds();
-  var libCreds = creds[libId];
-  if (!libCreds) return;
-  var libName = document.querySelector('.creds-row[data-lib="' + libId + '"] .creds-row-name').textContent;
-  document.getElementById('barcode-library').textContent = libName;
-  document.getElementById('barcode-number').textContent = libCreds.user;
+  var info = (_meData.libs || {})[libId] || {};
+  if (!info.connected || !info.user) return;
+  document.getElementById('barcode-library').textContent = libName(libId);
+  document.getElementById('barcode-number').textContent = info.user;
   document.getElementById('barcode-modal').style.display = '';
-  JsBarcode('#barcode-svg', libCreds.user, {
+  JsBarcode('#barcode-svg', info.user, {
     format: 'CODE128',
     width: 2,
     height: 60,
@@ -129,7 +151,7 @@ function attachCredsEvents() {
   document.querySelectorAll('.creds-connect-btn').forEach(function(btn) {
     btn.addEventListener('click', function() {
       _credsFormLib = btn.getAttribute('data-lib');
-      var name = btn.closest('.creds-row').querySelector('.creds-row-name').textContent;
+      var name = libName(_credsFormLib);
       document.getElementById('creds-form-label').textContent = name + ' — Card Number';
       document.getElementById('creds-form-user').value = '';
       document.getElementById('creds-form-pass').value = '';
@@ -151,13 +173,15 @@ function attachCredsEvents() {
   document.querySelectorAll('.creds-disconnect').forEach(function(btn) {
     btn.addEventListener('click', function() {
       var lib = btn.getAttribute('data-lib');
-      var name = btn.closest('.creds-row').querySelector('.creds-row-name').textContent;
+      var name = libName(lib);
       if (!confirm('Disconnect your library card for ' + name + '?')) return;
-      var creds = getCreds();
-      delete creds[lib];
-      saveCreds(creds);
-      localStorage.removeItem('bibliorecs_history_' + lib);
-      loadCreds();
+      fetch('/api/creds/disconnect', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({library_id: lib})
+      }).then(function(r) { return r.json(); }).then(function() {
+        loadCreds();
+      });
     });
   });
 }
@@ -174,7 +198,7 @@ document.getElementById('creds-form-save').addEventListener('click', function() 
   statusEl.style.display = '';
   statusEl.style.color = '#86868b';
   statusEl.textContent = 'Logging in...';
-  fetch('/api/proxy/login', {
+  fetch('/api/creds/login', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({library_id: _credsFormLib, user: user, password: pass})
@@ -182,20 +206,13 @@ document.getElementById('creds-form-save').addEventListener('click', function() 
   .then(function(r) { return r.json(); })
   .then(function(d) {
     if (d.success) {
-      var creds = getCreds();
-      creds[_credsFormLib] = {
-        user: user,
-        password: pass,
-        bc_token: d.bc_token,
-        session_id: d.session_id,
-        account_id: d.account_id
-      };
-      saveCreds(creds);
       document.getElementById('creds-form').style.display = 'none';
       btn.textContent = 'Connect';
       btn.disabled = false;
       document.getElementById('creds-form-cancel').disabled = false;
-      loadCreds();
+      showToast('Connected! Syncing data...', 3000);
+      _mePromise.then(function() { return fetch('/api/me').then(function(r) { return r.json(); }); })
+        .then(function(m) { _meData = m; loadCreds(); });
     } else {
       statusEl.style.color = '#dc2626';
       statusEl.textContent = d.error || 'Login failed';
@@ -217,6 +234,110 @@ document.getElementById('creds-form-cancel').addEventListener('click', function(
   document.getElementById('creds-form').style.display = 'none';
 });
 
-loadCreds();
+// ── devices ──
+var _pairTimer = null;
+
+function loadDevices() {
+  var me = _meData;
+  var list = document.getElementById('devices-list');
+  var devices = me.devices || [];
+  if (!devices.length) {
+    list.innerHTML = '<p style="color:#86868b;font-size:0.9rem">No devices linked.</p>';
+    return;
+  }
+  var html = devices.map(function(d) {
+    var isSelf = d.id === me.device_id;
+    var lastSeen = d.last_seen ? new Date(d.last_seen * 1000).toLocaleString() : 'never';
+    return '<div class="creds-row">'
+      + '<div class="creds-row-name">' + (d.name || 'Device') + (isSelf ? ' <span style="color:#86868b;font-size:0.8rem">(this device)</span>' : '') + '</div>'
+      + '<div class="creds-row-status"><span class="creds-status-dot creds-status-on"></span> <span style="font-size:0.85rem;color:#86868b">Last seen ' + lastSeen + '</span></div>'
+      + '<div class="creds-row-actions">'
+      + (isSelf ? '' : '<button class="btn-ghost device-revoke" data-device-id="' + d.id + '">Revoke</button>')
+      + '</div>'
+      + '</div>';
+  }).join('');
+  list.innerHTML = html;
+  list.querySelectorAll('.device-revoke').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var id = btn.getAttribute('data-device-id');
+      if (!confirm('Revoke this device? It will lose access to your account.')) return;
+      fetch('/api/device/revoke', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({device_id: id})
+      }).then(function(r) { return r.json(); }).then(function(d) {
+        if (d.success) {
+          showToast('Device revoked', 3000);
+          _mePromise.then(function() { return fetch('/api/me').then(function(r) { return r.json(); }); })
+            .then(function(m) { _meData = m; loadDevices(); });
+        } else {
+          showToast(d.error || 'Failed', 4000);
+        }
+      });
+    });
+  });
+}
+
+document.getElementById('pair-create-btn').addEventListener('click', function() {
+  var btn = this;
+  btn.disabled = true;
+  fetch('/api/pair/create', { method: 'POST' })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      document.getElementById('pair-code-box').style.display = '';
+      document.getElementById('pair-code-value').textContent = d.code;
+      var expiresAt = (d.expires_at || 0) * 1000;
+      function tick() {
+        var remain = Math.max(0, Math.round((expiresAt - Date.now()) / 1000));
+        var m = Math.floor(remain / 60), s = remain % 60;
+        document.getElementById('pair-code-countdown').textContent = 'Expires in ' + m + ':' + (s < 10 ? '0' : '') + s;
+        if (remain <= 0) {
+          btn.disabled = false;
+          document.getElementById('pair-code-box').style.display = 'none';
+        } else {
+          _pairTimer = setTimeout(tick, 1000);
+        }
+      }
+      tick();
+    })
+    .catch(function() {
+      btn.disabled = false;
+      showToast('Could not create pairing code', 4000);
+    });
+});
+
+document.getElementById('pair-claim-btn').addEventListener('click', function() {
+  var input = document.getElementById('pair-claim-input');
+  var status = document.getElementById('pair-claim-status');
+  var code = input.value.trim();
+  if (!code) return;
+  var btn = this;
+  btn.disabled = true;
+  status.textContent = 'Linking...';
+  fetch('/api/pair/claim', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({code: code})
+  }).then(function(r) { return r.json(); }).then(function(d) {
+    btn.disabled = false;
+    if (d.success) {
+      status.textContent = 'Linked! Reloading...';
+      showToast('Device linked', 3000);
+      setTimeout(function() { location.reload(); }, 1500);
+    } else {
+      status.style.color = '#dc2626';
+      status.textContent = d.error || 'Failed';
+    }
+  }).catch(function() {
+    btn.disabled = false;
+    status.style.color = '#dc2626';
+    status.textContent = 'Network error';
+  });
+});
+
+_mePromise.then(function() {
+  loadCreds();
+  loadDevices();
+});
 </script>
 {% endblock %}

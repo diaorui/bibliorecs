@@ -147,44 +147,38 @@
 
   function init() {
     var libId = document.body.getAttribute('data-lib');
-    var creds = getCreds();
-    var libCreds = creds[libId];
-    var history = [];
-    try {
-      var stored = localStorage.getItem('bibliorecs_history_' + libId);
-      if (stored) history = JSON.parse(stored) || [];
-    } catch(e) {}
 
-    if (history.length > 0) {
+    _mePromise.then(function() {
+      if (!isConnected(libId)) {
+        showCredsBanner();
+        fetchHoldsAndCheckouts();
+        return;
+      }
+
       skeleton.style.display = '';
-      fetch('/api/recommendations', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({library_id: libId, borrowing_history: history})
-    })
-      .then(function(r) { return r.json(); })
-      .then(function(data) {
-        renderCarousels(data.carousels || [], data.has_profile);
-        applyButtonStates();
-        revealButtons();
-        document.querySelectorAll('img.cover-img').forEach(function(img) {
-          if (typeof initCoverFallback === 'function') initCoverFallback(img);
+      fetch('/api/recommendations?library_id=' + encodeURIComponent(libId))
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          renderCarousels(data.carousels || [], data.has_profile);
+          applyButtonStates();
+          revealButtons();
+          document.querySelectorAll('img.cover-img').forEach(function(img) {
+            if (typeof initCoverFallback === 'function') initCoverFallback(img);
+          });
+          if (!data.carousels.length && !sessionStorage.getItem('recs_retried')) {
+            sessionStorage.setItem('recs_retried', '1');
+            setTimeout(function() { location.reload(); }, 6000);
+          } else if (sessionStorage.getItem('recs_retried')) {
+            sessionStorage.removeItem('recs_retried');
+          }
+        })
+        .catch(function() {
+          skeleton.style.display = 'none';
+          showToast('Could not load recommendations', 6000);
         });
-        if (!libCreds || !libCreds.bc_token) {
-          showCredsBanner();
-        }
-      })
-      .catch(function() {
-        skeleton.style.display = 'none';
-        showToast('Could not load recommendations', 6000);
-      });
-    }
 
-    if (!libCreds || !libCreds.bc_token) {
-      showCredsBanner();
-    }
-
-    fetchHoldsAndCheckouts();
+      fetchHoldsAndCheckouts();
+    });
 
     searchInput.addEventListener('input', function() {
       var val = this.value.trim();
@@ -356,7 +350,7 @@
       status.textContent = 'Logging in...';
       status.style.color = '#86868b';
       var libId = document.body.getAttribute('data-lib');
-      fetch('/api/proxy/login', {
+      fetch('/api/creds/login', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({library_id: libId, user: user, password: pass})
@@ -364,15 +358,6 @@
       .then(function(r) { return r.json(); })
       .then(function(d) {
         if (d.success) {
-          var creds = getCreds();
-          creds[libId] = {
-            user: user,
-            password: pass,
-            bc_token: d.bc_token,
-            session_id: d.session_id,
-            account_id: d.account_id
-          };
-          localStorage.setItem('bibliorecs_creds', JSON.stringify(creds));
           status.textContent = 'Connected! Refreshing...';
           status.style.color = '#16a34a';
           setTimeout(function() { location.reload(); }, 1500);
@@ -393,16 +378,14 @@
   }
   function fetchHoldsAndCheckouts() {
     var libId = document.body.getAttribute('data-lib');
-    var creds = getCreds();
-    var libCreds = creds[libId];
-    if (!libCreds) return;
+    if (!isConnected(libId)) return;
 
     Promise.all([
-      proxyFetch('/api/proxy/holds', {}),
-      proxyFetch('/api/proxy/checkouts', {})
+      fetch('/api/holds/' + encodeURIComponent(libId)).then(function(r) { return r.json(); }),
+      fetch('/api/checkouts/' + encodeURIComponent(libId)).then(function(r) { return r.json(); })
     ]).then(function(results) {
-      var holdsData = results[0];
-      var checkoutsData = results[1];
+      var holdsData = results[0].data || {};
+      var checkoutsData = results[1].data || {};
       var holdsObj = (holdsData.entities || {}).holds || {};
       Object.keys(holdsObj).forEach(function(k) {
         var h = holdsObj[k];
@@ -462,9 +445,7 @@
     if (!btn) return;
     e.preventDefault();
     var libId = document.body.getAttribute('data-lib');
-    var creds = getCreds();
-    var libCreds = creds[libId];
-    if (!libCreds || !libCreds.bc_token) {
+    if (!isConnected(libId)) {
       showToast('Connect a library card in Settings to place holds', 4000);
       return;
     }

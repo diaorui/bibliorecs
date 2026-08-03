@@ -288,19 +288,20 @@ function showNoCreds() {
 }
 
   var libId = document.body.getAttribute('data-lib');
-  var creds = getCreds();
-  var libCreds = creds[libId];
 
   showLoading();
 
-  if (!libCreds || !libCreds.bc_token) {
-    showNoCreds();
-  } else {
+  _mePromise.then(function() {
+    if (!isConnected(libId)) {
+      showNoCreds();
+      return;
+    }
     Promise.all([
-      proxyFetch('/api/proxy/holds', {}),
-      proxyFetch('/api/proxy/checkouts', {})
+      fetch('/api/holds/' + encodeURIComponent(libId)).then(function(r) { return r.json(); }),
+      fetch('/api/checkouts/' + encodeURIComponent(libId)).then(function(r) { return r.json(); })
     ]).then(function(results) {
-      var holdsData = results[0], checkoutsData = results[1];
+      var holdsData = results[0].data || {};
+      var checkoutsData = results[1].data || {};
 
     var checkoutsObj = (checkoutsData.entities || {}).checkouts || {};
     var isCheckedOut = false;
@@ -322,17 +323,15 @@ function showNoCreds() {
     }
 
     showPlaceHold();
+  }).catch(function() { showPlaceHold(); });
   });
-}
 
 document.addEventListener('click', function(e) {
   var btn = e.target.closest('.btn-hold-main');
   if (!btn) return;
   e.preventDefault();
   var libId = document.body.getAttribute('data-lib');
-  var creds = getCreds();
-  var libCreds = creds[libId];
-  if (!libCreds || !libCreds.bc_token) {
+  if (!isConnected(libId)) {
     showToast('Connect a library card in Settings to place holds', 4000);
     return;
   }

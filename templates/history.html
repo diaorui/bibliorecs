@@ -274,6 +274,8 @@
         checkout_date: b.checkout_date,
         title: b.title || '',
         subtitle: b.subtitle || '',
+        multiscript_title: b.multiscript_title || '',
+        multiscript_author: b.multiscript_author || '',
         author: (b.authors || []).join(', '),
         isbn: isbn,
         _format: b.format || '',
@@ -303,173 +305,75 @@
     return {current: current, past: past};
   }
 
-  function loadCached() {
+  function loadHistory() {
     var libId = document.body.getAttribute('data-lib');
     var syndeticsClient = document.body.getAttribute('data-syndetics') || 'sepup';
-    try {
-      var all = JSON.parse(localStorage.getItem('bibliorecs_history_' + libId));
-      if (all && all.length) {
-        var renderData = buildRenderData(all, syndeticsClient);
-        updateContent(renderData, true);
-        var dateCounts = {};
-        all.forEach(function(b) {
-          if (b.is_current) return;
-          var date = b.checkout_date;
-          if (date) {
-            var month = date.slice(0, 7);
-            dateCounts[month] = (dateCounts[month] || 0) + 1;
-          }
-        });
-        var months = Object.keys(dateCounts).sort();
-        if (months.length) {
-          var chartData = [];
-          var cumulative = 0;
-          months.forEach(function(m) {
-            cumulative += dateCounts[m];
-            chartData.push({m: m, b: dateCounts[m], c: cumulative});
-          });
-          drawChart(chartData);
-        }
+    _mePromise.then(function() {
+      if (!isConnected(libId)) {
+        hideIndicator();
+        document.getElementById('history-empty-msg').textContent = 'Connect a library card in Settings to sync your borrowing history.';
+        document.getElementById('history-empty-btn').style.display = '';
+        document.getElementById('history-empty').style.display = '';
         return;
       }
-    } catch(e) {}
-    var creds = getCreds();
-    if (creds[libId] && creds[libId].bc_token) {
-      document.getElementById('history-empty-msg').textContent = 'Syncing your borrowing history...';
-      document.getElementById('history-empty-btn').style.display = 'none';
-      document.getElementById('history-empty').style.display = '';
-    } else {
-      updateContent({current: [], past: []}, false);
-    }
-  }
 
-  function doSync() {
-    var libId = document.body.getAttribute('data-lib');
-    var syndeticsClient = document.body.getAttribute('data-syndetics') || 'sepup';
-    var creds = getCreds();
-    var libCreds = creds[libId];
-    if (!libCreds || !libCreds.bc_token) {
-      document.getElementById('history-empty-msg').textContent = 'Connect a library card in Settings to sync your borrowing history.';
-      document.getElementById('history-empty-btn').style.display = '';
-      hideIndicator();
-      return;
-    }
+      setIndicator('\u27F3 Syncing');
 
-    setIndicator('\u27F3 Syncing');
-
-    var allEntries = {};
-    var allBibs = {};
-
-    function fetchHistory() {
-      return proxyFetch('/api/proxy/history', {page: 0}).then(function(data) {
-        Object.assign(allBibs, data.entities.bibs || {});
-        var entries = data.entities.borrowingHistory || {};
-        Object.keys(entries).forEach(function(k) { allEntries[k] = entries[k]; });
-      });
-    }
-
-    function dedupItems(items, keyFn) {
-      var seen = {}, result = [];
-      for (var i = 0; i < items.length; i++) {
-        var item = items[i];
-        var k = keyFn ? keyFn(item) : item;
-        if (typeof k === 'string') k = k.trim().toLowerCase();
-        if (!k) continue;
-        if (!seen[k]) { seen[k] = true; result.push(item); }
-      }
-      return result;
-    }
-
-    function buildBorrowingHistory(entries, bibs) {
-      var seen = {};
-      var borrowingHistory = [];
-      Object.keys(entries).forEach(function(k) {
-        var entry = entries[k];
-        var bib = (bibs[entry.metadataId] || {}).briefInfo || {};
-        var key = entry.metadataId + '|' + (entry.checkedoutDate || '');
-        if (!seen[key]) {
-          seen[key] = true;
-          borrowingHistory.push({
-            metadata_id: entry.metadataId,
-            title: bib.title || '',
-            subtitle: bib.subtitle || '',
-            multiscript_title: bib.multiscriptTitle || '',
-            multiscript_author: (bib.multiscriptAuthor || ''),
-            authors: dedupItems(bib.authors || []),
-            series: dedupItems(bib.series || [], function(s) { return (s && (s.name || s)) || ''; }),
-            isbns: bib.isbns || [],
-            subjects: dedupItems(bib.subjectHeadings || []),
-            genres: dedupItems(bib.genreForm || []),
-            audiences: bib.audiences || [],
-            primary_language: bib.primaryLanguage || '',
-            content_type: bib.contentType || '',
-            format: bib.format || '',
-            checkout_date: entry.checkedoutDate,
-            is_current: false
+      fetch('/api/history/' + encodeURIComponent(libId))
+        .then(function(r) { return r.json(); })
+        .then(function(resp) {
+          var all = resp.data || [];
+          if (!all.length) {
+            hideIndicator();
+            document.getElementById('history-empty-msg').textContent = resp.stale ? 'Syncing your borrowing history...' : 'No borrowing history yet.';
+            document.getElementById('history-empty-btn').style.display = 'none';
+            document.getElementById('history-empty').style.display = '';
+            if (resp.stale) setTimeout(loadHistory, 5000);
+            return;
+          }
+          var renderData = buildRenderData(all, syndeticsClient);
+          updateContent(renderData, true);
+          document.querySelectorAll('img.cover-img').forEach(function(img) {
+            if (typeof initCoverFallback === 'function') initCoverFallback(img);
           });
-        }
-      });
-      return borrowingHistory;
-    }
 
-    fetchHistory().then(function() {
-      return proxyFetch('/api/proxy/checkouts', {});
-    }).then(function(checkoutsData) {
-      Object.assign(allBibs, checkoutsData.entities.bibs || {});
-      var checkoutsObj = (checkoutsData.entities || {}).checkouts || {};
+          var dateCounts = {};
+          all.forEach(function(b) {
+            if (b.is_current) return;
+            var date = b.checkout_date;
+            if (date) {
+              var month = date.slice(0, 7);
+              dateCounts[month] = (dateCounts[month] || 0) + 1;
+            }
+          });
+          var months = Object.keys(dateCounts).sort();
+          if (months.length) {
+            var chartData = [];
+            var cumulative = 0;
+            months.forEach(function(m) {
+              cumulative += dateCounts[m];
+              chartData.push({m: m, b: dateCounts[m], c: cumulative});
+            });
+            drawChart(chartData);
+          }
 
-      // Build unified borrowing history (past + current)
-      var borrowingHistory = buildBorrowingHistory(allEntries, allBibs);
-      Object.keys(checkoutsObj).forEach(function(k) {
-        var co = checkoutsObj[k];
-        var bib = (allBibs[co.metadataId] || {}).briefInfo || {};
-        borrowingHistory.push({
-          metadata_id: co.metadataId,
-          checkout_id: k,
-          actions: co.actions || [],
-          title: bib.title || co.bibTitle || '',
-          subtitle: bib.subtitle || '',
-          multiscript_title: bib.multiscriptTitle || '',
-          multiscript_author: (bib.multiscriptAuthor || ''),
-          authors: dedupItems(bib.authors || []),
-          series: dedupItems(bib.series || [], function(s) { return (s && (s.name || s)) || ''; }),
-          isbns: bib.isbns || [],
-          subjects: dedupItems(bib.subjectHeadings || []),
-          genres: dedupItems(bib.genreForm || []),
-          audiences: bib.audiences || [],
-          primary_language: bib.primaryLanguage || '',
-          content_type: bib.contentType || '',
-          format: bib.format || '',
-          checkout_date: co.dueDate,
-          is_current: true
+          hideIndicator();
+          var itemCount = renderData.past.length + renderData.current.length;
+          if (itemCount > 0) {
+            setIndicator('\u2713 Updated (' + itemCount + ' items)', 'sync-done');
+            setTimeout(hideIndicator, 3000);
+          }
+          if (resp.stale) {
+            setTimeout(loadHistory, 8000);
+          }
+        })
+        .catch(function() {
+          hideIndicator();
+          showToast('Could not load history', 5000);
         });
-      });
-      try { localStorage.setItem('bibliorecs_history_' + libId, JSON.stringify(borrowingHistory)); } catch(e) {}
-
-      // Build render data
-      var renderData = buildRenderData(borrowingHistory, syndeticsClient);
-
-      // Update content
-      updateContent(renderData, true);
-      document.querySelectorAll('img.cover-img').forEach(function(img) {
-        if (typeof initCoverFallback === 'function') initCoverFallback(img);
-      });
-
-      // Compute charts client-side
-      computeCharts(allEntries, allBibs);
-
-      hideIndicator();
-      var itemCount = renderData.past.length + renderData.current.length;
-      if (itemCount > 0) {
-        setIndicator('\u2713 Updated (' + itemCount + ' items)', 'sync-done');
-      }
-      setTimeout(hideIndicator, 3000);
-    })
-    .catch(function() {
-      hideIndicator();
-      showToast('Sync failed', 5000);
     });
   }
+
 
   var resizeTimer;
   var onResize = function() {
@@ -509,20 +413,6 @@
           }
         }
         btn.remove();
-        var libId = document.body.getAttribute('data-lib');
-        if (libId) {
-          try {
-            var cache = JSON.parse(localStorage.getItem('bibliorecs_history_' + libId) || '[]');
-            for (var i = 0; i < cache.length; i++) {
-              if (cache[i].checkout_id === checkoutId) {
-                cache[i].checkout_date = data.due_date;
-                cache[i].actions = (cache[i].actions || []).filter(function(a) { return a !== 'renew'; });
-                break;
-              }
-            }
-            localStorage.setItem('bibliorecs_history_' + libId, JSON.stringify(cache));
-          } catch(e) {}
-        }
         showToast('Renewed!', 3000);
       } else {
         btn.textContent = 'Renew';
@@ -536,8 +426,7 @@
     });
   });
 
-  loadCached();
-  doSync();
+  loadHistory();
 })();
 </script>
 {% endblock %}

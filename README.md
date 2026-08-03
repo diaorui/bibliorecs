@@ -6,7 +6,8 @@ In-page catalog search and library account management for Bibliocommons library 
 
 - **Search** — in-page catalog search with autocomplete suggestions; results filtered to physical books only
 - **Recommendations** — "Top Picks" carousel computed from borrowing history using model2vec embeddings + MaxSim + MMR diversity
-- **Privacy-first** — credentials and borrowing history stored in your browser's localStorage, not on the server. Proxy endpoints forward tokens inline, server is stateless
+- **Multi-device** — data lives on the server (encrypted SQLite vault); every browser gets a device identity automatically, and devices can be linked via a 6-digit pairing code. No accounts or passwords to remember
+- **Server-side sync** — holds/checkouts/history are cached per account with TTL-based background refresh (holds 15 min, checkouts/history 60 min, search 4 h); actions like placing/cancelling a hold or renewing immediately invalidate the cache
 - **Hold management** — view holds with status, place and cancel holds, ready-for-pickup with countdown
 - **Borrowing history** — lazy-synced from BC API on view, cached in localStorage for instant repeat views; renew current checkouts
 - **Book detail** — description, metadata, series, subjects, genres, borrow history, Google Books Preview; multi-script title/author display for non-English books
@@ -44,6 +45,11 @@ Edit `config.py` if needed. The defaults work for the 5 supported libraries:
 | `MIN_COSINE` | `0.75` | Min cosine similarity to seed when caching search results |
 | `REFRESH_HOURS` | `4` | Search result cache TTL |
 | `FORMATS_REFRESH_HOURS` | `24` | Physical format list cache TTL |
+| `HOLDS_TTL_MIN` | `15` | Holds cache freshness (background refresh interval) |
+| `CHECKOUTS_TTL_MIN` | `60` | Checkouts cache freshness |
+| `HISTORY_TTL_MIN` | `60` | History cache freshness |
+| `SYNC_MAX_CONCURRENCY` | `3` | Max parallel background BC sync jobs |
+| `SYNC_RETRY_MIN` | `5` | Retry delay after a failed sync |
 
 ## Usage
 
@@ -54,25 +60,31 @@ Edit `config.py` if needed. The defaults work for the 5 supported libraries:
 ## Architecture
 
 ```
-app.py                    → Flask web app (all routes, template filters)
+app.py                    → Flask web app (all routes, device cookie middleware, template filters)
 api.py                    → Bibliocommons API client (search, login, proxy functions)
 search_recs.py            → Recommendation engine: OR queries → cache → embedding → MaxSim → MMR
-cache.py                  → Generic RefreshCache with TTL-based refresh and file persistence
+sync_manager.py           → Account data worker: priority job queue, TTL, dedup, search-cache prewarm
+vault.py                  → SQLite storage: accounts, devices, pair codes, encrypted account data, catalog cache
+cache.py                  → Generic RefreshCache with TTL-based refresh, in-flight dedup, SQLite persistence
 config.py                 → Library definitions and configuration constants
 ```
 
-### Proxy pattern
+### Account & device model
 
-Credentials are never stored on the server. The frontend stores `{card, PIN, bc_token, session_id, account_id}` in `localStorage.bibliorecs_creds` and passes tokens with every proxy request. If a 401 is detected, `proxyFetch()` automatically re-logins using saved credentials and retries.
+Every browser is auto-provisioned with an opaque device token (HttpOnly cookie `bc_device`); the server only stores its hash. Device tokens map to an account that owns all data. To share data across devices (e.g. phone ↔ desktop), generate a 6-digit pairing code in Settings → Devices and enter it on the other device. A device can be revoked at any time; "Forget this device" unlinks the current browser.
+
+### Server-side credentials
+
+Library card credentials (card number, PIN, BC session tokens) are stored encrypted (Fernet) in the SQLite vault and shared across all linked devices. Proxy endpoints use them server-side and automatically re-login on 401. The card number is exposed to the frontend for the barcode view; the PIN never leaves the server after connecting.
 
 ### Recommendation algorithm
 
-1. **OR queries** — each book in borrowing history generates an OR query combining its subject headings, authors, and series. Results are cached per `(library_id, metadata_id)` via `RefreshCache` with a 4-hour TTL. Cache is pre-warmed by proxy endpoints on history/checkout page visits.
+1. **OR queries** — each book in borrowing history generates an OR query combining its subject headings, authors, and series. Results are cached per `(library_id, metadata_id)` via `RefreshCache` with a 4-hour TTL, persisted to SQLite so they survive restarts. The cache is pre-warmed by the backend history sync job.
 2. **Format filtering** — results are filtered to physical books only (no eBooks, eAudiobooks, eMagazines). Format list is discovered from BC API and cached with file persistence.
 3. **Cosine filter** — each search hit must have cosine similarity ≥ `MIN_COSINE` (0.75) to its seed book (model2vec `potion-base-4M`) before being cached.
 4. **Pool assembly** — cached search results are merged, deduplicating by metadata_id and ISBN, and filtered against borrowed books.
 5. **Embedding & similarity** — each book is encoded from title, subtitle, content type, author, series, subjects, and genres. MaxSim computes each pool book's relevance as max weighted cosine similarity to any borrowed book (weighted by recency).
-6. **MMR reranking** — the full filtered pool is reranked balancing relevance and pairwise embedding diversity; up to 300 are shown.
+6. **MMR reranking** — the full filtered pool is reranked (O(k·n·d) greedy MMR) balancing relevance and pairwise embedding diversity; up to 300 are shown.
 7. **Output** — single "Top Picks" carousel.
 
 ## API endpoints
@@ -83,19 +95,24 @@ Credentials are never stored on the server. The frontend stores `{card, PIN, bc_
 | `/book/<metadata_id>` | GET | Book detail page |
 | `/holds` | GET | Hold management page |
 | `/history` | GET | Borrowing history page |
-| `/settings` | GET | Settings (branch, creds, server) |
-| `/api/recommendations` | POST | Get recommendation carousels |
+| `/settings` | GET | Settings (branch, creds, devices, server) |
+| `/api/recommendations` | GET | Top Picks carousel (computed server-side from vault history) |
 | `/api/search` | POST | Catalog search |
 | `/api/search/suggest` | GET | Search autocomplete suggestions |
 | `/api/bib/<metadata_id>` | GET | Book metadata + covers |
 | `/api/branches` | GET | Branch list for all libraries |
 | `/api/ol-cover-search/<isbn>` | GET | OpenLibrary cover search fallback |
-| `/api/proxy/login` | POST | BC API login (returns tokens) |
-| `/api/proxy/holds` | POST | Current holds (raw BC data) |
-| `/api/proxy/checkouts` | POST | Current checkouts (raw BC data) |
+| `/api/me` | GET | Current account, linked devices, per-library connection status |
+| `/api/creds/login` | POST | Connect a library card (server logs in, stores encrypted) |
+| `/api/creds/disconnect` | POST | Remove a library card |
+| `/api/holds/<lib>` | GET | Cached holds (`{data, stale, last_updated}`) |
+| `/api/checkouts/<lib>` | GET | Cached checkouts (`{data, stale, last_updated}`) |
+| `/api/history/<lib>` | GET | Cached borrowing history (`{data, stale, last_updated}`) |
+| `/api/pair/create` | POST | Generate a 6-digit pairing code |
+| `/api/pair/claim` | POST | Link this device to the code's account |
+| `/api/device/revoke` | POST | Revoke a linked device |
+| `/api/device/forget` | POST | Unlink the current device |
 | `/api/proxy/checkout/renew` | POST | Renew a checkout |
-| `/api/proxy/history` | POST | Borrowing history (raw BC data) |
-| `/api/proxy/bib/<metadata_id>` | POST | Book detail from BC API |
 | `/api/proxy/hold/place` | POST | Place a hold |
 | `/api/proxy/hold/cancel` | POST | Cancel a hold |
 | `/api/restart` | POST | Restart server |

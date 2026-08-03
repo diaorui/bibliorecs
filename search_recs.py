@@ -214,7 +214,8 @@ formats_cache = RefreshCache(_refresh_formats, refresh_hours=config.FORMATS_REFR
                               failure_retry_minutes=5, name="formats",
                               persist_path=_formats_path)
 search_cache = RefreshCache(_refresh_search, refresh_hours=config.REFRESH_HOURS,
-                             failure_retry_minutes=5, name="search")
+                             failure_retry_minutes=5, name="search",
+                             persist_table="search")
 
 
 def _refresh_branches(key, meta=None):
@@ -335,10 +336,12 @@ def get_recommendations(library_id, borrowing_history):
     for b in books:
         mid = b["metadata_id"]
         key = (library_id, mid)
-        results = search_cache.get(key)
+        results, stale = search_cache.get_with_age(key)
         if results is not None:
             for info in results:
                 _add_to_pool(info, pool, pool_mids, pool_isbns, borrowed_mids, borrowed_isbns)
+            if stale:
+                search_cache.ensure(key, meta=b["_meta"], wait=False)
         else:
             search_cache.ensure(key, meta=b["_meta"], wait=False)
 

@@ -117,10 +117,10 @@
     container.innerHTML = '<h2>Could not load holds</h2><p style="color:#86868b;margin-top:4px">' + (msg || 'Unknown error') + '</p><button onclick="location.reload()" class="btn btn-primary" style="margin-top:12px">Retry</button>';
   }
 
-  function renderMessage(msg) {
+  function renderMessage(msg, heading) {
     document.getElementById('page-title').textContent = 'Your Holds';
     container.className = 'empty-state';
-    container.innerHTML = '<h2>Not connected</h2><p style="color:#86868b;margin-top:4px">' + msg + '</p><a href="/settings" class="btn btn-primary" style="margin-top:12px;display:inline-block;text-decoration:none">Settings</a>';
+    container.innerHTML = '<h2>' + (heading || 'Not connected') + '</h2><p style="color:#86868b;margin-top:4px">' + msg + '</p><a href="/settings" class="btn btn-primary" style="margin-top:12px;display:inline-block;text-decoration:none">Settings</a>';
   }
 
   function attachCancel() {
@@ -161,14 +161,25 @@
   }
 
   var libId = document.body.getAttribute('data-lib');
-  var creds = getCreds();
-  var libCreds = creds[libId];
 
-  if (!libCreds || !libCreds.bc_token) {
-    renderMessage('Connect a library card in Settings to view and manage holds.');
-  } else {
-    proxyFetch('/api/proxy/holds', {})
-      .then(function(data) {
+  _mePromise.then(function() {
+    if (!isConnected(libId)) {
+      renderMessage('Connect a library card in Settings to view and manage holds.');
+      return;
+    }
+    fetch('/api/holds/' + encodeURIComponent(libId))
+      .then(function(r) { return r.json(); })
+      .then(function(resp) {
+        if (resp.data == null) {
+          if (resp.stale) {
+            renderMessage('Syncing your holds...', 'Syncing');
+            setTimeout(function() { location.reload(); }, 5000);
+          } else {
+            renderError('Could not load holds');
+          }
+          return;
+        }
+        var data = resp.data;
         var holdsObj = (data.entities || {}).holds || {};
         // Convert {id: hold} to array with id
         var holds = Object.keys(holdsObj).map(function(k) {
@@ -198,7 +209,7 @@
       .catch(function() {
         renderError('Could not load holds');
       });
-  }
+  });
 })();
 </script>
 {% endblock %}

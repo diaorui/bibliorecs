@@ -2,18 +2,24 @@ import json
 import os
 import sys
 import re
+import secrets
+import time
 import urllib.request
 import urllib.parse
 import urllib.error
 
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, g
 import api
 from api import dedup_items
 import config
 import search_recs
+import sync_manager
+import vault
 
 app = Flask(__name__)
 app.config["DEBUG_MODE"] = "--debug" in sys.argv or os.environ.get("BIBLIORECS_DEBUG") == "1"
+
+DEVICE_COOKIE = "bc_device"
 
 OL_URL = "https://covers.openlibrary.org/b/isbn/{isbn}-{size}.jpg"
 PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='180' viewBox='0 0 120 180'%3E%3Crect width='120' height='180' fill='%23e8e8ed' rx='4'/%3E%3Cpath d='M45 55v70l15-8 15 8V55z' fill='%2386868b' opacity='.4'/%3E%3Crect x='48' y='65' width='24' height='2' fill='%2386868b' opacity='.3'/%3E%3C/svg%3E"
@@ -25,6 +31,70 @@ def _lib_from_cookies():
     if lib not in config.LIBRARIES:
         return "", branch, None
     return lib, branch, config.LIBRARIES[lib]
+
+
+def _secure_cookie():
+    return request.headers.get("X-Forwarded-Proto") == "https" or request.is_secure
+
+
+def _device_name_from_ua(ua):
+    ua = ua or ""
+    if "Edg/" in ua:
+        b = "Edge"
+    elif "Chrome/" in ua:
+        b = "Chrome"
+    elif "Safari/" in ua:
+        b = "Safari"
+    elif "Firefox/" in ua:
+        b = "Firefox"
+    else:
+        b = "Browser"
+    if "iPhone" in ua or "iPad" in ua:
+        plat = "iOS"
+    elif "Android" in ua:
+        plat = "Android"
+    elif "Windows" in ua:
+        plat = "Windows"
+    elif "Mac OS" in ua:
+        plat = "macOS"
+    elif "Linux" in ua:
+        plat = "Linux"
+    else:
+        plat = "device"
+    return f"{b} on {plat}"
+
+
+@app.before_request
+def _attach_device():
+    if request.path.startswith("/static/"):
+        g.account_id = None
+        g.device_token = None
+        return
+    token = request.cookies.get(DEVICE_COOKIE)
+    if token:
+        account_id = vault.account_for_token(token)
+        if account_id:
+            vault.touch_device(token)
+            g.account_id = account_id
+            g.device_token = token
+            return
+    token = secrets.token_urlsafe(32)
+    device = vault.create_device(token,
+                                 name=_device_name_from_ua(request.headers.get("User-Agent")))
+    g.account_id = device["account_id"]
+    g.device_token = token
+
+
+@app.after_request
+def _set_device_cookie(resp):
+    if getattr(g, "clear_device_cookie", False):
+        resp.set_cookie(DEVICE_COOKIE, "", httponly=True, samesite="Lax",
+                        max_age=0, secure=_secure_cookie(), path="/")
+    token = getattr(g, "device_token", None)
+    if token:
+        resp.set_cookie(DEVICE_COOKIE, token, httponly=True, samesite="Lax",
+                        max_age=400 * 24 * 3600, secure=_secure_cookie(), path="/")
+    return resp
 
 
 def _first_isbn(isbns_json):
@@ -70,10 +140,9 @@ def index():
                            selected_library=lib_id, selected_branch=branch_code)
 
 
-@app.route("/api/recommendations", methods=["POST"])
+@app.route("/api/recommendations", methods=["GET"])
 def api_recommendations():
-    body = request.get_json() or {}
-    lib_id = body.get("library_id") or request.cookies.get("selected_library")
+    lib_id = request.args.get("library_id") or request.cookies.get("selected_library")
     if not lib_id:
         return jsonify({"carousels": [], "has_profile": False})
 
@@ -81,10 +150,18 @@ def api_recommendations():
     if not lib_cfg:
         return jsonify({"carousels": [], "has_profile": False})
 
-    borrowing_history = body.get("borrowing_history", [])
+    history = []
+    account_id = getattr(g, "account_id", None)
+    if account_id:
+        value, _ = vault.get_account_data(account_id, f"history:{lib_id}")
+        if value is None and vault.get_creds(account_id, lib_id):
+            sync_manager.sync_now(account_id, lib_id, "history")
+            value, _ = vault.get_account_data(account_id, f"history:{lib_id}")
+        if value:
+            history = value
 
     try:
-        result = search_recs.get_recommendations(lib_id, borrowing_history)
+        result = search_recs.get_recommendations(lib_id, history)
         carousels = result.get("carousels", [])
         has_profile = result.get("has_profile", False)
 
@@ -257,213 +334,247 @@ def history():
                            selected_library=lib_id, selected_branch=branch_code)
 
 
-def _ensure_bibs_from_proxy(data, library_id):
-    bibs = data.get("entities", {}).get("bibs") or {}
-    entries = {}
-    entries.update(data.get("entities", {}).get("checkouts", {}))
-    entries.update(data.get("entities", {}).get("borrowingHistory", {}))
-    for eid, entry in entries.items():
-        metadata_id = entry.get("metadataId")
-        if not metadata_id:
-            continue
-        bib = (bibs.get(metadata_id) or {}).get("briefInfo") or {}
-        meta = {
-            "subjects": dedup_items(bib.get("subjectHeadings", [])),
-            "authors": dedup_items(bib.get("authors", [])),
-            "series": dedup_items(bib.get("series", []),
-                                   key=lambda s: s.get("name", "") if isinstance(s, dict) else str(s)),
-            "audiences": bib.get("audiences", []) or [],
-            "primary_language": bib.get("primaryLanguage", "") or "",
-            "title": bib.get("title") or "",
-            "subtitle": bib.get("subtitle") or "",
-            "content_type": bib.get("contentType") or "",
-            "genres": dedup_items(bib.get("genreForm", [])),
+# ── account / creds ──
+
+@app.route("/api/me")
+def api_me():
+    account_id = getattr(g, "account_id", None)
+    if not account_id:
+        return jsonify({"account_id": None, "device_id": None, "devices": [], "libs": {}})
+    dev = vault.current_device(g.device_token)
+    devices = vault.list_devices(account_id)
+    libs = {}
+    for lib_id in config.LIBRARIES:
+        creds = vault.get_creds(account_id, lib_id)
+        libs[lib_id] = {
+            "connected": bool(creds),
+            "user": creds.get("user") if creds else None,
         }
-        search_recs.search_cache.ensure((library_id, metadata_id), meta=meta, wait=False)
+    return jsonify({
+        "account_id": account_id,
+        "device_id": dev["id"] if dev else None,
+        "devices": devices,
+        "libs": libs,
+    })
 
 
-# ── Proxy endpoints (stateless — tokens from frontend) ──
-
-@app.route("/api/proxy/login", methods=["POST"])
-def api_proxy_login():
-    body = request.get_json()
-    if not body or "library_id" not in body or "user" not in body or "password" not in body:
-        return jsonify({"error": "library_id, user, password required"}), 400
+@app.route("/api/creds/login", methods=["POST"])
+def api_creds_login():
+    body = request.get_json() or {}
+    lib = body.get("library_id")
+    user = (body.get("user") or "").strip()
+    password = body.get("password") or ""
+    if not lib or not user or not password:
+        return jsonify({"success": False, "error": "library_id, user, password required"}), 400
     try:
-        bc_token, session_id, account_id = api.login(
-            body["library_id"], body["user"], body["password"]
-        )
-        return jsonify({"success": True, "bc_token": bc_token,
-                        "session_id": session_id, "account_id": account_id})
+        bc_token, session_id, account_id_bc = api.login(lib, user, password)
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
+    vault.set_creds(g.account_id, lib, {
+        "user": user,
+        "password": password,
+        "bc_token": bc_token,
+        "session_id": session_id,
+        "account_id": account_id_bc,
+    })
+    sync_manager.request(g.account_id, lib, "holds", force=True)
+    sync_manager.request(g.account_id, lib, "checkouts", force=True)
+    sync_manager.request(g.account_id, lib, "history", force=True)
+    return jsonify({"success": True})
 
 
-@app.route("/api/proxy/holds", methods=["POST"])
-def api_proxy_holds():
+@app.route("/api/creds/disconnect", methods=["POST"])
+def api_creds_disconnect():
     body = request.get_json() or {}
-    for k in ("library_id", "bc_token", "session_id", "account_id"):
-        if k not in body:
-            return jsonify({"error": f"{k} required"}), 400
-    try:
-        data = api.proxy_fetch_holds(body["library_id"], body["bc_token"],
-                                      body["session_id"], body["account_id"])
-        return jsonify(data)
-    except Exception as e:
-        return jsonify({"error": str(e)})
+    lib = body.get("library_id")
+    if not lib:
+        return jsonify({"error": "library_id required"}), 400
+    vault.delete_creds(g.account_id, lib)
+    return jsonify({"success": True})
 
 
-@app.route("/api/proxy/checkouts", methods=["POST"])
-def api_proxy_checkouts():
+# ── account data (cached, TTL-driven background refresh) ──
+
+_TTL_SEC = {
+    "holds": config.HOLDS_TTL_MIN * 60,
+    "checkouts": config.CHECKOUTS_TTL_MIN * 60,
+    "history": config.HISTORY_TTL_MIN * 60,
+}
+
+
+def _account_data_endpoint(data_type, library_id):
+    if library_id not in config.LIBRARIES:
+        return jsonify({"data": None, "stale": True, "last_updated": 0}), 400
+    account_id = getattr(g, "account_id", None)
+    if not account_id:
+        return jsonify({"data": None, "stale": True, "last_updated": 0})
+    key = f"{data_type}:{library_id}"
+    value, updated = vault.get_account_data(account_id, key)
+    if value is None:
+        if vault.get_creds(account_id, library_id):
+            sync_manager.sync_now(account_id, library_id, data_type)
+            value, updated = vault.get_account_data(account_id, key)
+        return jsonify({"data": value, "stale": value is None, "last_updated": updated})
+    stale = time.time() - updated > _TTL_SEC[data_type]
+    if stale:
+        sync_manager.request(account_id, library_id, data_type)
+    return jsonify({"data": value, "stale": stale, "last_updated": updated})
+
+
+@app.route("/api/holds/<library_id>")
+def api_holds_data(library_id):
+    return _account_data_endpoint("holds", library_id)
+
+
+@app.route("/api/checkouts/<library_id>")
+def api_checkouts_data(library_id):
+    return _account_data_endpoint("checkouts", library_id)
+
+
+@app.route("/api/history/<library_id>")
+def api_history_data(library_id):
+    return _account_data_endpoint("history", library_id)
+
+
+# ── device pairing ──
+
+@app.route("/api/pair/create", methods=["POST"])
+def api_pair_create():
+    code = vault.create_pair_code(g.account_id)
+    return jsonify({"code": code, "expires_at": time.time() + 600})
+
+
+@app.route("/api/pair/claim", methods=["POST"])
+def api_pair_claim():
     body = request.get_json() or {}
-    for k in ("library_id", "bc_token", "session_id", "account_id"):
-        if k not in body:
-            return jsonify({"error": f"{k} required"}), 400
+    code = (body.get("code") or "").strip()
+    dev = vault.current_device(g.device_token)
+    if not dev:
+        return jsonify({"success": False, "error": "no device"})
+    return jsonify(vault.claim_pair_code(code, dev["id"]))
+
+
+@app.route("/api/device/revoke", methods=["POST"])
+def api_device_revoke():
+    body = request.get_json() or {}
+    device_id = body.get("device_id")
+    dev = vault.current_device(g.device_token)
+    if dev and device_id == dev["id"]:
+        return jsonify({"success": False, "error": "cannot revoke current device"}), 400
+    ok = vault.revoke_device(device_id, g.account_id)
+    return jsonify({"success": ok})
+
+
+@app.route("/api/device/forget", methods=["POST"])
+def api_device_forget():
+    dev = vault.current_device(g.device_token)
+    if dev:
+        vault.forget_device(dev["id"])
+    g.device_token = None
+    g.clear_device_cookie = True
+    return jsonify({"success": True})
+
+
+# ── Proxy actions (server holds tokens, 401 auto-relogin) ──
+
+def _call_bc(library_id, fn):
+    account_id = getattr(g, "account_id", None)
+    creds = vault.get_creds(account_id, library_id) if account_id else None
+    if not creds:
+        return {"error": "no credentials"}, None
     try:
-        data = api.proxy_fetch_checkouts(body["library_id"], body["bc_token"],
-                                          body["session_id"], body["account_id"])
-        _ensure_bibs_from_proxy(data, body["library_id"])
-        return jsonify(data)
+        return None, fn(creds)
+    except urllib.error.HTTPError as e:
+        if e.code == 401 and creds.get("user") and creds.get("password"):
+            try:
+                new_creds = sync_manager.renew_creds(account_id, library_id, creds)
+            except Exception:
+                return {"error": str(e)}, None
+            try:
+                return None, fn(new_creds)
+            except Exception as e2:
+                return {"error": str(e2)}, None
+        return {"error": str(e)}, None
     except Exception as e:
-        return jsonify({"error": str(e)})
+        return {"error": str(e)}, None
 
 
 @app.route("/api/proxy/checkout/renew", methods=["POST"])
 def api_proxy_checkout_renew():
     body = request.get_json() or {}
-    for k in ("library_id", "bc_token", "session_id", "account_id", "checkout_id"):
-        if k not in body:
-            return jsonify({"error": f"{k} required"}), 400
-    try:
-        data = api.proxy_renew_checkout(
-            body["library_id"], body["bc_token"], body["session_id"],
-            body["account_id"], [body["checkout_id"]]
-        )
-        failures = data.get("failures")
-        if failures:
-            if isinstance(failures, dict) and body["checkout_id"] in failures:
-                return jsonify({"success": False, "error": str(failures[body["checkout_id"]])})
-            if isinstance(failures, list):
-                for f in failures:
-                    if f.get("id") == body["checkout_id"] or f.get("checkoutId") == body["checkout_id"]:
-                        msg = f.get("message") or f.get("error") or str(f)
-                        return jsonify({"success": False, "error": msg})
-        co = (data.get("entities", {}).get("checkouts", {}) or {}).get(body["checkout_id"], {})
-        return jsonify({"success": True, "due_date": co.get("dueDate")})
-    except urllib.error.HTTPError as e:
-        try:
-            detail = json.loads(e.read().decode())
-            msg = detail.get("error", {}).get("message", str(e))
-        except Exception:
-            msg = str(e)
-        return jsonify({"success": False, "error": msg})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
+    lib = body.get("library_id")
+    checkout_id = body.get("checkout_id")
+    if not lib or not checkout_id:
+        return jsonify({"error": "library_id, checkout_id required"}), 400
 
+    def do(creds):
+        return api.proxy_renew_checkout(lib, creds["bc_token"], creds["session_id"],
+                                        creds["account_id"], [checkout_id])
 
-@app.route("/api/proxy/history", methods=["POST"])
-def api_proxy_history():
-    body = request.get_json() or {}
-    for k in ("library_id", "bc_token", "session_id", "account_id"):
-        if k not in body:
-            return jsonify({"error": f"{k} required"}), 400
-    page = body.get("page", 0)
-    try:
-        data = api.proxy_fetch_history(body["library_id"], body["bc_token"],
-                                        body["session_id"], body["account_id"], page)
-        _ensure_bibs_from_proxy(data, body["library_id"])
-        return jsonify(data)
-    except Exception as e:
-        return jsonify({"error": str(e)})
-
-
-@app.route("/api/proxy/bib/<metadata_id>", methods=["POST"])
-def api_proxy_bib(metadata_id):
-    body = request.get_json() or {}
-    for k in ("library_id", "bc_token", "session_id"):
-        if k not in body:
-            return jsonify({"error": f"{k} required"}), 400
-    try:
-        data = api.proxy_fetch_bib(body["library_id"], body["bc_token"],
-                                    body["session_id"], metadata_id)
-        bib = data.get("entities", {}).get("bibs", {}).get(metadata_id)
-        if not bib:
-            return jsonify({"error": "not found"}), 404
-        bi = bib.get("briefInfo", {})
-        isbns = bi.get("isbns", [])
-        isbn = isbns[0] if isbns else ""
-        syndetics = config.LIBRARIES.get(body["library_id"], {}).get("syndetics_client", "sepup")
-        img, fallback = _cover(isbn, syndetics)
-        return jsonify({
-            "metadata_id": metadata_id,
-            "title": bi.get("title"),
-            "subtitle": bi.get("subtitle"),
-            "author": ", ".join(dedup_items(bi.get("authors") or [])),
-            "isbn": isbn,
-            "isbns": isbns,
-            "img_url": img,
-            "fallback_url": fallback,
-            "format": bi.get("format"),
-            "description": bi.get("description"),
-            "publication_year": api._parse_year(bi.get("publicationDate", "")),
-            "series": dedup_items(bi.get("series", []),
-                                   key=lambda s: s.get("name", "") if isinstance(s, dict) else str(s)),
-            "subjects": dedup_items(bi.get("subjectHeadings", [])),
-            "genres": dedup_items(bi.get("genreForm", [])),
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)})
+    err, data = _call_bc(lib, do)
+    if err:
+        return jsonify({"success": False, "error": err.get("error", "failed")})
+    failures = data.get("failures")
+    if failures:
+        if isinstance(failures, dict) and checkout_id in failures:
+            return jsonify({"success": False, "error": str(failures[checkout_id])})
+        if isinstance(failures, list):
+            for f in failures:
+                if f.get("id") == checkout_id or f.get("checkoutId") == checkout_id:
+                    msg = f.get("message") or f.get("error") or str(f)
+                    return jsonify({"success": False, "error": msg})
+    co = (data.get("entities", {}).get("checkouts", {}) or {}).get(checkout_id, {})
+    sync_manager.request(g.account_id, lib, "checkouts", force=True)
+    return jsonify({"success": True, "due_date": co.get("dueDate")})
 
 
 @app.route("/api/proxy/hold/place", methods=["POST"])
 def api_proxy_hold_place():
     body = request.get_json() or {}
-    for k in ("library_id", "bc_token", "session_id", "account_id", "metadata_id", "branch_code"):
-        if k not in body:
-            return jsonify({"error": f"{k} required"}), 400
-    try:
-        data = api.proxy_place_hold(body["library_id"], body["bc_token"],
-                                     body["session_id"], body["account_id"],
-                                     body["metadata_id"], body["branch_code"])
-        holds = data.get("entities", {}).get("holds", {})
-        if holds:
-            hid = next(iter(holds))
-            h = holds[hid]
-            return jsonify({"success": True, "hold_id": hid,
-                            "position": h.get("holdsPosition"),
-                            "status": h.get("status")})
-        return jsonify({"success": False, "error": "no hold in response"})
-    except urllib.error.HTTPError as e:
-        try:
-            detail = json.loads(e.read().decode())
-            msg = detail.get("error", {}).get("message", str(e))
-        except Exception:
-            msg = str(e)
-        return jsonify({"success": False, "error": msg})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
+    lib = body.get("library_id")
+    metadata_id = body.get("metadata_id")
+    branch_code = body.get("branch_code")
+    if not lib or not metadata_id or not branch_code:
+        return jsonify({"error": "library_id, metadata_id, branch_code required"}), 400
+
+    def do(creds):
+        return api.proxy_place_hold(lib, creds["bc_token"], creds["session_id"],
+                                    creds["account_id"], metadata_id, branch_code)
+
+    err, data = _call_bc(lib, do)
+    if err:
+        return jsonify({"success": False, "error": err.get("error", "failed")})
+    holds = data.get("entities", {}).get("holds", {})
+    if holds:
+        hid = next(iter(holds))
+        h = holds[hid]
+        sync_manager.request(g.account_id, lib, "holds", force=True)
+        return jsonify({"success": True, "hold_id": hid,
+                        "position": h.get("holdsPosition"),
+                        "status": h.get("status")})
+    return jsonify({"success": False, "error": "no hold in response"})
 
 
 @app.route("/api/proxy/hold/cancel", methods=["POST"])
 def api_proxy_hold_cancel():
     body = request.get_json() or {}
-    for k in ("library_id", "bc_token", "session_id", "account_id", "hold_id", "metadata_id"):
-        if k not in body:
-            return jsonify({"error": f"{k} required"}), 400
-    try:
-        data = api.proxy_cancel_hold(body["library_id"], body["bc_token"],
-                                      body["session_id"], body["account_id"],
-                                      body["hold_id"], body["metadata_id"])
-        return jsonify({"success": True})
-    except urllib.error.HTTPError as e:
-        try:
-            detail = json.loads(e.read().decode())
-            msg = detail.get("error", {}).get("message", str(e))
-        except Exception:
-            msg = str(e)
-        return jsonify({"success": False, "error": msg})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
+    lib = body.get("library_id")
+    hold_id = body.get("hold_id")
+    metadata_id = body.get("metadata_id")
+    if not lib or not hold_id or not metadata_id:
+        return jsonify({"error": "library_id, hold_id, metadata_id required"}), 400
+
+    def do(creds):
+        return api.proxy_cancel_hold(lib, creds["bc_token"], creds["session_id"],
+                                     creds["account_id"], hold_id, metadata_id)
+
+    err, data = _call_bc(lib, do)
+    if err:
+        return jsonify({"success": False, "error": err.get("error", "failed")})
+    sync_manager.request(g.account_id, lib, "holds", force=True)
+    return jsonify({"success": True})
+
+
 
 
 # ── template filters ──
