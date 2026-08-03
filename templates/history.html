@@ -329,7 +329,7 @@
         return;
       }
 
-      setIndicator('\\u27F3 Syncing');
+      setIndicator('↻ Syncing');
 
       fetch('/api/history/' + encodeURIComponent(libId))
         .then(function(r) { return r.json(); })
