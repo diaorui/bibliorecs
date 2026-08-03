@@ -71,7 +71,7 @@
 <div class="section" style="margin-top:2rem">
   <h2 class="section-title section-title-danger">Danger Zone</h2>
   <button class="btn btn-danger" onclick="forgetDevice()">Forget this device</button>
-  <p class="section-desc" style="margin-top:4px">Unlinks this browser from the account. You can re-link anytime with a pairing code; your data stays on the server.</p>
+  <p class="section-desc" style="margin-top:4px">Unlinks this browser from the account. If this is the last linked device, your server-stored data (including library cards) is deleted.</p>
 </div>
 
 </div>
@@ -81,7 +81,11 @@
 {% block scripts %}
 <script>
 function forgetDevice() {
-  if (!confirm('Forget this device? Your library cards stay on the server and can be re-linked with a pairing code.')) return;
+  var isLast = (_meData.devices || []).length <= 1;
+  var msg = isLast
+    ? 'Forget this device? This is the last linked device, so your server-stored data (including library cards) will be deleted.'
+    : 'Forget this device? Your library cards and data stay on the server and can be accessed from your other devices.';
+  if (!confirm(msg)) return;
   fetch('/api/device/forget', { method: 'POST' }).then(function() {
     showToast('Device forgotten', 3000);
     setTimeout(function() { location.href = '/'; }, 1500);
@@ -180,6 +184,9 @@ function attachCredsEvents() {
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({library_id: lib})
       }).then(function(r) { return r.json(); }).then(function() {
+        return fetch('/api/me').then(function(r) { return r.json(); });
+      }).then(function(m) {
+        _meData = m;
         loadCreds();
       });
     });

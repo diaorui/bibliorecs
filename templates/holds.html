@@ -173,12 +173,21 @@
         if (resp.data == null) {
           if (resp.stale) {
             renderMessage('Syncing your holds...', 'Syncing');
-            setTimeout(function() { location.reload(); }, 5000);
+            var retryKey = 'holds_retry_' + libId;
+            var n = parseInt(sessionStorage.getItem(retryKey) || '0', 10);
+            if (n >= 3) {
+              sessionStorage.removeItem(retryKey);
+              renderError('Could not load holds');
+            } else {
+              sessionStorage.setItem(retryKey, String(n + 1));
+              setTimeout(function() { location.reload(); }, 5000);
+            }
           } else {
             renderError('Could not load holds');
           }
           return;
         }
+        sessionStorage.removeItem('holds_retry_' + libId);
         var data = resp.data;
         var holdsObj = (data.entities || {}).holds || {};
         // Convert {id: hold} to array with id

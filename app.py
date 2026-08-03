@@ -12,6 +12,7 @@ from flask import Flask, render_template, jsonify, request, g
 import api
 from api import dedup_items
 import config
+import login_manager
 import search_recs
 import sync_manager
 import vault
@@ -487,7 +488,7 @@ def _call_bc(library_id, fn):
     except urllib.error.HTTPError as e:
         if e.code == 401 and creds.get("user") and creds.get("password"):
             try:
-                new_creds = sync_manager.renew_creds(account_id, library_id, creds)
+                new_creds = login_manager.renew_creds(account_id, library_id, creds)
             except Exception:
                 return {"error": str(e)}, None
             try:
@@ -525,6 +526,7 @@ def api_proxy_checkout_renew():
                     return jsonify({"success": False, "error": msg})
     co = (data.get("entities", {}).get("checkouts", {}) or {}).get(checkout_id, {})
     sync_manager.request(g.account_id, lib, "checkouts", force=True)
+    sync_manager.request(g.account_id, lib, "history", force=True)
     return jsonify({"success": True, "due_date": co.get("dueDate")})
 
 

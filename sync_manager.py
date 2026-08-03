@@ -4,6 +4,7 @@ import urllib.error
 
 import api
 import config
+import login_manager
 import vault
 from api import dedup_items
 
@@ -111,22 +112,9 @@ def _call_with_creds(account_id, library_id, creds, fn):
         return fn(creds)
     except urllib.error.HTTPError as e:
         if e.code == 401 and creds.get("user") and creds.get("password"):
-            new_creds = renew_creds(account_id, library_id, creds)
+            new_creds = login_manager.renew_creds(account_id, library_id, creds)
             return fn(new_creds)
         raise
-
-
-def renew_creds(account_id, library_id, creds):
-    bc_token, session_id, account_id_bc = api.login(
-        library_id, creds["user"], creds["password"])
-    new_creds = {
-        **creds,
-        "bc_token": bc_token,
-        "session_id": session_id,
-        "account_id": account_id_bc,
-    }
-    vault.set_creds(account_id, library_id, new_creds)
-    return new_creds
 
 
 def _renew_creds_and_retry(account_id, library_id, data_type):
@@ -134,7 +122,7 @@ def _renew_creds_and_retry(account_id, library_id, data_type):
         creds = vault.get_creds(account_id, library_id)
         if not creds:
             return
-        new_creds = renew_creds(account_id, library_id, creds)
+        new_creds = login_manager.renew_creds(account_id, library_id, creds)
         if data_type == "history":
             data = _fetch_history(account_id, library_id, new_creds)
             vault.set_account_data(account_id, f"history:{library_id}", data)
@@ -158,7 +146,7 @@ def _schedule_retry(account_id, library_id, data_type):
     t.start()
 
 
-def _fetch_history(account_id, library_id, creds):
+def _fetch_history(account_id, library_id, creds, depth=0):
     bc_token = creds["bc_token"]
     session_id = creds["session_id"]
     account_id_bc = creds["account_id"]
@@ -168,9 +156,9 @@ def _fetch_history(account_id, library_id, creds):
         checkouts_data = api.proxy_fetch_checkouts(
             library_id, bc_token, session_id, account_id_bc)
     except urllib.error.HTTPError as e:
-        if e.code == 401:
-            new_creds = renew_creds(account_id, library_id, creds)
-            return _fetch_history(account_id, library_id, new_creds)
+        if e.code == 401 and depth < 2:
+            new_creds = login_manager.renew_creds(account_id, library_id, creds)
+            return _fetch_history(account_id, library_id, new_creds, depth + 1)
         raise
     return _build_history(history_data, checkouts_data)
 

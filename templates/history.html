@@ -308,6 +308,18 @@
   function loadHistory() {
     var libId = document.body.getAttribute('data-lib');
     var syndeticsClient = document.body.getAttribute('data-syndetics') || 'sepup';
+    var retryKey = 'history_retry_' + libId;
+    var scheduleRetry = function(delay) {
+      var n = parseInt(sessionStorage.getItem(retryKey) || '0', 10);
+      if (n >= 3) {
+        sessionStorage.removeItem(retryKey);
+        hideIndicator();
+        showToast('Still syncing — refresh the page to retry', 6000);
+        return;
+      }
+      sessionStorage.setItem(retryKey, String(n + 1));
+      setTimeout(loadHistory, delay);
+    };
     _mePromise.then(function() {
       if (!isConnected(libId)) {
         hideIndicator();
@@ -317,7 +329,7 @@
         return;
       }
 
-      setIndicator('\u27F3 Syncing');
+      setIndicator('\\u27F3 Syncing');
 
       fetch('/api/history/' + encodeURIComponent(libId))
         .then(function(r) { return r.json(); })
@@ -328,9 +340,10 @@
             document.getElementById('history-empty-msg').textContent = resp.stale ? 'Syncing your borrowing history...' : 'No borrowing history yet.';
             document.getElementById('history-empty-btn').style.display = 'none';
             document.getElementById('history-empty').style.display = '';
-            if (resp.stale) setTimeout(loadHistory, 5000);
+            if (resp.stale) scheduleRetry(5000);
             return;
           }
+          if (!resp.stale) sessionStorage.removeItem(retryKey);
           var renderData = buildRenderData(all, syndeticsClient);
           updateContent(renderData, true);
           document.querySelectorAll('img.cover-img').forEach(function(img) {
@@ -364,7 +377,7 @@
             setTimeout(hideIndicator, 3000);
           }
           if (resp.stale) {
-            setTimeout(loadHistory, 8000);
+            scheduleRetry(8000);
           }
         })
         .catch(function() {

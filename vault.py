@@ -14,6 +14,7 @@ _KEY_PATH = os.path.join(os.path.dirname(__file__), "vault_key.bin")
 _conn = None
 _lock = threading.Lock()
 _cipher_obj = None
+_cipher_lock = threading.Lock()
 
 
 def _get_conn():
@@ -66,20 +67,21 @@ def _init_schema(conn):
 
 def _cipher():
     global _cipher_obj
-    if _cipher_obj is None:
-        key = os.environ.get("BIBLIORECS_SECRET_KEY")
-        if not key:
-            if not os.path.exists(_KEY_PATH):
-                _KEY_PATH_DIR = os.path.dirname(_KEY_PATH)
-                if _KEY_PATH_DIR:
-                    os.makedirs(_KEY_PATH_DIR, exist_ok=True)
-                with open(_KEY_PATH, "wb") as f:
-                    f.write(Fernet.generate_key())
-                os.chmod(_KEY_PATH, 0o600)
-            with open(_KEY_PATH, "rb") as f:
-                key = f.read().decode()
-        _cipher_obj = Fernet(key.encode() if isinstance(key, str) else key)
-    return _cipher_obj
+    with _cipher_lock:
+        if _cipher_obj is None:
+            key = os.environ.get("BIBLIORECS_SECRET_KEY")
+            if not key:
+                if not os.path.exists(_KEY_PATH):
+                    _KEY_PATH_DIR = os.path.dirname(_KEY_PATH)
+                    if _KEY_PATH_DIR:
+                        os.makedirs(_KEY_PATH_DIR, exist_ok=True)
+                    with open(_KEY_PATH, "wb") as f:
+                        f.write(Fernet.generate_key())
+                    os.chmod(_KEY_PATH, 0o600)
+                with open(_KEY_PATH, "rb") as f:
+                    key = f.read().decode()
+            _cipher_obj = Fernet(key.encode() if isinstance(key, str) else key)
+        return _cipher_obj
 
 
 def _encrypt(text):
