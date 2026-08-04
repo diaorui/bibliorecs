@@ -1,5 +1,7 @@
+import contextlib
 import hashlib
 import json
+import logging
 import os
 import secrets
 import sqlite3
@@ -8,6 +10,8 @@ import time
 
 from cryptography.fernet import Fernet
 
+logger = logging.getLogger(__name__)
+
 _DB_PATH = os.path.join(os.path.dirname(__file__), "bibliorecs.db")
 _KEY_PATH = os.path.join(os.path.dirname(__file__), "vault_key.bin")
 
@@ -15,6 +19,8 @@ _conn = None
 _lock = threading.Lock()
 _cipher_obj = None
 _cipher_lock = threading.Lock()
+_touch_cache = {}
+_touch_guard = threading.Lock()
 
 
 def _get_conn():
@@ -23,9 +29,26 @@ def _get_conn():
         if _conn is None:
             _conn = sqlite3.connect(_DB_PATH, check_same_thread=False)
             _conn.row_factory = sqlite3.Row
-            _conn.execute("PRAGMA journal_mode=WAL")
+            _conn.execute("PRAGMA busy_timeout=15000")
+            mode = _conn.execute("PRAGMA journal_mode=WAL").fetchone()[0]
+            if mode != "wal":
+                logger.warning("journal_mode=%s (WAL unavailable?)", mode)
             _init_schema(_conn)
         return _conn
+
+
+@contextlib.contextmanager
+def _write():
+    """Serialized write transaction with rollback on error."""
+    conn = _get_conn()
+    with _lock:
+        try:
+            yield conn
+        except Exception:
+            conn.rollback()
+            raise
+        else:
+            conn.commit()
 
 
 def _init_schema(conn):
@@ -103,19 +126,17 @@ def _now():
 # ── accounts / devices ──
 
 def create_device(token=None, name=""):
-    conn = _get_conn()
-    with _lock:
-        account_id = secrets.token_hex(16)
-        device_id = secrets.token_hex(16)
-        now = _now()
-        if token is None:
-            token = secrets.token_urlsafe(32)
+    account_id = secrets.token_hex(16)
+    device_id = secrets.token_hex(16)
+    now = _now()
+    if token is None:
+        token = secrets.token_urlsafe(32)
+    with _write() as conn:
         conn.execute("INSERT INTO accounts (id, created_at) VALUES (?, ?)",
                      (account_id, now))
         conn.execute(
             "INSERT INTO devices (id, account_id, token_hash, name, last_seen, created_at) VALUES (?, ?, ?, ?, ?, ?)",
             (device_id, account_id, _hash_token(token), name, now, now))
-        conn.commit()
     return {"account_id": account_id, "device_id": device_id, "token": token}
 
 
@@ -130,12 +151,16 @@ def account_for_token(token):
 
 
 def touch_device(token):
-    conn = _get_conn()
-    with _lock:
+    now = _now()
+    h = _hash_token(token)
+    with _touch_guard:
+        if _touch_cache.get(h, 0.0) > now - 60:
+            return
+        _touch_cache[h] = now
+    with _write() as conn:
         conn.execute(
             "UPDATE devices SET last_seen = ? WHERE token_hash = ?",
-            (_now(), _hash_token(token)))
-        conn.commit()
+            (now, h))
 
 
 def current_device(token):
@@ -155,25 +180,21 @@ def list_devices(account_id):
 
 
 def revoke_device(device_id, account_id):
-    conn = _get_conn()
-    with _lock:
+    with _write() as conn:
         cur = conn.execute(
             "DELETE FROM devices WHERE id = ? AND account_id = ?",
             (device_id, account_id))
-        conn.commit()
         return cur.rowcount > 0
 
 
 def forget_device(device_id):
-    conn = _get_conn()
-    with _lock:
+    with _write() as conn:
         row = conn.execute(
             "SELECT account_id FROM devices WHERE id = ?", (device_id,)).fetchone()
         if not row:
             return None
         conn.execute("DELETE FROM devices WHERE id = ?", (device_id,))
         _gc_account(conn, row["account_id"])
-        conn.commit()
         return row["account_id"]
 
 
@@ -190,20 +211,17 @@ def _gc_account(conn, account_id):
 # ── pair codes ──
 
 def create_pair_code(account_id, ttl_sec=600):
-    conn = _get_conn()
-    with _lock:
+    with _write() as conn:
         conn.execute("DELETE FROM pair_codes WHERE account_id = ?", (account_id,))
         code = f"{secrets.randbelow(1000000):06d}"
         conn.execute(
             "INSERT INTO pair_codes (code, account_id, expires_at, attempts, created_at) VALUES (?, ?, ?, 0, ?)",
             (code, account_id, _now() + ttl_sec, _now()))
-        conn.commit()
         return code
 
 
 def claim_pair_code(code, device_id):
-    conn = _get_conn()
-    with _lock:
+    with _write() as conn:
         row = conn.execute(
             "SELECT account_id, expires_at, attempts FROM pair_codes WHERE code = ?",
             (code,)).fetchone()
@@ -211,11 +229,9 @@ def claim_pair_code(code, device_id):
             return {"error": "invalid code"}
         if _now() > row["expires_at"]:
             conn.execute("DELETE FROM pair_codes WHERE code = ?", (code,))
-            conn.commit()
             return {"error": "code expired"}
         if row["attempts"] >= 5:
             conn.execute("DELETE FROM pair_codes WHERE code = ?", (code,))
-            conn.commit()
             return {"error": "too many attempts"}
         dev = conn.execute(
             "SELECT account_id FROM devices WHERE id = ?", (device_id,)).fetchone()
@@ -225,7 +241,6 @@ def claim_pair_code(code, device_id):
             conn.execute(
                 "UPDATE pair_codes SET attempts = attempts + 1 WHERE code = ?",
                 (code,))
-            conn.commit()
             return {"error": "already linked to this account"}
         if _has_creds(conn, dev["account_id"]):
             return {"error": "this device already has a library card linked"}
@@ -237,7 +252,6 @@ def claim_pair_code(code, device_id):
             (row["account_id"], device_id))
         conn.execute("DELETE FROM pair_codes WHERE code = ?", (code,))
         _gc_account(conn, dev["account_id"])
-        conn.commit()
         return {"success": True}
 
 
@@ -269,23 +283,19 @@ def get_creds(account_id, library_id):
 
 
 def set_creds(account_id, library_id, creds):
-    conn = _get_conn()
-    with _lock:
+    with _write() as conn:
         conn.execute(
             "INSERT OR REPLACE INTO vault (account_id, key, value, updated_at) VALUES (?, ?, ?, ?)",
             (account_id, f"creds:{library_id}", _encrypt(json.dumps(creds)), _now()))
-        conn.commit()
 
 
 def delete_creds(account_id, library_id):
-    conn = _get_conn()
-    with _lock:
+    with _write() as conn:
         for k in (f"creds:{library_id}", f"holds:{library_id}",
                   f"checkouts:{library_id}", f"history:{library_id}"):
             conn.execute(
                 "DELETE FROM vault WHERE account_id = ? AND key = ?",
                 (account_id, k))
-        conn.commit()
 
 
 # ── account data (encrypted) ──
@@ -304,12 +314,10 @@ def get_account_data(account_id, key):
 
 
 def set_account_data(account_id, key, value):
-    conn = _get_conn()
-    with _lock:
+    with _write() as conn:
         conn.execute(
             "INSERT OR REPLACE INTO vault (account_id, key, value, updated_at) VALUES (?, ?, ?, ?)",
             (account_id, key, _encrypt(json.dumps(value)), _now()))
-        conn.commit()
 
 
 # ── catalog cache (plain, shared across accounts) ──
@@ -328,9 +336,7 @@ def catalog_cache_get(cache_key):
 
 
 def catalog_cache_set(cache_key, entry):
-    conn = _get_conn()
-    with _lock:
+    with _write() as conn:
         conn.execute(
             "INSERT OR REPLACE INTO catalog_cache (cache_key, value) VALUES (?, ?)",
             (cache_key, json.dumps(entry)))
-        conn.commit()

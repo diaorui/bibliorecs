@@ -4,6 +4,8 @@ import sys
 import re
 import secrets
 import time
+import logging
+import traceback
 import urllib.request
 import urllib.parse
 import urllib.error
@@ -16,6 +18,8 @@ import login_manager
 import search_recs
 import sync_manager
 import vault
+
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.config["DEBUG_MODE"] = "--debug" in sys.argv or os.environ.get("BIBLIORECS_DEBUG") == "1"
@@ -63,6 +67,13 @@ def _device_name_from_ua(ua):
     else:
         plat = "device"
     return f"{b} on {plat}"
+
+
+@app.errorhandler(500)
+def _handle_500(e):
+    tb = "".join(traceback.format_exception(type(e), e, e.__traceback__))
+    logger.error("500 on %s\n%s", request.path, tb)
+    return jsonify({"error": "internal server error"}), 500
 
 
 @app.before_request
@@ -156,8 +167,7 @@ def api_recommendations():
     if account_id:
         value, _ = vault.get_account_data(account_id, f"history:{lib_id}")
         if value is None and vault.get_creds(account_id, lib_id):
-            sync_manager.sync_now(account_id, lib_id, "history")
-            value, _ = vault.get_account_data(account_id, f"history:{lib_id}")
+            value, _state = sync_manager.ensure_data(account_id, lib_id, "history")
         if value:
             history = value
 
@@ -378,9 +388,9 @@ def api_creds_login():
         "session_id": session_id,
         "account_id": account_id_bc,
     })
-    sync_manager.sync_now(g.account_id, lib, "holds")
-    sync_manager.sync_now(g.account_id, lib, "checkouts")
-    sync_manager.sync_now(g.account_id, lib, "history")
+    sync_manager.ensure_data(g.account_id, lib, "holds")
+    sync_manager.ensure_data(g.account_id, lib, "checkouts")
+    sync_manager.ensure_data(g.account_id, lib, "history")
     return jsonify({"success": True})
 
 
@@ -413,12 +423,12 @@ def _account_data_endpoint(data_type, library_id):
     value, updated = vault.get_account_data(account_id, key)
     if value is None:
         if vault.get_creds(account_id, library_id):
-            sync_manager.sync_now(account_id, library_id, data_type)
-            value, updated = vault.get_account_data(account_id, key)
+            value, _state = sync_manager.ensure_data(account_id, library_id, data_type)
+            _, updated = vault.get_account_data(account_id, key)
         return jsonify({"data": value, "stale": value is None, "last_updated": updated})
     stale = time.time() - updated > _TTL_SEC[data_type]
     if stale:
-        sync_manager.request(account_id, library_id, data_type)
+        sync_manager.refresh_later(account_id, library_id, data_type)
     return jsonify({"data": value, "stale": stale, "last_updated": updated})
 
 
@@ -526,8 +536,8 @@ def api_proxy_checkout_renew():
                     msg = f.get("message") or f.get("error") or str(f)
                     return jsonify({"success": False, "error": msg})
     co = (data.get("entities", {}).get("checkouts", {}) or {}).get(checkout_id, {})
-    sync_manager.request(g.account_id, lib, "checkouts", force=True)
-    sync_manager.request(g.account_id, lib, "history", force=True)
+    sync_manager.refresh_later(g.account_id, lib, "checkouts", force=True)
+    sync_manager.refresh_later(g.account_id, lib, "history", force=True)
     return jsonify({"success": True, "due_date": co.get("dueDate")})
 
 
@@ -551,7 +561,7 @@ def api_proxy_hold_place():
     if holds:
         hid = next(iter(holds))
         h = holds[hid]
-        sync_manager.request(g.account_id, lib, "holds", force=True)
+        sync_manager.refresh_later(g.account_id, lib, "holds", force=True)
         return jsonify({"success": True, "hold_id": hid,
                         "position": h.get("holdsPosition"),
                         "status": h.get("status")})
@@ -574,7 +584,7 @@ def api_proxy_hold_cancel():
     err, data = _call_bc(lib, do)
     if err:
         return jsonify({"success": False, "error": err.get("error", "failed")})
-    sync_manager.request(g.account_id, lib, "holds", force=True)
+    sync_manager.refresh_later(g.account_id, lib, "holds", force=True)
     return jsonify({"success": True})
 
 

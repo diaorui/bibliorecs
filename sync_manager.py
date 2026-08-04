@@ -1,3 +1,4 @@
+import logging
 import threading
 import time
 import urllib.error
@@ -8,103 +9,105 @@ import login_manager
 import vault
 from api import dedup_items
 
+logger = logging.getLogger(__name__)
+
 _TTL_SEC = {
     "holds": config.HOLDS_TTL_MIN * 60,
     "checkouts": config.CHECKOUTS_TTL_MIN * 60,
     "history": config.HISTORY_TTL_MIN * 60,
 }
 
-_LOCK = threading.Lock()
-_INFLIGHT = {}
-_QUEUE = None
-_SEM = threading.Semaphore(config.SYNC_MAX_CONCURRENCY)
+_FORCE_COOLDOWN_SEC = 5
+
+_LOCKS = {}
+_LOCKS_GUARD = threading.Lock()
 
 
-def _ensure_worker():
-    global _QUEUE
-    with _LOCK:
-        if _QUEUE is None:
-            import queue
-            _QUEUE = queue.Queue()
-            for _ in range(config.SYNC_MAX_CONCURRENCY):
-                threading.Thread(target=_worker, daemon=True).start()
-
-
-def request(account_id, library_id, data_type, force=False):
-    """Enqueue a background refresh job (deduped by key + TTL)."""
-    _ensure_worker()
+def _lock_for(account_id, library_id, data_type):
     key = (account_id, library_id, data_type)
-    with _LOCK:
-        if key in _INFLIGHT:
-            return
-        if not force and not _is_stale(account_id, library_id, data_type):
-            return
-        _INFLIGHT[key] = "queued"
-        _QUEUE.put(key)
+    with _LOCKS_GUARD:
+        lock = _LOCKS.get(key)
+        if lock is None:
+            lock = _LOCKS[key] = threading.Lock()
+        return lock
 
 
-def sync_now(account_id, library_id, data_type):
-    """Blocking refresh (used for first sync so callers get data immediately)."""
-    key = (account_id, library_id, data_type)
-    with _LOCK:
-        if key in _INFLIGHT:
-            return False
-        _INFLIGHT[key] = "running"
-    try:
-        _run(account_id, library_id, data_type)
-        return True
-    finally:
-        with _LOCK:
-            _INFLIGHT.pop(key, None)
-
-
-def _is_stale(account_id, library_id, data_type):
+def _is_fresh(account_id, library_id, data_type):
     value, updated = vault.get_account_data(account_id, f"{data_type}:{library_id}")
     if value is None:
-        return True
-    return time.time() - updated >= _TTL_SEC.get(data_type, 3600)
+        return False
+    return time.time() - updated < _TTL_SEC.get(data_type, 3600)
 
 
-def _worker():
-    while True:
-        key = _QUEUE.get()
-        account_id, library_id, data_type = key
-        with _LOCK:
-            _INFLIGHT[key] = "running"
-        try:
-            _run(account_id, library_id, data_type)
-        finally:
-            with _LOCK:
-                _INFLIGHT.pop(key, None)
+def ensure_data(account_id, library_id, data_type):
+    """Blocking guarantee: cached data exists whenever credentials allow it.
+
+    Waits for any in-flight sync of the same key (per-key lock), then syncs
+    itself if the data is still missing. Returns (value, state) where state is
+    'ok', 'no_creds', or 'failed'.
+    """
+    key = (account_id, library_id, data_type)
+    with _lock_for(*key):
+        value, _ = vault.get_account_data(account_id, f"{data_type}:{library_id}")
+        if value is not None:
+            return value, "ok"
+        if not vault.get_creds(account_id, library_id):
+            return None, "no_creds"
+        _sync(account_id, library_id, data_type)
+        value, _ = vault.get_account_data(account_id, f"{data_type}:{library_id}")
+        return (value, "ok") if value is not None else (None, "failed")
 
 
-def _run(account_id, library_id, data_type):
-    with _SEM:
-        try:
-            creds = vault.get_creds(account_id, library_id)
-            if not creds:
+def refresh_later(account_id, library_id, data_type, force=False):
+    """Fire-and-forget background refresh.
+
+    The per-key lock dedupes concurrent refreshes; a forced refresh runs unless
+    the same data was synced within _FORCE_COOLDOWN_SEC.
+    """
+    threading.Thread(target=_refresh_job,
+                     args=(account_id, library_id, data_type, force),
+                     daemon=True).start()
+
+
+def _refresh_job(account_id, library_id, data_type, force):
+    key = (account_id, library_id, data_type)
+    with _lock_for(*key):
+        if not force and _is_fresh(account_id, library_id, data_type):
+            return
+        if force:
+            value, updated = vault.get_account_data(account_id, f"{data_type}:{library_id}")
+            if value is not None and time.time() - updated < _FORCE_COOLDOWN_SEC:
                 return
-            if data_type == "history":
-                data = _fetch_history(account_id, library_id, creds)
-                vault.set_account_data(account_id, f"history:{library_id}", data)
-                _prewarm_search(library_id, data)
-            elif data_type == "holds":
-                data = _call_with_creds(account_id, library_id, creds,
-                                        lambda c: api.proxy_fetch_holds(
-                                            library_id, c["bc_token"], c["session_id"], c["account_id"]))
-                vault.set_account_data(account_id, f"holds:{library_id}", data)
-            elif data_type == "checkouts":
-                data = _call_with_creds(account_id, library_id, creds,
-                                        lambda c: api.proxy_fetch_checkouts(
-                                            library_id, c["bc_token"], c["session_id"], c["account_id"]))
-                vault.set_account_data(account_id, f"checkouts:{library_id}", data)
-        except urllib.error.HTTPError as e:
-            if e.code == 401:
-                _renew_creds_and_retry(account_id, library_id, data_type)
-            else:
-                _schedule_retry(account_id, library_id, data_type)
-        except Exception:
-            _schedule_retry(account_id, library_id, data_type)
+        if not vault.get_creds(account_id, library_id):
+            return
+        _sync(account_id, library_id, data_type)
+
+
+def _sync(account_id, library_id, data_type):
+    """Fetch from BC and write to vault. Caller must hold the key lock."""
+    try:
+        creds = vault.get_creds(account_id, library_id)
+        if not creds:
+            return False
+        if data_type == "history":
+            data = _fetch_history(account_id, library_id, creds)
+            vault.set_account_data(account_id, f"history:{library_id}", data)
+            _prewarm_search(library_id, data)
+        elif data_type == "holds":
+            data = _call_with_creds(account_id, library_id, creds,
+                                    lambda c: api.proxy_fetch_holds(
+                                        library_id, c["bc_token"], c["session_id"], c["account_id"]))
+            vault.set_account_data(account_id, f"holds:{library_id}", data)
+        elif data_type == "checkouts":
+            data = _call_with_creds(account_id, library_id, creds,
+                                    lambda c: api.proxy_fetch_checkouts(
+                                        library_id, c["bc_token"], c["session_id"], c["account_id"]))
+            vault.set_account_data(account_id, f"checkouts:{library_id}", data)
+        return True
+    except Exception:
+        logger.exception("sync failed: account=%s library=%s type=%s",
+                         account_id, library_id, data_type)
+        return False
 
 
 def _call_with_creds(account_id, library_id, creds, fn):
@@ -115,35 +118,6 @@ def _call_with_creds(account_id, library_id, creds, fn):
             new_creds = login_manager.renew_creds(account_id, library_id, creds)
             return fn(new_creds)
         raise
-
-
-def _renew_creds_and_retry(account_id, library_id, data_type):
-    try:
-        creds = vault.get_creds(account_id, library_id)
-        if not creds:
-            return
-        new_creds = login_manager.renew_creds(account_id, library_id, creds)
-        if data_type == "history":
-            data = _fetch_history(account_id, library_id, new_creds)
-            vault.set_account_data(account_id, f"history:{library_id}", data)
-            _prewarm_search(library_id, data)
-        elif data_type == "holds":
-            data = api.proxy_fetch_holds(
-                library_id, new_creds["bc_token"], new_creds["session_id"], new_creds["account_id"])
-            vault.set_account_data(account_id, f"holds:{library_id}", data)
-        elif data_type == "checkouts":
-            data = api.proxy_fetch_checkouts(
-                library_id, new_creds["bc_token"], new_creds["session_id"], new_creds["account_id"])
-            vault.set_account_data(account_id, f"checkouts:{library_id}", data)
-    except Exception:
-        _schedule_retry(account_id, library_id, data_type)
-
-
-def _schedule_retry(account_id, library_id, data_type):
-    t = threading.Timer(config.SYNC_RETRY_MIN * 60,
-                        request, args=(account_id, library_id, data_type, True))
-    t.daemon = True
-    t.start()
 
 
 def _fetch_history(account_id, library_id, creds, depth=0):
