@@ -96,8 +96,9 @@ def _maxsim_scores(pool_norm, borrowed_norm, borrowed_weights):
     return np.max(sims, axis=0)
 
 
-def _mmr(scores, embeddings, lambda_param, top_n):
-    """Greedy MMR in O(k · n · d). embeddings must be L2-normalized rows."""
+def _mmr(scores, embeddings, lambda_param, top_n, min_score=0.0):
+    """Greedy MMR in O(k · n · d). embeddings must be L2-normalized rows.
+    Candidates with score < min_score are never selected."""
     n = len(scores)
     if n == 0 or top_n <= 0:
         return []
@@ -109,6 +110,7 @@ def _mmr(scores, embeddings, lambda_param, top_n):
     for _ in range(min(top_n, n)):
         div = np.maximum(max_sim, 0.0)
         mmr_vals = lambda_param * scores - (1.0 - lambda_param) * div
+        mmr_vals[scores < min_score] = -np.inf
         mmr_vals[selected_mask] = -np.inf
         best_idx = int(np.argmax(mmr_vals))
         if not np.isfinite(mmr_vals[best_idx]):
@@ -202,7 +204,7 @@ def _refresh_search(key, meta):
         sims = cand_vecs @ seed_vec
         return [info for info, s in zip(results, sims) if float(s) >= config.MIN_COSINE]
     except Exception:
-        return []
+        raise
 
 
 def _refresh_formats(key, meta=None):
@@ -352,7 +354,8 @@ def get_recommendations(library_id, borrowing_history):
 
     sims = _maxsim_scores(pool_norm, emb_norm, weights)
 
-    mmr_selected = _mmr(sims, pool_norm, config.MMR_LAMBDA, config.TOP_CANDIDATES)
+    mmr_selected = _mmr(sims, pool_norm, config.MMR_LAMBDA, config.TOP_CANDIDATES,
+                        min_score=config.MIN_SCORE)
 
     top_picks = []
     for rank, i in enumerate(mmr_selected, 1):
