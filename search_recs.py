@@ -90,9 +90,59 @@ def _time_weight(checkout_date, is_current=False):
     return 2 ** (-days_ago / config.HALF_LIFE_DAYS)
 
 
-def _maxsim_scores(pool_norm, borrowed_norm, borrowed_weights):
+def _compat_mask(book_audiences, pool_audiences, book_langs, pool_langs):
+    """(n_book, n_pool) bool mask: a candidate is comparable to a borrowed
+    book only when they share an audience and a language. Missing metadata
+    on either side is permissive (treated as overlapping)."""
+    n_book = len(book_audiences)
+    n_pool = len(pool_audiences)
+
+    codes = set()
+    for au in book_audiences:
+        codes.update(au)
+    for au in pool_audiences:
+        codes.update(au)
+
+    aud_mask = np.zeros((n_book, n_pool), dtype=bool)
+    for c in codes:
+        b_has = np.fromiter((c in au for au in book_audiences), dtype=bool, count=n_book)
+        p_has = np.fromiter((c in au for au in pool_audiences), dtype=bool, count=n_pool)
+        aud_mask |= b_has[:, None] & p_has[None, :]
+    b_missing = np.fromiter((len(au) == 0 for au in book_audiences), dtype=bool, count=n_book)
+    p_missing = np.fromiter((len(au) == 0 for au in pool_audiences), dtype=bool, count=n_pool)
+    aud_mask |= b_missing[:, None] | p_missing[None, :]
+
+    def _lang_codes(langs, mapping):
+        out = np.empty(len(langs), dtype=np.int64)
+        for i, l in enumerate(langs):
+            l = (l or "").strip().lower()
+            if not l:
+                out[i] = -1
+            elif l not in mapping:
+                mapping[l] = len(mapping)
+                out[i] = mapping[l]
+            else:
+                out[i] = mapping[l]
+        return out
+
+    mapping = {}
+    b_code = _lang_codes(book_langs, mapping)
+    p_code = _lang_codes(pool_langs, mapping)
+    lang_mask = ((b_code[:, None] == p_code[None, :])
+                 | (b_code[:, None] == -1) | (p_code[None, :] == -1))
+
+    return aud_mask & lang_mask
+
+
+def _maxsim_scores(pool_norm, borrowed_norm, borrowed_weights,
+                   borrowed_audiences=None, pool_audiences=None,
+                   borrowed_langs=None, pool_langs=None):
     weighted = borrowed_norm * borrowed_weights[:, np.newaxis]
     sims = weighted @ pool_norm.T
+    if borrowed_audiences is not None:
+        compat = _compat_mask(borrowed_audiences, pool_audiences,
+                              borrowed_langs, pool_langs)
+        sims = np.where(compat, sims, -np.inf)
     return np.max(sims, axis=0)
 
 
@@ -350,7 +400,14 @@ def get_recommendations(library_id, borrowing_history):
 
     pool_norm = _embed_texts([_build_pool_embed_text(info) for info in pool])
 
-    sims = _maxsim_scores(pool_norm, emb_norm, weights)
+    book_audiences = [b["_meta"]["audiences"] for b in books]
+    book_langs = [b["_meta"]["primary_language"] for b in books]
+    pool_audiences = [json.loads(info.get("audiences") or "[]") for info in pool]
+    pool_langs = [info.get("primary_language") or "" for info in pool]
+
+    sims = _maxsim_scores(pool_norm, emb_norm, weights,
+                          borrowed_audiences=book_audiences, pool_audiences=pool_audiences,
+                          borrowed_langs=book_langs, pool_langs=pool_langs)
 
     mmr_selected = _mmr(sims, pool_norm, config.MMR_LAMBDA, config.TOP_CANDIDATES)
 
