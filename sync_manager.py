@@ -1,90 +1,102 @@
 import logging
 import threading
-import time
 import urllib.error
 
 import api
-import config
 import login_manager
 import vault
 from api import dedup_items
 
 logger = logging.getLogger(__name__)
 
-_TTL_SEC = {
-    "holds": config.HOLDS_TTL_MIN * 60,
-    "checkouts": config.CHECKOUTS_TTL_MIN * 60,
-    "history": config.HISTORY_TTL_MIN * 60,
-}
-
-_FORCE_COOLDOWN_SEC = 5
-
-_LOCKS = {}
-_LOCKS_GUARD = threading.Lock()
+_GUARD = threading.Lock()
+_INFLIGHT = {}
+_DIRTY = set()
 
 
-def _lock_for(account_id, library_id, data_type):
-    key = (account_id, library_id, data_type)
-    with _LOCKS_GUARD:
-        lock = _LOCKS.get(key)
-        if lock is None:
-            lock = _LOCKS[key] = threading.Lock()
-        return lock
+def _claim(key, force=False):
+    with _GUARD:
+        if key in _INFLIGHT:
+            if force:
+                _DIRTY.add(key)
+            return _INFLIGHT[key], False
+        ev = threading.Event()
+        _INFLIGHT[key] = ev
+        return ev, True
 
 
-def _is_fresh(account_id, library_id, data_type):
-    value, updated = vault.get_account_data(account_id, f"{data_type}:{library_id}")
-    if value is None:
-        return False
-    return time.time() - updated < _TTL_SEC.get(data_type, 3600)
+def _finish(key):
+    with _GUARD:
+        if key in _DIRTY:
+            _DIRTY.discard(key)
+            return True
+        ev = _INFLIGHT.pop(key, None)
+    if ev:
+        ev.set()
+    return False
+
+
+def _abort(key):
+    with _GUARD:
+        _DIRTY.discard(key)
+        ev = _INFLIGHT.pop(key, None)
+    if ev:
+        ev.set()
 
 
 def ensure_data(account_id, library_id, data_type):
     """Blocking guarantee: cached data exists whenever credentials allow it.
 
-    Waits for any in-flight sync of the same key (per-key lock), then syncs
-    itself if the data is still missing. Returns (value, state) where state is
-    'ok', 'no_creds', or 'failed'.
+    Coalesces with any in-flight sync of the same key. Returns (value, state)
+    where state is 'ok', 'no_creds', or 'failed'.
     """
+    value, _ = vault.get_account_data(account_id, f"{data_type}:{library_id}")
+    if value is not None:
+        return value, "ok"
+    if not vault.get_creds(account_id, library_id):
+        return None, "no_creds"
     key = (account_id, library_id, data_type)
-    with _lock_for(*key):
-        value, _ = vault.get_account_data(account_id, f"{data_type}:{library_id}")
-        if value is not None:
-            return value, "ok"
-        if not vault.get_creds(account_id, library_id):
-            return None, "no_creds"
-        _sync(account_id, library_id, data_type)
-        value, _ = vault.get_account_data(account_id, f"{data_type}:{library_id}")
-        return (value, "ok") if value is not None else (None, "failed")
+    ev, should_run = _claim(key)
+    if should_run:
+        _worker(account_id, library_id, data_type)
+    else:
+        ev.wait()
+    value, _ = vault.get_account_data(account_id, f"{data_type}:{library_id}")
+    return (value, "ok") if value is not None else (None, "failed")
 
 
 def refresh_later(account_id, library_id, data_type, force=False):
     """Fire-and-forget background refresh.
 
-    The per-key lock dedupes concurrent refreshes; a forced refresh runs unless
-    the same data was synced within _FORCE_COOLDOWN_SEC.
+    At most one sync per key is queued or running. A duplicate request is
+    dropped; force=True marks the in-flight sync dirty so it runs once more
+    after the current fetch finishes.
     """
-    threading.Thread(target=_refresh_job,
-                     args=(account_id, library_id, data_type, force),
+    key = (account_id, library_id, data_type)
+    _ev, should_run = _claim(key, force=force)
+    if not should_run:
+        return
+    threading.Thread(target=_worker,
+                     args=(account_id, library_id, data_type),
                      daemon=True).start()
 
 
-def _refresh_job(account_id, library_id, data_type, force):
+def _worker(account_id, library_id, data_type):
     key = (account_id, library_id, data_type)
-    with _lock_for(*key):
-        if not force and _is_fresh(account_id, library_id, data_type):
-            return
-        if force:
-            value, updated = vault.get_account_data(account_id, f"{data_type}:{library_id}")
-            if value is not None and time.time() - updated < _FORCE_COOLDOWN_SEC:
-                return
-        if not vault.get_creds(account_id, library_id):
-            return
-        _sync(account_id, library_id, data_type)
+    try:
+        while True:
+            if vault.get_creds(account_id, library_id):
+                _sync(account_id, library_id, data_type)
+            if not _finish(key):
+                break
+    except Exception:
+        logger.exception("sync worker failed: account=%s library=%s type=%s",
+                         account_id, library_id, data_type)
+        _abort(key)
 
 
 def _sync(account_id, library_id, data_type):
-    """Fetch from BC and write to vault. Caller must hold the key lock."""
+    """Fetch from BC and write to vault."""
     try:
         creds = vault.get_creds(account_id, library_id)
         if not creds:

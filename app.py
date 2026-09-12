@@ -168,6 +168,8 @@ def api_recommendations():
         value, _ = vault.get_account_data(account_id, f"history:{lib_id}")
         if value is None and vault.get_creds(account_id, lib_id):
             value, _state = sync_manager.ensure_data(account_id, lib_id, "history")
+        elif value is not None:
+            sync_manager.refresh_later(account_id, lib_id, "history")
         if value:
             history = value
 
@@ -404,14 +406,7 @@ def api_creds_disconnect():
     return jsonify({"success": True})
 
 
-# ── account data (cached, TTL-driven background refresh) ──
-
-_TTL_SEC = {
-    "holds": config.HOLDS_TTL_MIN * 60,
-    "checkouts": config.CHECKOUTS_TTL_MIN * 60,
-    "history": config.HISTORY_TTL_MIN * 60,
-}
-
+# ── account data (return cache, single-flight background refresh) ──
 
 def _account_data_endpoint(data_type, library_id):
     if library_id not in config.LIBRARIES:
@@ -426,10 +421,8 @@ def _account_data_endpoint(data_type, library_id):
             value, _state = sync_manager.ensure_data(account_id, library_id, data_type)
             _, updated = vault.get_account_data(account_id, key)
         return jsonify({"data": value, "stale": value is None, "last_updated": updated})
-    stale = time.time() - updated > _TTL_SEC[data_type]
-    if stale:
-        sync_manager.refresh_later(account_id, library_id, data_type)
-    return jsonify({"data": value, "stale": stale, "last_updated": updated})
+    sync_manager.refresh_later(account_id, library_id, data_type)
+    return jsonify({"data": value, "stale": False, "last_updated": updated})
 
 
 @app.route("/api/holds/<library_id>")
