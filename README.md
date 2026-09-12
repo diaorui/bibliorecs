@@ -2,12 +2,14 @@
 
 In-page catalog search and library account management for Bibliocommons library systems. Supports Santa Clara City/County, San Jose, Sunnyvale, and Palo Alto libraries.
 
+**Note.** Unofficial and not affiliated with BiblioCommons or any library. You are responsible for complying with BiblioCommons and your library’s terms when you run this. Catalog behavior can change without notice. Provided as-is, no warranty.
+
 ## Features
 
 - **Search** — in-page catalog search with autocomplete suggestions; results filtered to physical books only
 - **Recommendations** — "Top Picks" carousel computed from borrowing history using model2vec embeddings + MaxSim + MMR diversity
 - **Multi-device** — data lives on the server (encrypted SQLite vault); every browser gets a device identity automatically, and devices can be linked via a 6-digit pairing code. No accounts or passwords to remember
-- **Server-side sync** — holds/checkouts/history are cached per account with TTL-based background refresh (holds 15 min, checkouts/history 60 min, search 4 h); actions like placing/cancelling a hold or renewing immediately invalidate the cache
+- **Server-side sync** — holds/checkouts/history return cache immediately and refresh in the background (at most one in-flight fetch per key); search cache TTL is 4 h; actions like placing/cancelling a hold or renewing trigger a refresh
 - **Hold management** — view holds with status, place and cancel holds, ready-for-pickup with countdown
 - **Borrowing history** — synced from BC API on view, cached server-side per account for instant repeat views and cross-device consistency; renew current checkouts
 - **Book detail** — description, metadata, series, subjects, genres, borrow history, Google Books Preview; multi-script title/author display for non-English books
@@ -45,9 +47,9 @@ Edit `config.py` if needed. The defaults work for the 5 supported libraries:
 | `MIN_COSINE` | `0.75` | Min cosine similarity to seed when caching search results |
 | `REFRESH_HOURS` | `4` | Search result cache TTL |
 | `FORMATS_REFRESH_HOURS` | `24` | Physical format list cache TTL |
-| `HOLDS_TTL_MIN` | `15` | Holds cache freshness (background refresh interval) |
-| `CHECKOUTS_TTL_MIN` | `60` | Checkouts cache freshness |
-| `HISTORY_TTL_MIN` | `60` | History cache freshness |
+| `HOLDS_TTL_MIN` | `0` | Unused (holds always queue a background refresh) |
+| `CHECKOUTS_TTL_MIN` | `0` | Unused (checkouts always queue a background refresh) |
+| `HISTORY_TTL_MIN` | `0` | Unused (history always queue a background refresh) |
 | `SYNC_MAX_CONCURRENCY` | `3` | Max parallel background BC sync jobs |
 | `SYNC_RETRY_MIN` | `5` | Retry delay after a failed sync |
 
@@ -63,7 +65,7 @@ Edit `config.py` if needed. The defaults work for the 5 supported libraries:
 app.py                    → Flask web app (all routes, device cookie middleware, template filters)
 api.py                    → Bibliocommons API client (search, login, proxy functions)
 search_recs.py            → Recommendation engine: OR queries → cache → embedding → MaxSim → MMR
-sync_manager.py           → Account data worker: job queue, TTL, dedup, search-cache prewarm
+sync_manager.py           → Account data worker: single-flight refresh, dirty rerun, search-cache prewarm
 login_manager.py          → Serialized BC re-login (single-flight per account+library)
 vault.py                  → SQLite storage: accounts, devices, pair codes, encrypted account data, catalog cache
 cache.py                  → Generic RefreshCache with TTL-based refresh, in-flight dedup, SQLite persistence
