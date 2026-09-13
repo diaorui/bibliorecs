@@ -346,8 +346,23 @@
           if (!all.length) {
             hideIndicator();
             document.getElementById('history-empty-title').textContent = resp.stale ? 'Syncing' : 'No borrowing history';
-            document.getElementById('history-empty-msg').textContent = resp.stale ? 'Syncing your borrowing history...' : 'No borrowing history yet.';
-            document.getElementById('history-empty-btn').style.display = 'none';
+            var emptyBtn = document.getElementById('history-empty-btn');
+            if (resp.stale) {
+              document.getElementById('history-empty-msg').textContent = 'Syncing your borrowing history...';
+              emptyBtn.style.display = 'none';
+            } else {
+              document.getElementById('history-empty-msg').textContent = "If you've borrowed books, enable Borrowing History in your account settings on the library website, then refresh this page.";
+              var catalog = document.body.getAttribute('data-catalog');
+              if (catalog) {
+                emptyBtn.textContent = 'Open library account';
+                emptyBtn.href = catalog + '/account';
+                emptyBtn.target = '_blank';
+                emptyBtn.rel = 'noopener';
+                emptyBtn.style.display = '';
+              } else {
+                emptyBtn.style.display = 'none';
+              }
+            }
             document.getElementById('history-empty').style.display = '';
             if (resp.stale) {
               scheduleRetry(5000);

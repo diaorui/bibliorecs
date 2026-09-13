@@ -7,7 +7,8 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body data-lib="{{ selected_library }}" data-branch="{{ selected_branch }}"
-      data-syndetics="{{ libraries[selected_library].syndetics_client if selected_library in libraries else '' }}">
+      data-syndetics="{{ libraries[selected_library].syndetics_client if selected_library in libraries else '' }}"
+      data-catalog="{{ libraries[selected_library].catalog_base if selected_library in libraries else '' }}">
   <nav class="nav">
     <div class="nav-inner">
       <a href="/" class="nav-brand">Bibliorecs</a>
