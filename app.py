@@ -509,6 +509,23 @@ def api_device_forget():
 
 # ── Proxy actions (server holds tokens, 401 auto-relogin) ──
 
+def _http_error_message(e):
+    try:
+        body = e.read().decode() if e.fp else ""
+    except Exception:
+        body = ""
+    try:
+        detail = json.loads(body) if body else {}
+        err = detail.get("error")
+        if isinstance(err, dict) and err.get("message"):
+            return err["message"]
+        if isinstance(err, str) and err:
+            return err
+    except Exception:
+        pass
+    return str(e)
+
+
 def _call_bc(library_id, fn):
     account_id = getattr(g, "account_id", None)
     creds = vault.get_creds(account_id, library_id) if account_id else None
@@ -517,16 +534,19 @@ def _call_bc(library_id, fn):
     try:
         return None, fn(creds)
     except urllib.error.HTTPError as e:
+        msg = _http_error_message(e)
         if e.code == 401 and creds.get("user") and creds.get("password"):
             try:
                 new_creds = login_manager.renew_creds(account_id, library_id, creds)
             except Exception:
-                return {"error": str(e)}, None
+                return {"error": msg}, None
             try:
                 return None, fn(new_creds)
+            except urllib.error.HTTPError as e2:
+                return {"error": _http_error_message(e2)}, None
             except Exception as e2:
                 return {"error": str(e2)}, None
-        return {"error": str(e)}, None
+        return {"error": msg}, None
     except Exception as e:
         return {"error": str(e)}, None
 
