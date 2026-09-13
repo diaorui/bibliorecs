@@ -462,8 +462,8 @@ def get_similar(library_id, metadata_id, isbn):
         title=title, subtitle=subtitle, content_type=content_type,
         authors=authors, series=series, subjects=subjects, genres=genres)
     if not seed_text:
-        return pool[:10]
+        return pool[:12]
     seed_vec = _embed_texts([seed_text])[0]
     cand_vecs = _embed_texts([_build_pool_embed_text(info) for info in pool])
-    order = np.argsort(-(cand_vecs @ seed_vec))[:10]
+    order = np.argsort(-(cand_vecs @ seed_vec))[:12]
     return [pool[int(i)] for i in order]
