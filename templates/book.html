@@ -43,7 +43,7 @@
 </div>
 
 <div id="similar-section" class="section" style="display:none">
-  <h2 class="section-title">Similar books</h2>
+  <h2 class="section-title">Similar Books</h2>
   <div id="similar-grid" class="book-grid"></div>
 </div>
 {% endblock %}
@@ -231,28 +231,13 @@ if (isbn) {
       var books = (data && data.books) || [];
       if (!books.length) return;
       var grid = document.getElementById('similar-grid');
-      var html = '';
-      books.forEach(function(r) {
-        var displayTitle = r.multiscript_title || r.title;
-        var subtitle = r.multiscript_title ? '' : (r.subtitle ? '<span class="carousel-subtitle">' + r.subtitle + '</span>' : '');
-        var displayAuthor = r.multiscript_author || r.author || '';
-        html += '<div class="carousel-card" data-mid="' + r.metadata_id + '">'
-          + '<a href="/book/' + r.metadata_id + '?isbn=' + (r.isbn || '') + '" class="carousel-card-link">'
-          + '<div class="carousel-cover-wrap">'
-          + '<img class="carousel-cover cover-img" src="' + r.img_url + '" alt="" loading="lazy" data-fallback="' + r.fallback_url + '" data-isbn="' + (r.isbn || '') + '">'
-          + '<div class="cover-placeholder">📖<br>' + (displayTitle ? displayTitle.slice(0, 30) : '') + '</div>'
-          + '</div>'
-          + '<div class="carousel-body">'
-          + '<div class="carousel-title"><span>' + displayTitle + '</span>' + subtitle + '</div>'
-          + '<div class="carousel-author">' + displayAuthor + '</div>'
-          + '</div>'
-          + '</a></div>';
-      });
-      grid.innerHTML = html;
+      grid.innerHTML = books.map(_bookCardHtml).join('');
       document.getElementById('similar-section').style.display = '';
       grid.querySelectorAll('img.cover-img').forEach(function(img) {
         if (typeof initCoverFallback === 'function') initCoverFallback(img);
       });
+      applyButtonStates();
+      revealButtons();
     })
     .catch(function() {});
 }
@@ -344,15 +329,20 @@ function showNoCreds() {
     var checkoutsObj = (checkoutsData.entities || {}).checkouts || {};
     var isCheckedOut = false;
     Object.keys(checkoutsObj).forEach(function(k) {
-      if (checkoutsObj[k].metadataId === mid) isCheckedOut = true;
+      var c = checkoutsObj[k];
+      if (c.metadataId) __checkedOutByMe.add(c.metadataId);
+      if (c.metadataId === mid) isCheckedOut = true;
     });
-    if (isCheckedOut) { showCheckedOut(); return; }
-
     var holdsObj = (holdsData.entities || {}).holds || {};
     var myHold = null;
     Object.keys(holdsObj).forEach(function(k) {
-      if (holdsObj[k].metadataId === mid) myHold = holdsObj[k];
+      var h = holdsObj[k];
+      if (h.metadataId) __holdsByMid[h.metadataId] = h;
+      if (h.metadataId === mid) myHold = h;
     });
+    applyButtonStates();
+    revealButtons();
+    if (isCheckedOut) { showCheckedOut(); return; }
     if (myHold) {
       if (myHold.status === 'READY_FOR_PICKUP')
         { showReady(myHold); return; }

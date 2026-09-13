@@ -185,6 +185,111 @@
     document.body.appendChild(t);
     setTimeout(function() { t.style.opacity = '0'; setTimeout(function() { t.remove(); }, 400); }, duration);
   }
+
+  var __holdsByMid = {};
+  var __checkedOutByMe = new Set();
+
+  function _ratingStars(avg) {
+    var val = avg / 20;
+    var html = '';
+    for (var i = 0; i < 5; i++) {
+      var diff = val - i;
+      if (diff >= 0.75) html += '<span style="color:#f59e0b;vertical-align:top">★</span>';
+      else if (diff >= 0.25) html += '<span style="position:relative;display:inline-block;vertical-align:top;width:1em;height:1em">' +
+        '<span style="color:#d1d5db;position:absolute;left:0;top:0">★</span>' +
+        '<span style="color:#f59e0b;position:absolute;left:0;top:0;overflow:hidden;width:50%">★</span></span>';
+      else html += '<span style="color:#d1d5db;vertical-align:top">★</span>';
+    }
+    return html;
+  }
+
+  function _bookCardHtml(r) {
+    var displayTitle = r.multiscript_title || r.title;
+    var subtitle = r.multiscript_title ? '' : (r.subtitle ? '<span class="carousel-subtitle">' + r.subtitle + '</span>' : '');
+    var displayAuthor = r.multiscript_author || r.author || '';
+    return '<div class="carousel-card" data-mid="' + r.metadata_id + '">'
+      + '<a href="/book/' + r.metadata_id + '?isbn=' + (r.isbn || '') + '" class="carousel-card-link">'
+      + '<div class="carousel-cover-wrap">'
+      + '<img class="carousel-cover cover-img" src="' + r.img_url + '" alt="' + displayTitle + '" loading="lazy" data-fallback="' + r.fallback_url + '" data-isbn="' + (r.isbn || '') + '">'
+      + '<div class="cover-placeholder">📖<br>' + (displayTitle ? displayTitle.slice(0, 30) : '') + '</div>'
+      + '</div>'
+      + '<div class="carousel-body">'
+      + '<div class="carousel-title"><span>' + displayTitle + '</span>' + subtitle + '</div>'
+      + '<div class="carousel-author">' + displayAuthor + '</div>'
+      + '<div style="height:1.2em;font-size:0.75rem;line-height:1.2em;margin-top:3px">'
+        + (r.rating_avg && r.rating_count ? _ratingStars(r.rating_avg) : '')
+      + '</div>'
+      + '</div>'
+      + '</a>'
+      + '<button class="btn-card" data-mid="' + r.metadata_id + '">Hold</button>'
+      + '</div>';
+  }
+
+  function revealButtons() {
+    document.querySelectorAll('.btn-card').forEach(function(b) {
+      b.classList.add('btn-card-revealed');
+    });
+  }
+
+  function applyButtonStates() {
+    document.querySelectorAll('.carousel-card').forEach(function(card) {
+      var mid = card.getAttribute('data-mid');
+      var btn = card.querySelector('.btn-card');
+      if (!btn) return;
+      if (__checkedOutByMe.has(mid)) {
+        btn.textContent = 'Checked Out';
+        btn.disabled = true;
+        btn.className = 'btn-card btn-card-checked';
+        return;
+      }
+      var hold = __holdsByMid[mid];
+      if (hold) {
+        if (hold.status === 'READY_FOR_PICKUP') {
+          btn.textContent = 'Ready for Pickup';
+          btn.disabled = true;
+          btn.className = 'btn-card btn-card-ready';
+        } else {
+          btn.textContent = 'On Hold';
+          btn.disabled = true;
+          btn.className = 'btn-card btn-card-hold';
+        }
+      }
+    });
+  }
+
+  document.addEventListener('click', function(e) {
+    var btn = e.target.closest('.btn-card:not(:disabled)');
+    if (!btn) return;
+    e.preventDefault();
+    var libId = document.body.getAttribute('data-lib');
+    if (!isConnected(libId)) {
+      showToast('Connect a library card in Settings to place holds', 4000);
+      return;
+    }
+    var cardMid = btn.getAttribute('data-mid');
+    var orig = btn.textContent;
+    btn.textContent = 'Placing...';
+    btn.disabled = true;
+    proxyFetch('/api/proxy/hold/place', {
+      metadata_id: cardMid,
+      branch_code: document.body.getAttribute('data-branch')
+    })
+    .then(function(data) {
+      if (data.success) {
+        __holdsByMid[cardMid] = {status: 'ON_HOLD', metadataId: cardMid};
+        applyButtonStates();
+      } else {
+        btn.textContent = 'Failed';
+        btn.disabled = false;
+        showToast(data.error || 'Hold failed', 5000);
+      }
+    })
+    .catch(function() {
+      btn.textContent = orig;
+      btn.disabled = false;
+      showToast('Network error', 5000);
+    });
+  });
   </script>
   <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3/dist/JsBarcode.all.min.js"></script>
 
