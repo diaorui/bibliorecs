@@ -38,10 +38,6 @@ def _lib_from_cookies():
     return lib, branch, config.LIBRARIES[lib]
 
 
-def _secure_cookie():
-    return request.headers.get("X-Forwarded-Proto") == "https" or request.is_secure
-
-
 def _device_name_from_ua(ua):
     ua = ua or ""
     if "Edg/" in ua:
@@ -76,36 +72,45 @@ def _handle_500(e):
     return jsonify({"error": "internal server error"}), 500
 
 
+def _cookie_kwargs(max_age):
+    return dict(httponly=True, samesite="Lax", max_age=max_age, secure=False, path="/")
+
+
+def _ensure_device():
+    if getattr(g, "account_id", None) and getattr(g, "device_token", None):
+        return
+    token = secrets.token_urlsafe(32)
+    device = vault.create_device(
+        token, name=_device_name_from_ua(request.headers.get("User-Agent")))
+    g.account_id = device["account_id"]
+    g.device_token = token
+
+
 @app.before_request
 def _attach_device():
+    g.account_id = None
+    g.device_token = None
     if request.path.startswith("/static/"):
-        g.account_id = None
-        g.device_token = None
         return
     token = request.cookies.get(DEVICE_COOKIE)
-    if token:
-        account_id = vault.account_for_token(token)
-        if account_id:
-            vault.touch_device(token)
-            g.account_id = account_id
-            g.device_token = token
-            return
-    token = secrets.token_urlsafe(32)
-    device = vault.create_device(token,
-                                 name=_device_name_from_ua(request.headers.get("User-Agent")))
-    g.account_id = device["account_id"]
+    if not token:
+        return
+    account_id = vault.account_for_token(token)
+    if not account_id:
+        return
+    vault.touch_device(token)
+    g.account_id = account_id
     g.device_token = token
 
 
 @app.after_request
 def _set_device_cookie(resp):
     if getattr(g, "clear_device_cookie", False):
-        resp.set_cookie(DEVICE_COOKIE, "", httponly=True, samesite="Lax",
-                        max_age=0, secure=_secure_cookie(), path="/")
+        resp.set_cookie(DEVICE_COOKIE, "", **_cookie_kwargs(0))
+        return resp
     token = getattr(g, "device_token", None)
     if token:
-        resp.set_cookie(DEVICE_COOKIE, token, httponly=True, samesite="Lax",
-                        max_age=400 * 24 * 3600, secure=_secure_cookie(), path="/")
+        resp.set_cookie(DEVICE_COOKIE, token, **_cookie_kwargs(400 * 24 * 3600))
     return resp
 
 
@@ -383,6 +388,7 @@ def api_creds_login():
         bc_token, session_id, account_id_bc = api.login(lib, user, password)
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
+    _ensure_device()
     vault.set_creds(g.account_id, lib, {
         "user": user,
         "password": password,
@@ -444,6 +450,7 @@ def api_history_data(library_id):
 
 @app.route("/api/pair/create", methods=["POST"])
 def api_pair_create():
+    _ensure_device()
     code = vault.create_pair_code(g.account_id)
     return jsonify({"code": code, "expires_at": time.time() + 600,
                     "has_data": vault.has_creds(g.account_id)})
@@ -453,6 +460,7 @@ def api_pair_create():
 def api_pair_claim():
     body = request.get_json() or {}
     code = (body.get("code") or "").strip()
+    _ensure_device()
     dev = vault.current_device(g.device_token)
     if not dev:
         return jsonify({"success": False, "error": "no device"})
