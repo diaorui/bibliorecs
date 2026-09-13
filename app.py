@@ -266,6 +266,25 @@ def book_detail(metadata_id):
     )
 
 
+@app.route("/api/similar/<metadata_id>")
+def api_similar(metadata_id):
+    lib_id, _, lib_cfg = _lib_from_cookies()
+    if not lib_id:
+        return jsonify({"books": []})
+    isbn = request.args.get("isbn") or ""
+    if not isbn:
+        return jsonify({"books": []})
+    try:
+        books = search_recs.get_similar(lib_id, metadata_id, isbn)
+        for r in books:
+            _fmt_rec(r, lib_cfg["syndetics_client"], lib_id)
+        return jsonify({"books": books})
+    except Exception as e:
+        if app.config.get("DEBUG_MODE"):
+            raise
+        return jsonify({"books": []})
+
+
 @app.route("/api/bib/<metadata_id>")
 def api_bib(metadata_id):
     lib_id, _, lib_cfg = _lib_from_cookies()

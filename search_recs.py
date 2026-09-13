@@ -419,3 +419,51 @@ def get_recommendations(library_id, borrowing_history):
         top_picks.append(info)
 
     return {"carousels": [{"name": "Top Picks", "books": top_picks}], "has_profile": has_profile}
+
+
+def get_similar(library_id, metadata_id, isbn):
+    if not isbn:
+        return []
+    book = api.fetch_bib_by_isbn(library_id, isbn)
+    if not book:
+        return []
+    authors = json.loads(book.get("authors") or "[]")
+    series = json.loads(book.get("series") or "[]")
+    subjects = json.loads(book.get("subjects") or "[]")
+    genres = json.loads(book.get("genres") or "[]")
+    audiences = json.loads(book.get("audiences") or "[]")
+    isbns = json.loads(book.get("isbns") or "[]")
+    title = book.get("title") or ""
+    subtitle = book.get("subtitle") or ""
+    content_type = book.get("content_type") or ""
+    meta = {
+        "subjects": subjects,
+        "authors": authors,
+        "series": series,
+        "audiences": audiences,
+        "primary_language": book.get("primary_language") or "",
+        "title": title,
+        "subtitle": subtitle,
+        "content_type": content_type,
+        "genres": genres,
+    }
+    key = (library_id, metadata_id)
+    search_cache.ensure(key, meta=meta, wait=True)
+    results = search_cache.get(key) or []
+    pool, pool_mids, pool_isbns = [], set(), set()
+    skip_mids = {metadata_id}
+    if book.get("metadata_id"):
+        skip_mids.add(book["metadata_id"])
+    for info in results:
+        _add_to_pool(info, pool, pool_mids, pool_isbns, skip_mids, set(isbns))
+    if not pool:
+        return []
+    seed_text = _build_embedding_text(
+        title=title, subtitle=subtitle, content_type=content_type,
+        authors=authors, series=series, subjects=subjects, genres=genres)
+    if not seed_text:
+        return pool[:10]
+    seed_vec = _embed_texts([seed_text])[0]
+    cand_vecs = _embed_texts([_build_pool_embed_text(info) for info in pool])
+    order = np.argsort(-(cand_vecs @ seed_vec))[:10]
+    return [pool[int(i)] for i in order]
