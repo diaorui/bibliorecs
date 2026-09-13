@@ -44,6 +44,9 @@
 
 <div id="similar-section" class="section" style="display:none">
   <h2 class="section-title">Similar Books</h2>
+  <div id="similar-loading" class="hold-status">
+    <span class="hold-status-label muted">Finding similar books…</span>
+  </div>
   <div id="similar-grid" class="book-grid"></div>
 </div>
 {% endblock %}
@@ -225,21 +228,27 @@ function renderBook(data) {
 }
 
 if (isbn) {
+  var similarSection = document.getElementById('similar-section');
+  var similarLoading = document.getElementById('similar-loading');
+  similarSection.style.display = '';
   fetch('/api/similar/' + encodeURIComponent(mid) + '?isbn=' + encodeURIComponent(isbn))
     .then(function(r) { return r.json(); })
     .then(function(data) {
+      similarLoading.style.display = 'none';
       var books = (data && data.books) || [];
-      if (!books.length) return;
+      if (!books.length) {
+        similarSection.style.display = 'none';
+        return;
+      }
       var grid = document.getElementById('similar-grid');
       grid.innerHTML = books.map(_bookCardHtml).join('');
-      document.getElementById('similar-section').style.display = '';
       grid.querySelectorAll('img.cover-img').forEach(function(img) {
         if (typeof initCoverFallback === 'function') initCoverFallback(img);
       });
       applyButtonStates();
       revealButtons();
     })
-    .catch(function() {});
+    .catch(function() { similarSection.style.display = 'none'; });
 }
 
 // Async fetch full data

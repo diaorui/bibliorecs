@@ -18,7 +18,7 @@ class RefreshCache:
         self._cache = {}
         self._lock = threading.Lock()
         self._concurrency = threading.Semaphore(10)
-        self._inflight = set()
+        self._inflight = {}
 
         if persist_path:
             self._load_from_disk()
@@ -67,7 +67,9 @@ class RefreshCache:
 
     def ensure(self, key, meta=None, wait=False):
         if wait:
-            self._do_ensure(key, meta)
+            ev = self._do_ensure(key, meta)
+            if ev is not None:
+                ev.wait()
         else:
             threading.Thread(target=self._do_ensure, args=(key, meta), daemon=True).start()
 
@@ -121,16 +123,17 @@ class RefreshCache:
     def _do_ensure(self, key, meta=None):
         key_id = self._key_str(key)
         with self._lock:
-            if key_id in self._inflight:
-                return
-            self._inflight.add(key_id)
+            existing = self._inflight.get(key_id)
+            if existing is not None:
+                return existing
+            self._inflight[key_id] = threading.Event()
         try:
             with self._concurrency:
                 with self._lock:
                     now = time.time()
                     entry = self._cache.get(key)
                     if entry and now - entry["last_refreshed"] < entry["refresh_interval"]:
-                        return
+                        return None
                 try:
                     value = self._refresh_func(key, meta)
                     with self._lock:
@@ -160,4 +163,7 @@ class RefreshCache:
                             }
         finally:
             with self._lock:
-                self._inflight.discard(key_id)
+                done = self._inflight.pop(key_id, None)
+            if done:
+                done.set()
+        return None
