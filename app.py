@@ -465,28 +465,20 @@ def api_history_data(library_id):
     return _account_data_endpoint("history", library_id)
 
 
-# ── parent picks (hand-curated pool + home display limit) ──
+# ── parent picks (hand-curated pool; home shows first row) ──
 
-PICKS_LIMIT_DEFAULT = 6
-PICKS_LIMIT_OPTIONS = (4, 6, 8, 12)
-
-
-def _picks_blob(account_id, library_id):
+def _picks_books(account_id, library_id):
     value, _ = vault.get_account_data(account_id, f"picks:{library_id}")
     if not isinstance(value, dict):
-        value = {}
+        return []
     books = value.get("books")
     if not isinstance(books, list):
-        books = []
-    books = [b for b in books if isinstance(b, dict) and b.get("metadata_id")]
-    limit = value.get("limit", PICKS_LIMIT_DEFAULT)
-    if limit not in PICKS_LIMIT_OPTIONS:
-        limit = PICKS_LIMIT_DEFAULT
-    return {"books": books, "limit": limit}
+        return []
+    return [b for b in books if isinstance(b, dict) and b.get("metadata_id")]
 
 
-def _save_picks(account_id, library_id, blob):
-    vault.set_account_data(account_id, f"picks:{library_id}", blob)
+def _save_picks(account_id, library_id, books):
+    vault.set_account_data(account_id, f"picks:{library_id}", {"books": books})
 
 
 def _isbn_set(entry):
@@ -508,6 +500,7 @@ def _hydrate_pick(b, syndetics_client):
     return {
         "metadata_id": b.get("metadata_id"),
         "isbn": isbn,
+        "isbns": b.get("isbns") or "[]",
         "title": b.get("title") or "",
         "subtitle": b.get("subtitle"),
         "author": b.get("author") or "",
@@ -522,13 +515,13 @@ def _hydrate_pick(b, syndetics_client):
 def api_picks(library_id):
     lib_cfg = config.LIBRARIES.get(library_id)
     if not lib_cfg:
-        return jsonify({"books": [], "limit": PICKS_LIMIT_DEFAULT}), 400
+        return jsonify({"books": []}), 400
     account_id = getattr(g, "account_id", None)
     if not account_id:
-        return jsonify({"books": [], "limit": PICKS_LIMIT_DEFAULT})
-    blob = _picks_blob(account_id, library_id)
-    books = [_hydrate_pick(b, lib_cfg["syndetics_client"]) for b in blob["books"]]
-    return jsonify({"books": books, "limit": blob["limit"]})
+        return jsonify({"books": []})
+    books = [_hydrate_pick(b, lib_cfg["syndetics_client"])
+             for b in _picks_books(account_id, library_id)]
+    return jsonify({"books": books})
 
 
 @app.route("/api/picks/add", methods=["POST"])
@@ -541,8 +534,7 @@ def api_picks_add():
     if not mid:
         return jsonify({"success": False, "error": "metadata_id required"}), 400
     _ensure_device()
-    blob = _picks_blob(g.account_id, library_id)
-    books = blob["books"]
+    books = _picks_books(g.account_id, library_id)
     if any(b.get("metadata_id") == mid for b in books):
         return jsonify({"success": True, "duplicate": True, "count": len(books)})
     new_isbns = _isbn_set(body)
@@ -559,8 +551,50 @@ def api_picks_add():
         "multiscript_title": body.get("multiscript_title"),
         "multiscript_author": body.get("multiscript_author"),
     })
-    _save_picks(g.account_id, library_id, blob)
+    _save_picks(g.account_id, library_id, books)
     return jsonify({"success": True, "count": len(books)})
+
+
+@app.route("/api/picks/prune", methods=["POST"])
+def api_picks_prune():
+    """Silently drop pool books the account already borrowed (history cache only)."""
+    body = request.get_json() or {}
+    library_id = body.get("library_id")
+    if library_id not in config.LIBRARIES:
+        return jsonify({"removed": 0}), 400
+    account_id = getattr(g, "account_id", None)
+    if not account_id:
+        return jsonify({"removed": 0})
+    books = _picks_books(account_id, library_id)
+    if not books:
+        return jsonify({"removed": 0})
+    history, _ = vault.get_account_data(account_id, f"history:{library_id}")
+    if not isinstance(history, list) or not history:
+        return jsonify({"removed": 0})
+    sync_manager.refresh_later(account_id, library_id, "history")
+    borrowed_mids = set()
+    borrowed_isbns = set()
+    for h in history:
+        if not isinstance(h, dict):
+            continue
+        if h.get("metadata_id"):
+            borrowed_mids.add(h["metadata_id"])
+        for i in (h.get("isbns") or []):
+            if i:
+                borrowed_isbns.add(i)
+    if not borrowed_mids and not borrowed_isbns:
+        return jsonify({"removed": 0})
+    kept = []
+    for b in books:
+        if b.get("metadata_id") in borrowed_mids:
+            continue
+        if borrowed_isbns and (_isbn_set(b) & borrowed_isbns):
+            continue
+        kept.append(b)
+    removed = len(books) - len(kept)
+    if removed:
+        _save_picks(account_id, library_id, kept)
+    return jsonify({"removed": removed})
 
 
 @app.route("/api/picks/remove", methods=["POST"])
@@ -573,36 +607,16 @@ def api_picks_remove():
     if not mid:
         return jsonify({"success": False, "error": "metadata_id required"}), 400
     _ensure_device()
-    blob = _picks_blob(g.account_id, library_id)
-    books = blob["books"]
+    books = _picks_books(g.account_id, library_id)
     removed = None
     for i, b in enumerate(books):
         if b.get("metadata_id") == mid:
             removed = books.pop(i)
             break
     if removed is not None:
-        _save_picks(g.account_id, library_id, blob)
+        _save_picks(g.account_id, library_id, books)
     return jsonify({"success": True, "removed": removed is not None,
                     "count": len(books)})
-
-
-@app.route("/api/picks/limit", methods=["POST"])
-def api_picks_limit():
-    body = request.get_json() or {}
-    library_id = body.get("library_id")
-    if library_id not in config.LIBRARIES:
-        return jsonify({"success": False, "error": "Invalid library"}), 400
-    try:
-        limit = int(body.get("limit"))
-    except (TypeError, ValueError):
-        return jsonify({"success": False, "error": "Invalid limit"}), 400
-    if limit not in PICKS_LIMIT_OPTIONS:
-        return jsonify({"success": False, "error": "Invalid limit"}), 400
-    _ensure_device()
-    blob = _picks_blob(g.account_id, library_id)
-    blob["limit"] = limit
-    _save_picks(g.account_id, library_id, blob)
-    return jsonify({"success": True, "limit": limit})
 
 
 # ── device pairing ──

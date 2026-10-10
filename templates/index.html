@@ -95,16 +95,20 @@
   var _suggestTimer = null;
   var __picksPool = [];
   var __picksMids = {};
-  var __picksLimit = 6;
+  var __pickSnaps = {};
   var __searchIndex = {};
+  var _picksResizeBound = false;
+  var _picksResizeTimer = null;
 
-  function shuffleSample(arr, n) {
-    var a = arr.slice();
-    for (var i = a.length - 1; i > 0; i--) {
-      var j = Math.floor(Math.random() * (i + 1));
-      var t = a[i]; a[i] = a[j]; a[j] = t;
-    }
-    return a.slice(0, n);
+  function fitFirstRow() {
+    var section = document.getElementById('picks-section');
+    var grid = document.getElementById('picks-grid');
+    if (!section || !grid || section.style.display === 'none') return;
+    var cards = grid.querySelectorAll('.carousel-card');
+    if (!cards.length) return;
+    cards.forEach(function(c) { c.style.display = ''; });
+    var top = cards[0].offsetTop;
+    cards.forEach(function(c) { if (c.offsetTop !== top) c.style.display = 'none'; });
   }
 
   function renderPicks() {
@@ -113,9 +117,9 @@
     if (!__picksPool.length) { section.style.display = 'none'; return; }
     var grid = document.getElementById('picks-grid');
     grid.innerHTML = '';
-    shuffleSample(__picksPool, __picksLimit).forEach(function(r) {
+    __picksPool.forEach(function(r) {
       var tmp = document.createElement('div');
-      tmp.innerHTML = _bookCardHtml(r, {remove: true});
+      tmp.innerHTML = _bookCardHtml(r, {star: 'on'});
       grid.appendChild(tmp.firstElementChild);
     });
     section.style.display = '';
@@ -124,6 +128,7 @@
     });
     applyButtonStates();
     revealButtons();
+    fitFirstRow();
   }
 
   function loadPicks() {
@@ -132,17 +137,39 @@
       .then(function(r) { return r.json(); })
       .then(function(data) {
         __picksPool = (data && data.books) || [];
-        __picksLimit = (data && data.limit) || 6;
         __picksMids = {};
-        __picksPool.forEach(function(b) { __picksMids[b.metadata_id] = true; });
+        __picksPool.forEach(function(b) {
+          __picksMids[b.metadata_id] = true;
+          __pickSnaps[b.metadata_id] = b;
+        });
         renderPicks();
         document.querySelectorAll('.pick-star').forEach(function(b) {
           var on = !!__picksMids[b.getAttribute('data-mid')];
           b.setAttribute('data-on', on ? '1' : '0');
           b.textContent = on ? '★' : '☆';
         });
+        if (__picksPool.length) prunePicks(libId);
       })
       .catch(function() {});
+  }
+
+  function prunePicks(libId) {
+    fetch('/api/picks/prune', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({library_id: libId})
+    }).then(function(r) { return r.json(); }).then(function(data) {
+      if (data && data.removed > 0) loadPicks();
+    }).catch(function() {});
+  }
+
+  function bindPicksResize() {
+    if (_picksResizeBound) return;
+    _picksResizeBound = true;
+    window.addEventListener('resize', function() {
+      _picksResizeTimer && clearTimeout(_picksResizeTimer);
+      _picksResizeTimer = setTimeout(fitFirstRow, 200);
+    });
   }
 
   function setStarButtons(mid, on) {
@@ -152,21 +179,17 @@
     });
   }
 
-  function showUndoToast(msg, onUndo) {
-    var t = document.querySelector('.toast');
-    if (t) t.remove();
-    t = document.createElement('div');
-    t.className = 'toast';
-    var s = document.createElement('span');
-    s.textContent = msg;
-    t.appendChild(s);
-    var b = document.createElement('button');
-    b.textContent = 'Undo';
-    b.style.cssText = 'margin-left:12px;background:none;border:none;color:#fff;text-decoration:underline;cursor:pointer;font-size:inherit';
-    b.addEventListener('click', function() { t.remove(); onUndo(); });
-    t.appendChild(b);
-    document.body.appendChild(t);
-    setTimeout(function() { if (t.parentNode) { t.style.opacity = '0'; setTimeout(function() { t.remove(); }, 400); } }, 5000);
+  function pickPayload(libId, r) {
+    return {library_id: libId, metadata_id: r.metadata_id,
+      isbn: r.isbn || '', isbns: r.isbns || '[]',
+      title: r.title || '', subtitle: r.subtitle || '',
+      author: r.author || '',
+      multiscript_title: r.multiscript_title || '',
+      multiscript_author: r.multiscript_author || ''};
+  }
+
+  function findPickSnap(mid) {
+    return __pickSnaps[mid] || __searchIndex[mid] || null;
   }
 
   function togglePick(btn) {
@@ -178,20 +201,17 @@
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({library_id: libId, metadata_id: mid})
       }).then(function(r) { return r.json(); }).then(function(data) {
-        if (data && data.success) loadPicks();
+        if (!(data && data.success)) return;
+        delete __picksMids[mid];
+        setStarButtons(mid, false);
       }).catch(function() {});
     } else {
-      var r = __searchIndex[mid];
+      var r = findPickSnap(mid);
       if (!r) return;
       fetch('/api/picks/add', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({library_id: libId, metadata_id: mid,
-          isbn: r.isbn || '', isbns: r.isbns || '[]',
-          title: r.title || '', subtitle: r.subtitle || '',
-          author: r.author || '',
-          multiscript_title: r.multiscript_title || '',
-          multiscript_author: r.multiscript_author || ''})
+        body: JSON.stringify(pickPayload(libId, r))
       }).then(function(resp) { return resp.json(); }).then(function(data) {
         if (data && data.success) {
           if (data.duplicate) showToast('Already in Parent Picks', 3000);
@@ -203,49 +223,12 @@
     }
   }
 
-  function removePick(mid) {
-    var libId = document.body.getAttribute('data-lib');
-    var snap = null;
-    __picksPool.forEach(function(b) { if (b.metadata_id === mid) snap = b; });
-    fetch('/api/picks/remove', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({library_id: libId, metadata_id: mid})
-    }).then(function(r) { return r.json(); }).then(function(data) {
-      if (!(data && data.success)) return;
-      loadPicks();
-      var title = snap ? (snap.multiscript_title || snap.title || '') : '';
-      showUndoToast('Removed' + (title ? ' ' + title : ''), function() {
-        if (!snap) return;
-        fetch('/api/picks/add', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({library_id: libId, metadata_id: snap.metadata_id,
-            isbn: snap.isbn || '', isbns: '[]',
-            title: snap.title || '', subtitle: snap.subtitle || '',
-            author: snap.author || '',
-            multiscript_title: snap.multiscript_title || '',
-            multiscript_author: snap.multiscript_author || ''})
-        }).then(function(resp) { return resp.json(); }).then(function(d) {
-          if (d && d.success) loadPicks();
-        }).catch(function() {});
-      });
-    }).catch(function() {});
-  }
-
   document.addEventListener('click', function(e) {
     var star = e.target.closest('.pick-star');
     if (star) {
       e.preventDefault();
       e.stopPropagation();
       togglePick(star);
-      return;
-    }
-    var rm = e.target.closest('.pick-remove');
-    if (rm) {
-      e.preventDefault();
-      e.stopPropagation();
-      removePick(rm.getAttribute('data-mid'));
     }
   });
 
@@ -304,6 +287,7 @@
   function init() {
     var libId = document.body.getAttribute('data-lib');
     setupSearch();
+    bindPicksResize();
 
     _mePromise.then(function() {
       loadPicks();
