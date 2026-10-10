@@ -416,7 +416,7 @@ body {
 
 /* ── parent picks: per-card tint, no heading, no box ── */
 .picks-section { margin-bottom: 0; }
-.picks-section .book-grid { margin-bottom: 32px; }
+.picks-section .book-grid { margin-bottom: 12px; }
 .picks-section .carousel-card { background: #e8eef6; }
 .picks-section .btn-card-revealed { background: transparent; border-top-color: #dbe3ee; }
 
@@ -1566,6 +1566,8 @@ th {
     grid-template-columns: repeat(2, 1fr);
     gap: 8px;
   }
+
+  .picks-section .book-grid { margin-bottom: 8px; }
 
   .nav-inner { padding: 0 12px; flex-wrap: wrap; height: auto; min-height: 52px; gap: 2px; }
   .nav-links { width: 100%; justify-content: center; gap: 12px; padding: 6px 0 8px; border-top: 1px solid #e8e8ed; }
