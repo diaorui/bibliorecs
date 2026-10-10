@@ -541,7 +541,9 @@ def api_picks_add():
     for b in books:
         if new_isbns and (new_isbns & _isbn_set(b)):
             return jsonify({"success": True, "duplicate": True, "count": len(books)})
-    books.append({
+    # Newest first: home shows the pool's first row only, so a just-added
+    # book must land where it is visible instead of behind hidden cards.
+    books.insert(0, {
         "metadata_id": mid,
         "isbn": body.get("isbn") or "",
         "isbns": body.get("isbns") or "[]",
