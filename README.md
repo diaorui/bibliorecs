@@ -8,6 +8,8 @@ In-page catalog search and library account management for Bibliocommons library 
 
 - **Search** — in-page catalog search with autocomplete suggestions; results filtered to physical books only
 - **Recommendations** — "Top Picks" carousel computed from borrowing history using model2vec embeddings + MaxSim + MMR diversity
+- **Parent Picks** — hand-curated pool: star books from search results, home shows the pool's first row (newest first); borrowed books are pruned silently against cached history
+- **Similar Books** — up to 12 related books on the book detail page, ranked by embedding cosine (same audience + language)
 - **Multi-device** — data lives on the server (encrypted SQLite vault); every browser gets a device identity automatically, and devices can be linked via a 6-digit pairing code. No accounts or passwords to remember
 - **Server-side sync** — holds/checkouts/history return cache immediately and refresh in the background (at most one in-flight fetch per key); search cache TTL is 4 h; actions like placing/cancelling a hold or renewing trigger a refresh
 - **Hold management** — view holds with status, place and cancel holds, ready-for-pickup with countdown
@@ -103,6 +105,11 @@ Library card credentials (card number, PIN, BC session tokens) are stored encryp
 | `/api/search` | POST | Catalog search |
 | `/api/search/suggest` | GET | Search autocomplete suggestions |
 | `/api/bib/<metadata_id>` | GET | Book metadata + covers |
+| `/api/similar/<metadata_id>` | GET | Up to 12 similar books (needs `?isbn=`) |
+| `/api/picks/<lib>` | GET | Parent Picks pool (card fields) |
+| `/api/picks/add` | POST | Add a book to the pool (newest first; mid + ISBN overlap dedup) |
+| `/api/picks/remove` | POST | Remove a book from the pool |
+| `/api/picks/prune` | POST | Drop pool books already in borrowing history |
 | `/api/branches` | GET | Branch list for all libraries |
 | `/api/ol-cover-search/<isbn>` | GET | OpenLibrary cover search fallback |
 | `/api/me` | GET | Current account, linked devices, per-library connection status |
