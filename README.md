@@ -14,9 +14,9 @@ In-page catalog search and library account management for Bibliocommons library 
 - **Server-side sync** — holds/checkouts/history return cache immediately and refresh in the background (at most one in-flight fetch per key); search cache TTL is 4 h; actions like placing/cancelling a hold or renewing trigger a refresh
 - **Hold management** — view holds with status, place and cancel holds, ready-for-pickup with countdown
 - **Borrowing history** — synced from BC API on view, cached server-side per account for instant repeat views and cross-device consistency; renew current checkouts
-- **Book detail** — description, metadata, series, subjects, genres, borrow history, Google Books Preview; multi-script title/author display for non-English books
+- **Book detail** — description, metadata, series, subjects, genres, Google Books Preview; multi-script title/author display for non-English books
 - **Cover fallback chain** — Syndetics → OpenLibrary → OpenLibrary search → placeholder SVG
-- **Settings** — library/branch selection and per-library credential management
+- **Settings** — per-library credential and device management (branch is picked from the nav location menu)
 - **Mobile-friendly** — responsive layout down to 320px
 
 ## Requirements
