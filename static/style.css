@@ -415,8 +415,8 @@ body {
 .section { margin-bottom: 28px; }
 
 /* ── parent picks: per-card tint, no heading, no box ── */
-.picks-section { margin-bottom: 32px; }
-.picks-section .book-grid { margin-bottom: 0; }
+.picks-section { margin-bottom: 0; }
+.picks-section .book-grid { margin-bottom: 32px; }
 .picks-section .carousel-card { background: #e8eef6; }
 .picks-section .btn-card-revealed { background: transparent; border-top-color: #dbe3ee; }
 
