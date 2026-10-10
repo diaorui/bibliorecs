@@ -843,6 +843,29 @@ th {
 .btn-card:hover:not(:disabled) { background: #f0f5ff; }
 .btn-card:disabled { cursor: default; }
 
+/* ── picks corner buttons (star / remove on cover) ── */
+.pick-corner {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  background: rgba(255,255,255,.93);
+  box-shadow: 0 1px 4px rgba(0,0,0,.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  line-height: 1;
+  padding: 0 0 2px 0;
+  color: #86868b;
+}
+.pick-star[data-on="1"] { color: #f59e0b; }
+.pick-remove { color: #6b7280; font-size: 18px; }
+
 /* ── search ── */
 
 .search-input-wrap {

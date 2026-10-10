@@ -60,6 +60,10 @@
     <div id="search-suggestions" class="search-suggestions" style="display:none"></div>
   </div>
 </div>
+<div id="picks-section" class="section" style="display:none">
+  <h2 class="section-title">Parent Picks</h2>
+  <div id="picks-grid" class="book-grid"></div>
+</div>
 <div id="recommendations-container">
   <div id="rec-skeleton" style="display:none">
     <div class="book-grid">
@@ -90,6 +94,161 @@
   var _cachedRecsHtml = null;
   var _suggestAbort = null;
   var _suggestTimer = null;
+  var __picksPool = [];
+  var __picksMids = {};
+  var __picksLimit = 6;
+  var __searchIndex = {};
+
+  function shuffleSample(arr, n) {
+    var a = arr.slice();
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a.slice(0, n);
+  }
+
+  function renderPicks() {
+    var section = document.getElementById('picks-section');
+    if (!section) return;
+    if (!__picksPool.length) { section.style.display = 'none'; return; }
+    var grid = document.getElementById('picks-grid');
+    grid.innerHTML = '';
+    shuffleSample(__picksPool, __picksLimit).forEach(function(r) {
+      var tmp = document.createElement('div');
+      tmp.innerHTML = _bookCardHtml(r, {remove: true});
+      grid.appendChild(tmp.firstElementChild);
+    });
+    section.style.display = '';
+    grid.querySelectorAll('img.cover-img').forEach(function(img) {
+      if (typeof initCoverFallback === 'function') initCoverFallback(img);
+    });
+    applyButtonStates();
+    revealButtons();
+  }
+
+  function loadPicks() {
+    var libId = document.body.getAttribute('data-lib');
+    fetch('/api/picks/' + encodeURIComponent(libId))
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        __picksPool = (data && data.books) || [];
+        __picksLimit = (data && data.limit) || 6;
+        __picksMids = {};
+        __picksPool.forEach(function(b) { __picksMids[b.metadata_id] = true; });
+        renderPicks();
+        document.querySelectorAll('.pick-star').forEach(function(b) {
+          var on = !!__picksMids[b.getAttribute('data-mid')];
+          b.setAttribute('data-on', on ? '1' : '0');
+          b.textContent = on ? '★' : '☆';
+        });
+      })
+      .catch(function() {});
+  }
+
+  function setStarButtons(mid, on) {
+    document.querySelectorAll('.pick-star[data-mid="' + mid + '"]').forEach(function(b) {
+      b.setAttribute('data-on', on ? '1' : '0');
+      b.textContent = on ? '★' : '☆';
+    });
+  }
+
+  function showUndoToast(msg, onUndo) {
+    var t = document.querySelector('.toast');
+    if (t) t.remove();
+    t = document.createElement('div');
+    t.className = 'toast';
+    var s = document.createElement('span');
+    s.textContent = msg;
+    t.appendChild(s);
+    var b = document.createElement('button');
+    b.textContent = 'Undo';
+    b.style.cssText = 'margin-left:12px;background:none;border:none;color:#fff;text-decoration:underline;cursor:pointer;font-size:inherit';
+    b.addEventListener('click', function() { t.remove(); onUndo(); });
+    t.appendChild(b);
+    document.body.appendChild(t);
+    setTimeout(function() { if (t.parentNode) { t.style.opacity = '0'; setTimeout(function() { t.remove(); }, 400); } }, 5000);
+  }
+
+  function togglePick(btn) {
+    var libId = document.body.getAttribute('data-lib');
+    var mid = btn.getAttribute('data-mid');
+    if (btn.getAttribute('data-on') === '1') {
+      fetch('/api/picks/remove', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({library_id: libId, metadata_id: mid})
+      }).then(function(r) { return r.json(); }).then(function(data) {
+        if (data && data.success) loadPicks();
+      }).catch(function() {});
+    } else {
+      var r = __searchIndex[mid];
+      if (!r) return;
+      fetch('/api/picks/add', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({library_id: libId, metadata_id: mid,
+          isbn: r.isbn || '', isbns: r.isbns || '[]',
+          title: r.title || '', subtitle: r.subtitle || '',
+          author: r.author || '',
+          multiscript_title: r.multiscript_title || '',
+          multiscript_author: r.multiscript_author || ''})
+      }).then(function(resp) { return resp.json(); }).then(function(data) {
+        if (data && data.success) {
+          if (data.duplicate) showToast('Already in Parent Picks', 3000);
+          loadPicks();
+        } else {
+          showToast((data && data.error) || 'Could not add', 4000);
+        }
+      }).catch(function() { showToast('Network error', 4000); });
+    }
+  }
+
+  function removePick(mid) {
+    var libId = document.body.getAttribute('data-lib');
+    var snap = null;
+    __picksPool.forEach(function(b) { if (b.metadata_id === mid) snap = b; });
+    fetch('/api/picks/remove', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({library_id: libId, metadata_id: mid})
+    }).then(function(r) { return r.json(); }).then(function(data) {
+      if (!(data && data.success)) return;
+      loadPicks();
+      var title = snap ? (snap.multiscript_title || snap.title || '') : '';
+      showUndoToast('Removed' + (title ? ' ' + title : ''), function() {
+        if (!snap) return;
+        fetch('/api/picks/add', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({library_id: libId, metadata_id: snap.metadata_id,
+            isbn: snap.isbn || '', isbns: '[]',
+            title: snap.title || '', subtitle: snap.subtitle || '',
+            author: snap.author || '',
+            multiscript_title: snap.multiscript_title || '',
+            multiscript_author: snap.multiscript_author || ''})
+        }).then(function(resp) { return resp.json(); }).then(function(d) {
+          if (d && d.success) loadPicks();
+        }).catch(function() {});
+      });
+    }).catch(function() {});
+  }
+
+  document.addEventListener('click', function(e) {
+    var star = e.target.closest('.pick-star');
+    if (star) {
+      e.preventDefault();
+      e.stopPropagation();
+      togglePick(star);
+      return;
+    }
+    var rm = e.target.closest('.pick-remove');
+    if (rm) {
+      e.preventDefault();
+      e.stopPropagation();
+      removePick(rm.getAttribute('data-mid'));
+    }
+  });
 
   function renderCarousels(carousels, hasProfile) {
     if (_searchQuery) return;
@@ -148,6 +307,7 @@
     setupSearch();
 
     _mePromise.then(function() {
+      loadPicks();
       if (!isConnected(libId)) {
         showCredsBanner();
         fetchHoldsAndCheckouts();
@@ -251,8 +411,9 @@
     grid.className = 'book-grid';
     container.appendChild(grid);
     books.forEach(function(r) {
+      __searchIndex[r.metadata_id] = r;
       var tmp = document.createElement('div');
-      tmp.innerHTML = _bookCardHtml(r);
+      tmp.innerHTML = _bookCardHtml(r, {star: __picksMids[r.metadata_id] ? 'on' : 'off'});
       grid.appendChild(tmp.firstElementChild);
     });
   }

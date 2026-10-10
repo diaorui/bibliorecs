@@ -72,6 +72,21 @@
 </div>
 
 <div class="section" style="margin-top:2rem">
+  <h2 class="section-title">Parent Picks</h2>
+  <p class="section-desc">Hand-picked books shown at the top of Home. Star books from search results to add them; Home shows a random subset on each visit.</p>
+  <div class="settings-field">
+    <label for="picks-limit">Books shown on Home</label>
+    <select id="picks-limit" style="max-width:120px">
+      <option value="4">4</option>
+      <option value="6">6</option>
+      <option value="8">8</option>
+      <option value="12">12</option>
+    </select>
+    <span id="picks-limit-status" style="font-size:0.85rem;color:#86868b;margin-left:8px"></span>
+  </div>
+</div>
+
+<div class="section" style="margin-top:2rem">
   <h2 class="section-title">Server</h2>
   <button onclick="restartServer()" class="btn btn-restart" style="background:#dc2626;color:#fff;border:none;padding:8px 16px;border-radius:6px;font-size:0.9rem;cursor:pointer">Restart Server</button>
 </div>
@@ -356,9 +371,41 @@ document.getElementById('pair-claim-btn').addEventListener('click', function() {
   });
 });
 
+function loadPicksLimit() {
+  var libId = document.body.getAttribute('data-lib');
+  var sel = document.getElementById('picks-limit');
+  if (!libId) { sel.disabled = true; return; }
+  fetch('/api/picks/' + encodeURIComponent(libId))
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      sel.value = String((d && d.limit) || 6);
+    })
+    .catch(function() {});
+}
+
+document.getElementById('picks-limit').addEventListener('change', function() {
+  var libId = document.body.getAttribute('data-lib');
+  var sel = this;
+  var status = document.getElementById('picks-limit-status');
+  status.textContent = 'Saving...';
+  fetch('/api/picks/limit', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({library_id: libId, limit: parseInt(sel.value, 10)})
+  }).then(function(r) { return r.json(); }).then(function(d) {
+    if (d && d.success) {
+      status.textContent = 'Saved';
+      setTimeout(function() { status.textContent = ''; }, 2000);
+    } else {
+      status.textContent = (d && d.error) || 'Failed';
+    }
+  }).catch(function() { status.textContent = 'Network error'; });
+});
+
 _mePromise.then(function() {
   loadCreds();
   loadDevices();
+  loadPicksLimit();
 });
 </script>
 {% endblock %}
