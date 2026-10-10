@@ -414,6 +414,13 @@ body {
 
 .section { margin-bottom: 28px; }
 
+/* ── parent picks: tinted zone, no heading ── */
+.picks-section {
+  background: #edf2f8;
+  border-radius: 12px;
+  padding: 14px 14px 18px;
+}
+
 .table-wrap {
   overflow-x: auto;
 }
