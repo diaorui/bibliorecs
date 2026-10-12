@@ -506,6 +506,8 @@ def _hydrate_pick(b, syndetics_client):
         "author": b.get("author") or "",
         "multiscript_title": b.get("multiscript_title"),
         "multiscript_author": b.get("multiscript_author"),
+        "rating_avg": b.get("rating_avg"),
+        "rating_count": b.get("rating_count"),
         "img_url": img,
         "fallback_url": fallback,
     }
@@ -552,6 +554,8 @@ def api_picks_add():
         "author": body.get("author") or "",
         "multiscript_title": body.get("multiscript_title"),
         "multiscript_author": body.get("multiscript_author"),
+        "rating_avg": body.get("rating_avg"),
+        "rating_count": body.get("rating_count"),
     })
     _save_picks(g.account_id, library_id, books)
     return jsonify({"success": True, "count": len(books)})

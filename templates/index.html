@@ -185,7 +185,9 @@
       title: r.title || '', subtitle: r.subtitle || '',
       author: r.author || '',
       multiscript_title: r.multiscript_title || '',
-      multiscript_author: r.multiscript_author || ''};
+      multiscript_author: r.multiscript_author || '',
+      rating_avg: (r.rating_avg === undefined) ? null : r.rating_avg,
+      rating_count: (r.rating_count === undefined) ? null : r.rating_count};
   }
 
   function findPickSnap(mid) {
